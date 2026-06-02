@@ -1,53 +1,17 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>WashIN — Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="src/styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>WashIN</title>
 </head>
 <body>
-  <main class="app">
-    <header class="topbar">
-      <h1>WashIN</h1>
-      <nav id="nav-right"></nav>
-    </header>
-
-    <section id="auth-section" class="card centered">
-      <h2>Accedi</h2>
-      <form id="login-form" class="stack">
-        <label>
-          Email
-          <input type="email" id="email" required>
-        </label>
-        <label>
-          Password
-          <input type="password" id="password" required>
-        </label>
-        <div class="row">
-          <button id="login-btn" class="btn primary">Accedi</button>
-          <button id="signup-btn" type="button" class="btn ghost">Registrati</button>
-        </div>
-        <p id="auth-error" class="muted error"></p>
-      </form>
-    </section>
-
-    <section id="dashboard" class="hidden">
-      <div id="admin-dashboard" class="dashboard card hidden">
-        <h2><span data-lucide="shield"></span> Dashboard Admin</h2>
-        <p class="muted">Gestione utenti e impostazioni.</p>
-        <div id="admin-actions" class="grid">
-          <button class="btn">Gestisci operatori</button>
-          <button class="btn">Impostazioni</button>
-        </div>
-      </div>
-
-      <div id="operator-dashboard" class="dashboard card hidden">
-        <h2><span data-lucide="briefcase"></span> Dashboard Operatore</h2>
-        <p class="muted">Le tue attività e turni.</p>
+    <script>
+        // Reindirizza immediatamente a washin/
+        window.location.replace(window.location.origin + window.location.pathname.replace('index.html', '') + 'washin/');
+    </script>
+</body>
+</html>
         <div id="tasks" class="stack">
           <p class="muted">Nessuna attività assegnata (mock).</p>
         </div>
