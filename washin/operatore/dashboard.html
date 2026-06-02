@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>WashIN — Dashboard Operatore</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/lucide/dist/lucide.min.js"></script>
+    <style>
+      .operator-layout {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: auto;
+        min-height: auto;
+        z-index: 20;
+        padding: 12px 16px;
+      }
+      .sidebar-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: space-between;
+        margin-top: 12px;
+      }
+      .sidebar-nav a {
+        flex: 1 1 calc(50% - 10px);
+        min-width: 140px;
+      }
+      .sidebar-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .sidebar-profile {
+        margin: 16px 0 0;
+        padding: 14px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        color: #fff;
+      }
+      .sidebar-profile strong {
+        display: block;
+        font-size: 16px;
+        margin-bottom: 4px;
+      }
+      .main-content {
+        padding: 20px 16px 32px;
+        margin-top: 240px;
+      }
+      .section {
+        margin-bottom: 24px;
+      }
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .section-header h2 {
+        font-size: 20px;
+        margin: 0;
+      }
+      .agenda-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+      .agenda-summary {
+        display: grid;
+        gap: 14px;
+      }
+      .intervento-card {
+        border-radius: var(--radius);
+        background: var(--white);
+        padding: 18px;
+        box-shadow: var(--shadow-sm);
+        margin-bottom: 12px;
+      }
+      .intervento-card .meta {
+        display: flex;
+        justify-content: space-between;
+        gap:12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .intervento-card .location {
+        font-size: 13px;
+        color: var(--gray-500);
+        margin-bottom: 12px;
+      }
+      .intervento-card .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .agenda-week {
+        display: grid;
+        gap: 12px;
+      }
+      .agenda-week-item {
+        background: var(--white);
+        border-radius: var(--radius);
+        padding: 14px;
+        box-shadow: var(--shadow-sm);
+      }
+      .hidden {
+        display: none !important;
+      }
+      .document-upload {
+        display: grid;
+        gap: 12px;
+      }
+      .document-row,
+      .cedolino-row {
+        background: var(--white);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        padding: 16px;
+        margin-bottom: 12px;
+      }
+      .document-row a,
+      .cedolino-row a {
+        color: var(--teal);
+      }
+      .section-card {
+        background: var(--white);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        padding: 20px;
+      }
+      @media(min-width: 900px){
+        .operator-layout { grid-template-columns: 260px 1fr; }
+        .sidebar { position: sticky; width: 100%; height: 100vh; top: 0; padding: 24px 16px; }
+        .sidebar-nav { display: grid; gap: 8px; }
+        .sidebar-nav a { flex: unset; min-width: auto; }
+        .main-content { margin-top: 0; padding: 32px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-layout operator-layout">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-top">
+          <div class="sidebar-logo">WashIN <span class="pro">Pro</span></div>
+          <button id="sidebar-toggle" class="btn btn-sm btn-secondary" type="button">Menu</button>
+        </div>
+        <div class="sidebar-profile">
+          <strong id="operator-name">Operatore sul campo</strong>
+          <span>Benvenuto!</span>
+        </div>
+        <nav class="sidebar-nav" id="sidebar-nav">
+          <a class="active" href="#agenda" data-section="agenda"><span data-lucide="calendar"></span> La mia agenda</a>
+          <a href="#checklist" data-section="checklist"><span data-lucide="check-square"></span> ✅ Checklist</a>
+          <a href="#documenti" data-section="documenti"><span data-lucide="file-text"></span> 📄 I miei documenti</a>
+          <a href="#cedolini" data-section="cedolini"><span data-lucide="dollar-sign"></span> 💰 Cedolini</a>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <header class="page-header">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+            <div>
+              <p style="color:var(--gray-500);font-size:14px;margin-bottom:8px;">Oggi è <span id="today-date"></span></p>
+              <h1 style="font-size:28px;">Ciao, <span id="greeting-name">Operatore</span> 👋</h1>
+            </div>
+            <button id="logout" class="btn btn-secondary btn-sm">Esci</button>
+          </div>
+        </header>
+
+        <section id="agenda" class="section section-card">
+          <div class="section-header">
+            <div>
+              <h2>La mia agenda</h2>
+              <p style="color:var(--gray-500);margin-top:6px;">Controlla i tuoi interventi in programma e avvia il lavoro.</p>
+            </div>
+            <label class="btn btn-secondary btn-sm" style="display:inline-flex;align-items:center;">
+              <input id="toggle-week" type="checkbox" style="margin-right:8px;" /> Mostra settimana
+            </label>
+          </div>
+
+          <div id="agenda-cards" class="agenda-summary">
+            <div class="intervento-card">
+              <div class="meta">
+                <div>
+                  <strong>09:00 - 10:30</strong>
+                  <p style="margin:6px 0 0;color:var(--gray-700);font-weight:600;">Cliente Rossi S.r.l.</p>
+                </div>
+                <span class="badge badge-warning">Pianificato</span>
+              </div>
+              <div class="location">Via Garibaldi 10, Milano</div>
+              <div class="actions">
+                <a class="btn btn-secondary btn-sm" href="https://maps.google.com/?q=Via%20Garibaldi%2010%2C%20Milano" target="_blank" rel="noreferrer">Vai a Maps</a>
+                <button class="btn btn-primary btn-sm" type="button">Inizia</button>
+                <button class="btn btn-secondary btn-sm" type="button">Compila checklist</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="week-view" class="agenda-week hidden">
+            <div class="agenda-week-item"><strong>Lun</strong> 26 mag — 2 interventi</div>
+            <div class="agenda-week-item"><strong>Mar</strong> 27 mag — 1 intervento</div>
+            <div class="agenda-week-item"><strong>Mer</strong> 28 mag — 0 interventi</div>
+            <div class="agenda-week-item"><strong>Gio</strong> 29 mag — 1 intervento</div>
+            <div class="agenda-week-item"><strong>Ven</strong> 30 mag — 1 intervento</div>
+            <div class="agenda-week-item"><strong>Sab</strong> 31 mag — 0 interventi</div>
+            <div class="agenda-week-item"><strong>Dom</strong> 1 giu — 0 interventi</div>
+          </div>
+        </section>
+
+        <section id="checklist" class="section section-card hidden">
+          <div class="section-header">
+            <div>
+              <h2>Checklist intervento</h2>
+              <p style="color:var(--gray-500);margin-top:6px;">Compila le voci e completa l'intervento.</p>
+            </div>
+            <div style="font-size:14px;color:var(--gray-600);">Completamento: <strong id="checklist-progress">0%</strong></div>
+          </div>
+
+          <div style="margin-bottom:18px;">
+            <p id="checklist-title" style="font-weight:700;color:var(--gray-900);">Cliente Rossi S.r.l. — 26 maggio 2026</p>
+          </div>
+
+          <div id="checklist-items" style="display:grid;gap:12px;margin-bottom:16px;">
+            <label class="card" style="display:flex;align-items:center;gap:12px;">
+              <input type="checkbox" />
+              <span>Pulire superfici comuni</span>
+            </label>
+            <label class="card" style="display:flex;align-items:center;gap:12px;">
+              <input type="checkbox" />
+              <span>Controllare livelli detergenti</span>
+            </label>
+          </div>
+
+          <div class="section-card" style="margin-bottom:16px;">
+            <label style="display:block;font-weight:600;margin-bottom:8px;">Note operatore</label>
+            <textarea id="checklist-notes" rows="4" style="width:100%;border:1px solid var(--gray-300);border-radius:12px;padding:14px;font-size:14px;"></textarea>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:12px;">
+            <button id="checklist-save-draft" class="btn btn-secondary btn-sm" type="button">Salva bozza</button>
+            <button id="checklist-submit" class="btn btn-primary btn-sm" type="button">Invia e completa</button>
+          </div>
+        </section>
+
+        <section id="documenti" class="section section-card hidden">
+          <div class="section-header">
+            <div>
+              <h2>I miei documenti</h2>
+              <p style="color:var(--gray-500);margin-top:6px;">Carica certificati e giustificativi in modo rapido.</p>
+            </div>
+          </div>
+
+          <div class="document-upload">
+            <div style="display:grid;gap:12px;">
+              <label style="font-weight:600;">Tipo documento</label>
+              <select id="document-type" style="padding:12px;border:1px solid var(--gray-300);border-radius:12px;">
+                <option value="certificato_medico">Certificato medico</option>
+                <option value="giustificativo">Giustificativo</option>
+                <option value="altro">Altro</option>
+              </select>
+            </div>
+            <div style="display:grid;gap:12px;">
+              <label style="font-weight:600;">File</label>
+              <input id="document-file" type="file" />
+            </div>
+            <button class="btn btn-primary btn-sm" type="button">Carica documento</button>
+          </div>
+
+          <div id="documenti-list" style="margin-top:20px;">
+            <div class="document-row">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                <div>
+                  <strong>Certificato medico</strong>
+                  <p style="margin:6px 0 0;color:var(--gray-500);font-size:14px;">Caricato il 22 mag 2026</p>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                  <a href="#">Anteprima</a>
+                  <a href="#">Scarica</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="cedolini" class="section section-card hidden">
+          <div class="section-header">
+            <div>
+              <h2>Cedolini</h2>
+              <p style="color:var(--gray-500);margin-top:6px;">Scarica i cedolini mese per mese.</p>
+            </div>
+          </div>
+
+          <div class="cedolino-row" style="display:grid;gap:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div>
+                <p style="font-weight:700;margin-bottom:4px;">Maggio 2026</p>
+                <p style="margin:0;color:var(--gray-500);font-size:14px;">Lordo 2.400€, Netto 1.900€</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span class="badge badge-success">Pagato</span>
+                <a class="btn btn-secondary btn-sm" href="#">Download PDF</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="cedolino-row" style="display:grid;gap:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div>
+                <p style="font-weight:700;margin-bottom:4px;">Aprile 2026</p>
+                <p style="margin:0;color:var(--gray-500);font-size:14px;">Lordo 2.350€, Netto 1.860€</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span class="badge badge-warning">In attesa</span>
+                <a class="btn btn-secondary btn-sm" href="#">Download PDF</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module">
+      import initDashboard from '../js/operatore/dashboard.js'
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        await initDashboard()
+      })
+    </script>
+  </body>
+</html>
