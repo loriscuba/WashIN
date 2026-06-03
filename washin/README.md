@@ -1,3 +1,21 @@
+Istruzioni per pubblicazione file di configurazione
+
+- Non committare `config.js` se contiene chiavi sensibili.
+- Copia `js/config.template.js` o `js/config.example.js` in `js/config.js` e sostituisci i valori con le tue credenziali Supabase.
+- Per siti statici (GitHub Pages) puoi usare la chiave anon di Supabase, ma abilita regole di sicurezza (RLS) e limita l'accesso.
+- Se vuoi che il file sia servito pubblicamente, crea `washin/js/config.js` nel repository, ma ricontrolla che la chiave sia appropriata per l'uso client.
+
+Esempio veloce (locale):
+
+1. Copia il template:
+
+```bash
+cp washin/js/config.template.js washin/js/config.js
+```
+
+2. Modifica `washin/js/config.js` con la tua `SUPABASE_URL` e `SUPABASE_ANON_KEY`.
+
+3. Non includere `washin/js/config.js` nel commit se contiene chiavi reali; aggiungilo a `.gitignore` (già presente nel progetto).
 # WashIN (cartella `washin/`)
 
 Progetto web per la gestione di un'impresa di pulizie.
