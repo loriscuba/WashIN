@@ -34,26 +34,29 @@
 
       <main class="main-content" id="main-content">
         <section id="cruscotto" class="section active">
-          <div class="page-header">
-            <h1>Buongiorno, <span id="greeting-name">Amministratore</span>!</h1>
-            <p id="current-date" style="color: var(--gray-500); margin-top: 8px;"></p>
+          <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+              <h1>Buongiorno, <span id="greeting-name">Amministratore</span>!</h1>
+              <p id="current-date" style="color: var(--gray-500); margin-top: 8px;"></p>
+            </div>
+            <button id="refresh-cruscotto" class="btn btn-secondary btn-sm">Aggiorna</button>
           </div>
 
           <div class="kpi-grid">
             <div class="kpi-card">
-              <div class="value">12</div>
+              <div class="value" id="kpi-interventi-oggi">—</div>
               <div class="label">Interventi oggi</div>
             </div>
             <div class="kpi-card">
-              <div class="value">152</div>
+              <div class="value" id="kpi-ore-mese">—</div>
               <div class="label">Ore questo mese</div>
             </div>
             <div class="kpi-card">
-              <div class="value">€ 34.780</div>
+              <div class="value" id="kpi-fatturato-mese">—</div>
               <div class="label">Fatturato mese</div>
             </div>
             <div class="kpi-card">
-              <div class="value">74</div>
+              <div class="value" id="kpi-clienti-attivi">—</div>
               <div class="label">Clienti attivi</div>
             </div>
           </div>
@@ -73,19 +76,7 @@
                     <th>Stato</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr>
-                    <td>Marco Rossi</td>
-                    <td>Studio Alpha / Centro</td>
-                    <td>09:00 - 11:00</td>
-                    <td><span class="badge badge-warning">Pianificato</span></td>
-                  </tr>
-                  <tr>
-                    <td>Giulia Bianchi</td>
-                    <td>Residence Blu / Sala</td>
-                    <td>11:30 - 13:00</td>
-                    <td><span class="badge badge-success">In corso</span></td>
-                  </tr>
+                <tbody id="interventi-oggi-body">
                 </tbody>
               </table>
             </div>
@@ -449,11 +440,11 @@
     <script type="module">
       import supabase, { getUserProfile } from '../js/supabase.js'
       import { checkAuth, logout } from '../js/auth.js'
-      import '../js/admin/clienti.js'
-      import '../js/admin/interventi.js'
-      import '../js/admin/operatori.js'
-      import '../js/admin/fatture.js'
-      import '../js/admin/cruscotto.js'
+      import { initClienti } from '../js/admin/clienti.js'
+      import { initInterventi } from '../js/admin/interventi.js'
+      import { initOperatori } from '../js/admin/operatori.js'
+      import { initFatture } from '../js/admin/fatture.js'
+      import { initCruscotto } from '../js/admin/cruscotto.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -501,6 +492,11 @@
         if (window.lucide) window.lucide.replace()
         const now = new Date()
         currentDate.textContent = now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        initCruscotto()
+        initClienti()
+        initInterventi()
+        initOperatori()
+        initFatture()
       })
     </script>
   </body>
