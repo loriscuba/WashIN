@@ -19,18 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate config.js from secrets
-        run: |
-          mkdir -p washin/js
-          cat > washin/js/config.js << 'EOF'
-          // Auto-generated from GitHub Secrets during deploy
-          const SUPABASE_URL = '${{ secrets.SUPABASE_URL }}';
-          const SUPABASE_ANON_KEY = '${{ secrets.SUPABASE_ANON_KEY }}';
-          
-          window.SUPABASE_URL = SUPABASE_URL;
-          window.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY;
-          EOF
-
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
