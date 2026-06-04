@@ -67,8 +67,7 @@ export async function openModalOperatore(id = null) {
 
 export async function saveOperatore(payload) {
   try {
-    const up = {
-      id: payload.id || undefined,
+    const fields = {
       nome: payload.nome,
       cognome: payload.cognome,
       email: payload.email,
@@ -77,10 +76,15 @@ export async function saveOperatore(payload) {
       attivo: payload.attivo !== undefined ? payload.attivo : true,
       ruolo: payload.ruolo || 'operatore'
     }
-    const { data, error } = await supabase.from('profili').upsert(up, { returning: 'representation' })
+    let error
+    if (payload.id) {
+      ;({ error } = await supabase.from('profili').update(fields).eq('id', payload.id))
+    } else {
+      ;({ error } = await supabase.from('profili').insert(fields))
+    }
     if (error) throw error
     showToast('Operatore salvato', 'success')
-    return data?.[0] || null
+    return true
   } catch (err) {
     showToast('Errore salvataggio operatore', 'error')
     console.error(err)

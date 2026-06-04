@@ -222,8 +222,7 @@ export async function openModalIntervento(id = null){
 
 export async function saveIntervento(formData){
   try{
-    const payload = {
-      id: formData.id || undefined,
+    const fields = {
       contratto_id: formData.contratto_id || null,
       sede_id: formData.sede_id || null,
       operatore_id: formData.operatore_id || null,
@@ -234,10 +233,15 @@ export async function saveIntervento(formData){
       note_operatore: formData.note || null,
       stato: formData.stato || 'pianificato'
     }
-    const { data, error } = await supabase.from('interventi').upsert(payload, { returning: 'representation' })
+    let error
+    if (formData.id) {
+      ;({ error } = await supabase.from('interventi').update(fields).eq('id', formData.id))
+    } else {
+      ;({ error } = await supabase.from('interventi').insert(fields))
+    }
     if (error) throw error
     showToast('Intervento salvato','success')
-    return data?.[0] || null
+    return true
   }catch(err){
     showToast('Errore salvataggio intervento','error')
     console.error(err)
