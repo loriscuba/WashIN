@@ -63,6 +63,5 @@ export async function checkAuth() {
 
 if (form) {
   form.addEventListener('submit', handleLogin)
+  window.addEventListener('DOMContentLoaded', checkSession)
 }
-
-window.addEventListener('DOMContentLoaded', checkSession)
