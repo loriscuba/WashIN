@@ -356,3 +356,98 @@ textarea:focus {
     font-size: 13px;
   }
 }
+
+/* ── Login page ─────────────────────────────────── */
+.page-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--navy);
+  padding: 24px;
+}
+
+.login-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow-md);
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.brand h1 {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--teal);
+  margin-bottom: 6px;
+}
+
+.brand p {
+  color: var(--gray-500);
+  font-size: 14px;
+}
+
+.login-form {
+  display: grid;
+  gap: 18px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.button.action {
+  width: 100%;
+  padding: 12px;
+  background: var(--teal);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  display: block;
+}
+
+.button.action:hover {
+  background: var(--teal-light);
+}
+
+.forgot {
+  text-align: center;
+  font-size: 13px;
+  color: var(--gray-500);
+  display: block;
+}
+
+.forgot:hover {
+  color: var(--teal);
+}
+
+.error {
+  color: #DC2626;
+  font-size: 13px;
+  text-align: center;
+  min-height: 18px;
+  margin: 0;
+}
+
+.error:empty {
+  visibility: hidden;
+}
+
+/* sidebar logo brand accent */
+.sidebar-logo .in {
+  color: var(--teal);
+}
