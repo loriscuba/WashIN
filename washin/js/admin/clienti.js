@@ -131,8 +131,7 @@ export async function openModalCliente(id = null) {
 
 export async function saveCliente(formData) {
 	try {
-		const payload = {
-			id: formData.id || undefined,
+		const fields = {
 			ragione_sociale: formData.ragione_sociale,
 			tipo: formData.tipo,
 			indirizzo: formData.indirizzo,
@@ -144,10 +143,15 @@ export async function saveCliente(formData) {
 			note: formData.note,
 			attivo: formData.attivo !== undefined ? formData.attivo : true,
 		}
-		const { data, error } = await supabase.from('clienti').upsert(payload, { returning: 'representation' })
+		let error
+		if (formData.id) {
+			;({ error } = await supabase.from('clienti').update(fields).eq('id', formData.id))
+		} else {
+			;({ error } = await supabase.from('clienti').insert(fields))
+		}
 		if (error) throw error
 		showToast('Cliente salvato con successo', 'success')
-		return data?.[0] || null
+		return true
 	} catch (error) {
 		showToast('Errore durante il salvataggio del cliente', 'error')
 		console.error(error)

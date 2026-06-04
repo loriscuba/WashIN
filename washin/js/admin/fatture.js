@@ -112,8 +112,7 @@ export async function saveFattura(formData){
     const imponibile = Number(formData.imponibile) || 0
     const iva_pct = Number(formData.iva_pct) || 22
     const { iva, totale } = calcolaTotale(imponibile, iva_pct)
-    const up = {
-      id: formData.id || undefined,
+    const fields = {
       cliente_id: formData.cliente_id || null,
       contratto_id: formData.contratto_id || null,
       numero_fattura: formData.numero_fattura || null,
@@ -127,10 +126,15 @@ export async function saveFattura(formData){
       metodo_pagamento: formData.metodo_pagamento || null,
       note: formData.note || null,
     }
-    const { data, error } = await supabase.from('fatture').upsert(up, { returning: 'representation' })
+    let error
+    if (formData.id) {
+      ;({ error } = await supabase.from('fatture').update(fields).eq('id', formData.id))
+    } else {
+      ;({ error } = await supabase.from('fatture').insert(fields))
+    }
     if (error) throw error
     showToast('Fattura salvata', 'success')
-    return data?.[0] || null
+    return true
   }catch(err){
     showToast('Errore salvataggio fattura','error')
     console.error(err)
