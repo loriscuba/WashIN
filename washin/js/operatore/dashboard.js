@@ -4,7 +4,7 @@ import { initAgenda } from './agenda.js'
 import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
 
 function showSection(sectionId) {
-  const sections = ['agenda', 'checklist', 'documenti', 'cedolini']
+  const sections = ['agenda', 'checklist', 'documenti', 'cedolini', 'profilo']
   sections.forEach((id) => {
     const el = document.getElementById(id)
     const link = document.querySelector(`[data-section="${id}"]`)
@@ -58,6 +58,37 @@ function bindNavigation() {
   })
 }
 
+function initProfilo() {
+  document.getElementById('btn-profilo')?.addEventListener('click', () => showSection('profilo'))
+
+  document.getElementById('form-cambia-email')?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const email = e.target.querySelector('[name="new_email"]').value.trim()
+    if (!email) return
+    const { error } = await supabase.auth.updateUser({ email })
+    if (error) {
+      alert('Errore: ' + error.message)
+    } else {
+      alert('Controlla la tua nuova casella email per confermare il cambio.')
+      e.target.reset()
+    }
+  })
+
+  document.getElementById('form-cambia-password')?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const pw = e.target.querySelector('[name="new_password"]').value
+    const pw2 = e.target.querySelector('[name="confirm_password"]').value
+    if (pw !== pw2) { alert('Le password non coincidono.'); return }
+    const { error } = await supabase.auth.updateUser({ password: pw })
+    if (error) {
+      alert('Errore: ' + error.message)
+    } else {
+      alert('Password aggiornata con successo.')
+      e.target.reset()
+    }
+  })
+}
+
 async function initDashboard() {
   await checkAuth()
   updateTodayDate()
@@ -67,6 +98,7 @@ async function initDashboard() {
   showSection('agenda')
   await initAgenda()
   initChecklist()
+  initProfilo()
 
   window.addEventListener('operatore:open-checklist', async (event) => {
     showSection('checklist')
