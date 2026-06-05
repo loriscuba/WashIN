@@ -197,58 +197,6 @@
             </table>
           </div>
 
-          <div class="modal-overlay" id="cliente-modal">
-            <div class="modal-box">
-              <h2>Nuovo/Modifica Cliente</h2>
-              <form>
-                <div class="form-group">
-                  <label>Ragione sociale</label>
-                  <input name="ragione_sociale" type="text" required>
-                </div>
-                <div class="form-group">
-                  <label>Tipo</label>
-                  <select name="tipo">
-                    <option value="privato">Privato</option>
-                    <option value="azienda">Azienda</option>
-                    <option value="condominio">Condominio</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Indirizzo</label>
-                  <input name="indirizzo" type="text">
-                </div>
-                <div style="display:grid; grid-template-columns:2fr 1fr; gap:10px;">
-                  <div class="form-group"><label>Città</label><input name="citta" type="text"></div>
-                  <div class="form-group"><label>CAP</label><input name="cap" type="text"></div>
-                </div>
-                <div class="form-group">
-                  <label>Referente</label>
-                  <input name="referente" type="text">
-                </div>
-                <div class="form-group">
-                  <label>Telefono</label>
-                  <input name="telefono" type="text">
-                </div>
-                <div class="form-group">
-                  <label>Email</label>
-                  <input name="email" type="email">
-                </div>
-                <div class="form-group">
-                  <label>Note</label>
-                  <textarea name="note" rows="3"></textarea>
-                </div>
-                <div class="form-group">
-                  <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
-                    <input name="attivo" type="checkbox" checked style="width:auto;"> Attivo
-                  </label>
-                </div>
-                <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
-                  <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
-                  <button type="submit" class="btn btn-primary btn-sm">Salva cliente</button>
-                </div>
-              </form>
-            </div>
-          </div>
         </section>
 
         <!-- ── Contratti ─────────────────────────────── -->
@@ -279,61 +227,6 @@
             </table>
           </div>
 
-          <div class="modal-overlay" id="contratto-modal">
-            <div class="modal-box">
-              <h2>Nuovo Contratto</h2>
-              <form>
-                <div class="form-group">
-                  <label>Cliente</label>
-                  <select name="cliente_id"><option value="">-- Seleziona cliente --</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Numero contratto</label>
-                  <input name="numero_contratto" type="text">
-                </div>
-                <div class="form-group">
-                  <label>Tipo</label>
-                  <select name="tipo">
-                    <option value="ricorrente">Ricorrente</option>
-                    <option value="una_tantum">Una tantum</option>
-                    <option value="appalto">Appalto</option>
-                  </select>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                  <div class="form-group"><label>Data inizio</label><input name="data_inizio" type="date"></div>
-                  <div class="form-group"><label>Data fine</label><input name="data_fine" type="date"></div>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                  <div class="form-group"><label>Importo mensile (€)</label><input name="importo_mensile" type="number" step="0.01" min="0"></div>
-                  <div class="form-group"><label>Ore/mese</label><input name="ore_contratto_mensili" type="number" step="0.5" min="0"></div>
-                </div>
-                <div class="form-group">
-                  <label>Frequenza</label>
-                  <select name="frequenza">
-                    <option value="settimanale">Settimanale</option>
-                    <option value="giornaliera">Giornaliera</option>
-                    <option value="mensile">Mensile</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Stato</label>
-                  <select name="stato">
-                    <option value="attivo">Attivo</option>
-                    <option value="sospeso">Sospeso</option>
-                    <option value="scaduto">Scaduto</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Note</label>
-                  <textarea name="note" rows="3"></textarea>
-                </div>
-                <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
-                  <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
-                  <button type="submit" class="btn btn-primary btn-sm">Salva contratto</button>
-                </div>
-              </form>
-            </div>
-          </div>
         </section>
 
         <!-- ── Sedi ──────────────────────────────────── -->
@@ -362,37 +255,6 @@
             </table>
           </div>
 
-          <div class="modal-overlay" id="sede-modal">
-            <div class="modal-box">
-              <h2>Nuova Sede</h2>
-              <form>
-                <div class="form-group">
-                  <label>Contratto</label>
-                  <select name="contratto_id"><option value="">-- Seleziona contratto --</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Nome sede</label>
-                  <input name="nome_sede" type="text" required>
-                </div>
-                <div class="form-group">
-                  <label>Indirizzo</label>
-                  <input name="indirizzo" type="text">
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                  <div class="form-group"><label>Piano</label><input name="piano" type="text"></div>
-                  <div class="form-group"><label>Mq totali</label><input name="mq_totali" type="number" step="0.1" min="0"></div>
-                </div>
-                <div class="form-group">
-                  <label>Note accesso</label>
-                  <textarea name="note_accesso" rows="3"></textarea>
-                </div>
-                <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
-                  <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
-                  <button type="submit" class="btn btn-primary btn-sm">Salva sede</button>
-                </div>
-              </form>
-            </div>
-          </div>
         </section>
 
         <!-- ── Interventi ────────────────────────────── -->
@@ -429,50 +291,6 @@
             </table>
           </div>
 
-          <div class="modal-overlay" id="intervento-modal">
-            <div class="modal-box">
-              <h2>Nuovo/Modifica Intervento</h2>
-              <form id="intervento-form">
-                <div class="form-group">
-                  <label>Operatore</label>
-                  <select name="operatore_id"><option value="">-- Seleziona operatore --</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Contratto</label>
-                  <select name="contratto_id"><option value="">-- Seleziona contratto --</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Sede</label>
-                  <select name="sede_id"><option value="">-- Prima seleziona contratto --</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Data</label>
-                  <input name="data_pianificata" type="date">
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                  <div class="form-group"><label>Ora inizio</label><input name="ora_inizio" type="time"></div>
-                  <div class="form-group"><label>Ora fine</label><input name="ora_fine" type="time"></div>
-                </div>
-                <div class="form-group">
-                  <label>Tipo pulizia</label>
-                  <select name="tipo_pulizia">
-                    <option value="ordinaria">Ordinaria</option>
-                    <option value="straordinaria">Straordinaria</option>
-                    <option value="sanificazione">Sanificazione</option>
-                    <option value="post_cantiere">Post cantiere</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Note</label>
-                  <textarea name="note" rows="3"></textarea>
-                </div>
-                <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
-                  <button type="button" class="btn btn-secondary btn-sm" id="intervento-cancel">Annulla</button>
-                  <button type="submit" class="btn btn-primary btn-sm">Salva intervento</button>
-                </div>
-              </form>
-            </div>
-          </div>
         </section>
 
         <!-- ── Operatori ─────────────────────────────── -->
@@ -500,39 +318,6 @@
             </table>
           </div>
 
-          <div class="modal-overlay" id="operatore-modal">
-            <div class="modal-box">
-              <h2>Nuovo/Modifica Operatore</h2>
-              <form>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                  <div class="form-group"><label>Nome</label><input name="nome" type="text" required></div>
-                  <div class="form-group"><label>Cognome</label><input name="cognome" type="text" required></div>
-                </div>
-                <div class="form-group">
-                  <label>Email</label>
-                  <input name="email" type="email">
-                </div>
-                <div class="form-group">
-                  <label>Telefono</label>
-                  <input name="telefono" type="text">
-                </div>
-                <div class="form-group">
-                  <label>Qualifica</label>
-                  <input name="qualifica" type="text">
-                </div>
-                <input name="ruolo" type="hidden" value="operatore">
-                <div class="form-group">
-                  <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
-                    <input name="attivo" type="checkbox" checked style="width:auto;"> Attivo
-                  </label>
-                </div>
-                <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
-                  <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
-                  <button type="submit" class="btn btn-primary btn-sm">Salva operatore</button>
-                </div>
-              </form>
-            </div>
-          </div>
         </section>
 
         <!-- ── Fatture ───────────────────────────────── -->
@@ -590,63 +375,6 @@
             </table>
           </div>
 
-          <div class="modal-overlay" id="fattura-modal">
-            <div class="modal-box">
-              <h2>Nuova/Modifica Fattura</h2>
-              <form>
-                <div class="form-group">
-                  <label>Cliente</label>
-                  <select name="cliente_id"><option value="">-- Seleziona cliente --</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Contratto</label>
-                  <select name="contratto_id"><option value="">-- Seleziona contratto --</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Numero fattura</label>
-                  <input name="numero_fattura" type="text">
-                </div>
-                <div class="form-group">
-                  <label>Mese</label>
-                  <input name="mese" type="month">
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                  <div class="form-group"><label>Imponibile (€)</label><input name="imponibile" type="number" step="0.01" min="0" value="0"></div>
-                  <div class="form-group"><label>IVA %</label><input name="iva_pct" type="number" min="0" max="100" value="22"></div>
-                </div>
-                <div class="form-group">
-                  <label>Stato</label>
-                  <select name="stato">
-                    <option value="bozza">Bozza</option>
-                    <option value="emessa">Emessa</option>
-                    <option value="pagata">Pagata</option>
-                    <option value="scaduta">Scaduta</option>
-                  </select>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                  <div class="form-group"><label>Data scadenza</label><input name="data_scadenza" type="date"></div>
-                  <div class="form-group"><label>Data pagamento</label><input name="data_pagamento" type="date"></div>
-                </div>
-                <div class="form-group">
-                  <label>Metodo pagamento</label>
-                  <select name="metodo_pagamento">
-                    <option value="">--</option>
-                    <option value="bonifico">Bonifico</option>
-                    <option value="contanti">Contanti</option>
-                    <option value="carta">Carta</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Note</label>
-                  <textarea name="note" rows="3"></textarea>
-                </div>
-                <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
-                  <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
-                  <button type="submit" class="btn btn-primary btn-sm">Salva fattura</button>
-                </div>
-              </form>
-            </div>
-          </div>
         </section>
 
         <!-- ── Impostazioni ──────────────────────────── -->
@@ -719,6 +447,208 @@
         </section>
 
       </main>
+    </div>
+
+    <!-- ── Modali (fuori dalle sezioni per non essere nascosti da .hidden) ── -->
+    <div class="modal-overlay" id="cliente-modal">
+      <div class="modal-box">
+        <h2>Nuovo/Modifica Cliente</h2>
+        <form>
+          <div class="form-group"><label>Ragione sociale</label><input name="ragione_sociale" type="text" required></div>
+          <div class="form-group"><label>Tipo</label>
+            <select name="tipo">
+              <option value="privato">Privato</option>
+              <option value="azienda">Azienda</option>
+              <option value="condominio">Condominio</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Indirizzo</label><input name="indirizzo" type="text"></div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;">
+            <div class="form-group"><label>Città</label><input name="citta" type="text"></div>
+            <div class="form-group"><label>CAP</label><input name="cap" type="text"></div>
+          </div>
+          <div class="form-group"><label>Referente</label><input name="referente" type="text"></div>
+          <div class="form-group"><label>Telefono</label><input name="telefono" type="text"></div>
+          <div class="form-group"><label>Email</label><input name="email" type="email"></div>
+          <div class="form-group"><label>Note</label><textarea name="note" rows="3"></textarea></div>
+          <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-weight:400;"><input name="attivo" type="checkbox" checked style="width:auto;"> Attivo</label></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva cliente</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="contratto-modal">
+      <div class="modal-box">
+        <h2>Nuovo Contratto</h2>
+        <form>
+          <div class="form-group"><label>Cliente</label><select name="cliente_id"><option value="">-- Seleziona cliente --</option></select></div>
+          <div class="form-group"><label>Numero contratto</label><input name="numero_contratto" type="text"></div>
+          <div class="form-group"><label>Tipo</label>
+            <select name="tipo">
+              <option value="ricorrente">Ricorrente</option>
+              <option value="una_tantum">Una tantum</option>
+              <option value="appalto">Appalto</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Data inizio</label><input name="data_inizio" type="date"></div>
+            <div class="form-group"><label>Data fine</label><input name="data_fine" type="date"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Importo mensile (€)</label><input name="importo_mensile" type="number" step="0.01" min="0"></div>
+            <div class="form-group"><label>Ore/mese</label><input name="ore_contratto_mensili" type="number" step="0.5" min="0"></div>
+          </div>
+          <div class="form-group"><label>Frequenza</label>
+            <select name="frequenza">
+              <option value="settimanale">Settimanale</option>
+              <option value="giornaliera">Giornaliera</option>
+              <option value="mensile">Mensile</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Stato</label>
+            <select name="stato">
+              <option value="attivo">Attivo</option>
+              <option value="sospeso">Sospeso</option>
+              <option value="scaduto">Scaduto</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Note</label><textarea name="note" rows="3"></textarea></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva contratto</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="sede-modal">
+      <div class="modal-box">
+        <h2>Nuova Sede</h2>
+        <form>
+          <div class="form-group"><label>Contratto</label><select name="contratto_id"><option value="">-- Seleziona contratto --</option></select></div>
+          <div class="form-group"><label>Nome sede</label><input name="nome_sede" type="text" required></div>
+          <div class="form-group"><label>Indirizzo</label><input name="indirizzo" type="text"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Piano</label><input name="piano" type="text"></div>
+            <div class="form-group"><label>Mq totali</label><input name="mq_totali" type="number" step="0.1" min="0"></div>
+          </div>
+          <div class="form-group"><label>Note accesso</label><textarea name="note_accesso" rows="3"></textarea></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva sede</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="operatore-modal">
+      <div class="modal-box">
+        <h2>Nuovo/Modifica Operatore</h2>
+        <form>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Nome</label><input name="nome" type="text" required></div>
+            <div class="form-group"><label>Cognome</label><input name="cognome" type="text" required></div>
+          </div>
+          <div class="form-group"><label>Email</label><input name="email" type="email"></div>
+          <div class="form-group"><label>Telefono</label><input name="telefono" type="text"></div>
+          <div class="form-group"><label>Qualifica</label><input name="qualifica" type="text"></div>
+          <input name="ruolo" type="hidden" value="operatore">
+          <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-weight:400;"><input name="attivo" type="checkbox" checked style="width:auto;"> Attivo</label></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva operatore</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="fattura-modal">
+      <div class="modal-box">
+        <h2>Nuova/Modifica Fattura</h2>
+        <form>
+          <div class="form-group"><label>Cliente</label><select name="cliente_id"><option value="">-- Seleziona cliente --</option></select></div>
+          <div class="form-group"><label>Contratto</label><select name="contratto_id"><option value="">-- Seleziona contratto --</option></select></div>
+          <div class="form-group"><label>Numero fattura</label><input name="numero_fattura" type="text"></div>
+          <div class="form-group"><label>Mese</label><input name="mese" type="month"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Imponibile (€)</label><input name="imponibile" type="number" step="0.01" min="0" value="0"></div>
+            <div class="form-group"><label>IVA %</label><input name="iva_pct" type="number" min="0" max="100" value="22"></div>
+          </div>
+          <div class="form-group"><label>Stato</label>
+            <select name="stato">
+              <option value="bozza">Bozza</option>
+              <option value="emessa">Emessa</option>
+              <option value="pagata">Pagata</option>
+              <option value="scaduta">Scaduta</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Data scadenza</label><input name="data_scadenza" type="date"></div>
+            <div class="form-group"><label>Data pagamento</label><input name="data_pagamento" type="date"></div>
+          </div>
+          <div class="form-group"><label>Metodo pagamento</label>
+            <select name="metodo_pagamento">
+              <option value="">--</option>
+              <option value="bonifico">Bonifico</option>
+              <option value="contanti">Contanti</option>
+              <option value="carta">Carta</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Note</label><textarea name="note" rows="3"></textarea></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva fattura</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="intervento-modal">
+      <div class="modal-box">
+        <h2>Nuovo/Modifica Intervento</h2>
+        <form id="intervento-form">
+          <div class="form-group">
+            <label>Operatore</label>
+            <select name="operatore_id"><option value="">-- Seleziona operatore --</option></select>
+          </div>
+          <div class="form-group">
+            <label>Contratto</label>
+            <select name="contratto_id"><option value="">-- Seleziona contratto --</option></select>
+          </div>
+          <div class="form-group">
+            <label>Sede</label>
+            <select name="sede_id"><option value="">-- Prima seleziona contratto --</option></select>
+          </div>
+          <div class="form-group">
+            <label>Data</label>
+            <input name="data_pianificata" type="date">
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="form-group"><label>Ora inizio</label><input name="ora_inizio" type="time"></div>
+            <div class="form-group"><label>Ora fine</label><input name="ora_fine" type="time"></div>
+          </div>
+          <div class="form-group">
+            <label>Tipo pulizia</label>
+            <select name="tipo_pulizia">
+              <option value="ordinaria">Ordinaria</option>
+              <option value="straordinaria">Straordinaria</option>
+              <option value="sanificazione">Sanificazione</option>
+              <option value="post_cantiere">Post cantiere</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Note</label>
+            <textarea name="note" rows="3"></textarea>
+          </div>
+          <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="intervento-cancel">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva intervento</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
