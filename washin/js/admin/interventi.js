@@ -213,7 +213,7 @@ export async function stopIntervento(id){
   }
 }
 
-
+export async function cambiaStatoIntervento(id, nuovoStato, motivo = null){
   try{
     const payload = { stato: nuovoStato }
     if (nuovoStato === 'annullato' && motivo) payload.note_operatore = motivo
