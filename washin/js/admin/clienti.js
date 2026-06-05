@@ -272,6 +272,9 @@ export function initClienti() {
 				renderTabellaClienti(clienti)
 			}
 		})
+
+		// caricamento iniziale
+		loadClienti().then(renderTabellaClienti)
 	} catch (error) {
 		showToast('Errore durante l inizializzazione sezione clienti', 'error')
 		console.error(error)
