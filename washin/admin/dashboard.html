@@ -201,7 +201,7 @@
               <h1>Contratti</h1>
               <p style="color: var(--gray-500); margin-top:8px;">Gestisci i contratti attivi e ricorrenti.</p>
             </div>
-            <button class="btn btn-primary">+ Nuovo contratto</button>
+            <button id="add-contratto-button" class="btn btn-primary">+ Nuovo contratto</button>
           </div>
           <div class="table-container card">
             <table class="washin-table">
@@ -220,6 +220,62 @@
               </thead>
               <tbody id="contratti-table-body"></tbody>
             </table>
+          </div>
+
+          <div class="modal-overlay" id="contratto-modal">
+            <div class="modal-box">
+              <h2>Nuovo Contratto</h2>
+              <form>
+                <div class="form-group">
+                  <label>Cliente</label>
+                  <select name="cliente_id"><option value="">-- Seleziona cliente --</option></select>
+                </div>
+                <div class="form-group">
+                  <label>Numero contratto</label>
+                  <input name="numero_contratto" type="text">
+                </div>
+                <div class="form-group">
+                  <label>Tipo</label>
+                  <select name="tipo">
+                    <option value="ricorrente">Ricorrente</option>
+                    <option value="una_tantum">Una tantum</option>
+                    <option value="appalto">Appalto</option>
+                  </select>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                  <div class="form-group"><label>Data inizio</label><input name="data_inizio" type="date"></div>
+                  <div class="form-group"><label>Data fine</label><input name="data_fine" type="date"></div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                  <div class="form-group"><label>Importo mensile (€)</label><input name="importo_mensile" type="number" step="0.01" min="0"></div>
+                  <div class="form-group"><label>Ore/mese</label><input name="ore_contratto_mensili" type="number" step="0.5" min="0"></div>
+                </div>
+                <div class="form-group">
+                  <label>Frequenza</label>
+                  <select name="frequenza">
+                    <option value="settimanale">Settimanale</option>
+                    <option value="giornaliera">Giornaliera</option>
+                    <option value="mensile">Mensile</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Stato</label>
+                  <select name="stato">
+                    <option value="attivo">Attivo</option>
+                    <option value="sospeso">Sospeso</option>
+                    <option value="scaduto">Scaduto</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Note</label>
+                  <textarea name="note" rows="3"></textarea>
+                </div>
+                <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
+                  <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
+                  <button type="submit" class="btn btn-primary btn-sm">Salva contratto</button>
+                </div>
+              </form>
+            </div>
           </div>
         </section>
 
@@ -530,6 +586,7 @@
       import { initOperatori } from '../js/admin/operatori.js'
       import { initFatture } from '../js/admin/fatture.js'
       import { initCruscotto } from '../js/admin/cruscotto.js'
+      import { initContratti } from '../js/admin/contratti.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -573,6 +630,7 @@
         currentDate.textContent = now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
         initCruscotto()
         initClienti()
+        initContratti()
         initInterventi()
         initOperatori()
         initFatture()
