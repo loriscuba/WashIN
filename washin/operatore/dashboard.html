@@ -159,7 +159,10 @@
         </div>
         <div class="sidebar-profile">
           <strong id="operator-name">Operatore sul campo</strong>
-          <span>Benvenuto!</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;">
+            <span style="font-size:13px;opacity:0.75;">Benvenuto!</span>
+            <button class="btn btn-sm" id="btn-profilo" type="button" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);padding:4px 12px;font-size:12px;">Il mio profilo</button>
+          </div>
         </div>
         <nav class="sidebar-nav" id="sidebar-nav">
           <a class="active" href="#agenda" data-section="agenda"><span data-lucide="calendar"></span> La mia agenda</a>
@@ -292,6 +295,46 @@
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section id="profilo" class="section section-card hidden">
+          <div class="section-header">
+            <div>
+              <h2>Il mio profilo</h2>
+              <p style="color:var(--gray-500);margin-top:6px;">Modifica email e password del tuo account.</p>
+            </div>
+          </div>
+
+          <div style="display:grid;gap:24px;max-width:480px;">
+            <form id="form-cambia-email">
+              <h3 style="font-size:16px;margin-bottom:14px;">Cambia email</h3>
+              <div style="display:grid;gap:12px;">
+                <div>
+                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Nuova email</label>
+                  <input name="new_email" type="email" required placeholder="nuova@email.it" style="width:100%;padding:12px;border:1px solid var(--gray-300);border-radius:12px;font-size:14px;" />
+                </div>
+                <button class="btn btn-primary btn-sm" type="submit">Aggiorna email</button>
+                <p style="font-size:12px;color:var(--gray-500);margin:0;">Riceverai un'email di conferma al nuovo indirizzo.</p>
+              </div>
+            </form>
+
+            <hr style="border:none;border-top:1px solid var(--gray-200);" />
+
+            <form id="form-cambia-password">
+              <h3 style="font-size:16px;margin-bottom:14px;">Cambia password</h3>
+              <div style="display:grid;gap:12px;">
+                <div>
+                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Nuova password</label>
+                  <input name="new_password" type="password" required minlength="6" placeholder="Minimo 6 caratteri" style="width:100%;padding:12px;border:1px solid var(--gray-300);border-radius:12px;font-size:14px;" />
+                </div>
+                <div>
+                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Conferma password</label>
+                  <input name="confirm_password" type="password" required minlength="6" placeholder="Ripeti la password" style="width:100%;padding:12px;border:1px solid var(--gray-300);border-radius:12px;font-size:14px;" />
+                </div>
+                <button class="btn btn-primary btn-sm" type="submit">Aggiorna password</button>
+              </div>
+            </form>
           </div>
         </section>
 
