@@ -1,5 +1,6 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
+import { openModalIntervento } from './interventi.js'
 
 function todayISO(){
   return new Date().toISOString().slice(0,10)
@@ -172,6 +173,12 @@ export function initCruscotto(){
     }
     const refresh = document.getElementById('refresh-cruscotto')
     refresh?.addEventListener('click', refreshAll)
+
+    document.getElementById('interventi-oggi-body')?.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-action="open"]')
+      if (btn?.dataset.id) await openModalIntervento(btn.dataset.id)
+    })
+
     refreshAll()
   }catch(err){
     showToast('Errore inizializzazione cruscotto','error')
