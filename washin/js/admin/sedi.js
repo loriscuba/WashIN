@@ -27,11 +27,55 @@ function createSedeRow(s) {
     <td>${s.indirizzo || '-'}</td>
     <td>${s.piano || '-'}</td>
     <td>${s.mq_totali ?? '-'}</td>
-    <td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap;">
       <button class="btn btn-sm btn-secondary" data-action="edit-sede" data-id="${s.id}">Modifica</button>
+      <button class="btn btn-sm btn-secondary" data-action="storico-sede" data-id="${s.id}" data-nome="${s.nome_sede || ''}">Storico</button>
     </td>
   `
   return tr
+}
+
+const STORICO_BADGE = { pianificato:'badge-warning', in_corso:'badge-info', completato:'badge-success', approvato:'badge-success', annullato:'badge-danger' }
+
+export async function openStoricSede(sedeId, sedeName) {
+  try {
+    const modal = document.getElementById('storico-sede-modal')
+    if (!modal) return
+    const title = document.getElementById('storico-sede-title')
+    if (title) title.textContent = `Storico — ${sedeName}`
+    const tbody = document.getElementById('storico-sede-body')
+    if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;">Caricamento...</td></tr>'
+    modal.classList.add('active')
+
+    const { data, error } = await supabase.from('interventi')
+      .select('*, profili(nome,cognome)')
+      .eq('sede_id', sedeId)
+      .order('data_pianificata', { ascending: false })
+      .limit(60)
+    if (error) throw error
+
+    if (!tbody) return
+    if (!data?.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun intervento registrato</td></tr>'
+      return
+    }
+    tbody.innerHTML = ''
+    data.forEach(iv => {
+      const tr = document.createElement('tr')
+      const op = iv.profili ? `${iv.profili.nome || ''} ${iv.profili.cognome || ''}`.trim() : '-'
+      const badge = STORICO_BADGE[iv.stato] || 'badge-warning'
+      tr.innerHTML = `
+        <td>${iv.data_pianificata}</td>
+        <td>${op}</td>
+        <td>${iv.tipo_pulizia || '-'}</td>
+        <td><span class="badge ${badge}">${iv.stato}</span></td>
+      `
+      tbody.appendChild(tr)
+    })
+  } catch (err) {
+    showToast('Errore caricamento storico sede', 'error')
+    console.error(err)
+  }
 }
 
 export function renderTabellaSedi(sedi) {
@@ -154,11 +198,18 @@ export function initSedi() {
       })
     }
 
+    document.getElementById('storico-sede-close')?.addEventListener('click', () => {
+      document.getElementById('storico-sede-modal')?.classList.remove('active')
+    })
+
     document.addEventListener('click', async e => {
       const t = e.target
       if (!(t instanceof HTMLElement)) return
       if (t.dataset.action === 'edit-sede' && t.dataset.id) {
         await openModalSede(t.dataset.id)
+      }
+      if (t.dataset.action === 'storico-sede' && t.dataset.id) {
+        await openStoricSede(t.dataset.id, t.dataset.nome || '')
       }
     })
 
