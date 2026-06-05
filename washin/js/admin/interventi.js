@@ -293,9 +293,15 @@ export async function openModalIntervento(id = null){
       if (data.contratto_id && contrattoSelect) contrattoSelect.value = data.contratto_id
       if (sedeSelect) await loadSediByContratto(data.contratto_id, sedeSelect, data.sede_id)
       form.dataset.interventoId = id
+      // carica materiali
+      const mat = await loadMaterialiPerIntervento(id)
+      const matList = document.getElementById('materiali-list')
+      if (matList) { matList.innerHTML = ''; mat.forEach(m => addMaterialeRow(m)) }
     } else {
       form.reset()
       delete form.dataset.interventoId
+      const matList = document.getElementById('materiali-list')
+      if (matList) matList.innerHTML = ''
     }
 
     modal.classList.add('active')
@@ -318,19 +324,84 @@ export async function saveIntervento(formData){
       note_operatore: formData.note || null,
       stato: formData.stato || 'pianificato'
     }
+    let savedId = formData.id
     let error
     if (formData.id) {
       ;({ error } = await supabase.from('interventi').update(fields).eq('id', formData.id))
     } else {
-      ;({ error } = await supabase.from('interventi').insert(fields))
+      const { data: ins, error: errIns } = await supabase.from('interventi').insert(fields).select('id').single()
+      error = errIns
+      if (!errIns) savedId = ins.id
     }
     if (error) throw error
+    // fire-and-forget notification
+    if (savedId && fields.operatore_id) {
+      supabase.from('notifiche').insert({
+        utente_id: fields.operatore_id,
+        messaggio: `Intervento assegnato: ${fields.data_pianificata || ''} — ${fields.tipo_pulizia || 'pulizia'}`,
+        tipo: 'info'
+      }).then(({ error: ne }) => { if (ne) console.warn('Notifica:', ne.message) })
+    }
     showToast('Intervento salvato','success')
-    return true
+    return savedId
   }catch(err){
     showToast('Errore salvataggio intervento','error')
     console.error(err)
     return null
+  }
+}
+
+async function loadMaterialiPerIntervento(interventoId) {
+  const { data } = await supabase.from('materiali_intervento')
+    .select('*').eq('intervento_id', interventoId).order('created_at')
+  return data || []
+}
+
+function addMaterialeRow(m = {}) {
+  const container = document.getElementById('materiali-list')
+  if (!container) return
+  const row = document.createElement('div')
+  row.className = 'materiale-row'
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 70px 70px 36px;gap:6px;align-items:center;margin-bottom:8px;'
+  row.innerHTML = `
+    <input class="mat-prodotto" type="text" placeholder="Prodotto/materiale" value="${m.prodotto || ''}"
+      style="padding:8px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;" />
+    <input class="mat-quantita" type="number" placeholder="Qtà" value="${m.quantita ?? 1}" min="0" step="0.1"
+      style="padding:8px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;" />
+    <select class="mat-unita" style="padding:8px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;">
+      <option value="lt" ${(m.unita || 'lt') === 'lt' ? 'selected' : ''}>lt</option>
+      <option value="kg" ${(m.unita || '') === 'kg' ? 'selected' : ''}>kg</option>
+      <option value="pz" ${(m.unita || '') === 'pz' ? 'selected' : ''}>pz</option>
+      <option value="m²" ${(m.unita || '') === 'm²' ? 'selected' : ''}>m²</option>
+    </select>
+    <button type="button" data-action="remove-materiale"
+      style="padding:0;width:32px;height:32px;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+  `
+  if (m.id) row.dataset.materialeId = m.id
+  container.appendChild(row)
+}
+
+async function saveMateriali(interventoId) {
+  const container = document.getElementById('materiali-list')
+  if (!container) return
+  const rows = container.querySelectorAll('.materiale-row')
+
+  await supabase.from('materiali_intervento').delete().eq('intervento_id', interventoId)
+
+  const toInsert = []
+  rows.forEach(row => {
+    const prodotto = row.querySelector('.mat-prodotto')?.value?.trim()
+    if (!prodotto) return
+    toInsert.push({
+      intervento_id: interventoId,
+      prodotto,
+      quantita: parseFloat(row.querySelector('.mat-quantita')?.value) || 1,
+      unita: row.querySelector('.mat-unita')?.value || 'lt'
+    })
+  })
+  if (toInsert.length) {
+    const { error } = await supabase.from('materiali_intervento').insert(toInsert)
+    if (error) console.error('Errore salvataggio materiali:', error)
   }
 }
 
@@ -362,6 +433,8 @@ export function initInterventi(){
     const cancelBtn = document.getElementById('intervento-cancel')
     cancelBtn?.addEventListener('click', ()=> modal?.classList.remove('active'))
 
+    document.getElementById('add-materiale-btn')?.addEventListener('click', () => addMaterialeRow())
+
     if (form){
       form.addEventListener('submit', async (e)=>{
         e.preventDefault()
@@ -378,19 +451,22 @@ export function initInterventi(){
           tipo_pulizia: fd.get('tipo_pulizia') || null,
           note: fd.get('note') || null,
         }
-        await saveIntervento(payload)
+        const savedId = await saveIntervento(payload)
+        if (savedId) await saveMateriali(savedId)
         modal.classList.remove('active')
         refreshView()
       })
     }
 
-    // delegate clicks for edit/avvia/stop
+    // delegate clicks for edit/avvia/stop/remove-materiale
     document.addEventListener('click', async (e)=>{
       const t = e.target
       if (!(t instanceof HTMLElement)) return
       const action = t.dataset.action
+      if (!action) return
+      if (action === 'remove-materiale') { t.closest('.materiale-row')?.remove(); return }
       const id = t.dataset.id
-      if (!action || !id) return
+      if (!id) return
       if (action === 'edit') await openModalIntervento(id)
       if (action === 'avvia-intervento'){ await avviaIntervento(id); refreshView() }
       if (action === 'stop-intervento'){ await stopIntervento(id); refreshView() }

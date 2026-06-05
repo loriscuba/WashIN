@@ -3,6 +3,34 @@ import { checkAuth, logout } from '../auth.js'
 import { initAgenda } from './agenda.js'
 import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
 
+let _currentUserId = null
+
+async function loadNotificheBadge(userId) {
+  try {
+    const { count, error } = await supabase.from('notifiche')
+      .select('id', { count: 'exact' })
+      .eq('utente_id', userId)
+      .eq('letto', false)
+    if (error) return
+    const badge = document.getElementById('notifiche-badge')
+    if (!badge) return
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count)
+      badge.style.display = 'flex'
+    } else {
+      badge.style.display = 'none'
+    }
+  } catch { }
+}
+
+async function markNotificheRead(userId) {
+  try {
+    await supabase.from('notifiche').update({ letto: true }).eq('utente_id', userId).eq('letto', false)
+    const badge = document.getElementById('notifiche-badge')
+    if (badge) badge.style.display = 'none'
+  } catch { }
+}
+
 function showSection(sectionId) {
   const sections = ['agenda', 'checklist', 'documenti', 'cedolini', 'profilo']
   sections.forEach((id) => {
@@ -13,13 +41,15 @@ function showSection(sectionId) {
       link.classList.toggle('active', id === sectionId)
     })
   })
+  if (sectionId === 'agenda' && _currentUserId) markNotificheRead(_currentUserId)
 }
 
 async function loadOperatorInfo() {
   try {
     const { data, error } = await supabase.auth.getSession()
     if (error || !data?.session?.user) return null
-    const profile = await getUserProfile(data.session.user.id)
+    _currentUserId = data.session.user.id
+    const profile = await getUserProfile(_currentUserId)
     if (profile) {
       const name = `${profile.nome || ''} ${profile.cognome || ''}`.trim() || 'Operatore'
       const nameEl = document.getElementById('operator-name')
@@ -27,6 +57,7 @@ async function loadOperatorInfo() {
       if (nameEl) nameEl.textContent = name
       if (greetingEl) greetingEl.textContent = name
     }
+    await loadNotificheBadge(_currentUserId)
     return profile
   } catch (error) {
     console.error('loadOperatorInfo', error)
