@@ -22,6 +22,7 @@
           <a class="active" href="#cruscotto" data-target="cruscotto"><span data-lucide="layout"></span> Cruscotto</a>
           <a href="#clienti" data-target="clienti"><span data-lucide="users"></span> Clienti</a>
           <a href="#contratti" data-target="contratti"><span data-lucide="file-text"></span> Contratti</a>
+          <a href="#sedi" data-target="sedi"><span data-lucide="map-pin"></span> Sedi</a>
           <a href="#interventi" data-target="interventi"><span data-lucide="calendar"></span> Interventi</a>
           <a href="#operatori" data-target="operatori"><span data-lucide="user-check"></span> Operatori</a>
           <a href="#fatture" data-target="fatture"><span data-lucide="file-invoice"></span> Fatture</a>
@@ -279,6 +280,65 @@
           </div>
         </section>
 
+        <!-- ── Sedi ──────────────────────────────────── -->
+        <section id="sedi" class="section hidden">
+          <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+              <h1>Sedi</h1>
+              <p style="color: var(--gray-500); margin-top:8px;">Gestisci le sedi associate ai contratti.</p>
+            </div>
+            <button id="add-sede-button" class="btn btn-primary">+ Nuova sede</button>
+          </div>
+          <div class="table-container card">
+            <table class="washin-table">
+              <thead>
+                <tr>
+                  <th>Nome sede</th>
+                  <th>Cliente</th>
+                  <th>Contratto</th>
+                  <th>Indirizzo</th>
+                  <th>Piano</th>
+                  <th>Mq totali</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="sedi-table-body"></tbody>
+            </table>
+          </div>
+
+          <div class="modal-overlay" id="sede-modal">
+            <div class="modal-box">
+              <h2>Nuova Sede</h2>
+              <form>
+                <div class="form-group">
+                  <label>Contratto</label>
+                  <select name="contratto_id"><option value="">-- Seleziona contratto --</option></select>
+                </div>
+                <div class="form-group">
+                  <label>Nome sede</label>
+                  <input name="nome_sede" type="text" required>
+                </div>
+                <div class="form-group">
+                  <label>Indirizzo</label>
+                  <input name="indirizzo" type="text">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                  <div class="form-group"><label>Piano</label><input name="piano" type="text"></div>
+                  <div class="form-group"><label>Mq totali</label><input name="mq_totali" type="number" step="0.1" min="0"></div>
+                </div>
+                <div class="form-group">
+                  <label>Note accesso</label>
+                  <textarea name="note_accesso" rows="3"></textarea>
+                </div>
+                <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
+                  <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
+                  <button type="submit" class="btn btn-primary btn-sm">Salva sede</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
         <!-- ── Interventi ────────────────────────────── -->
         <section id="interventi" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -322,16 +382,12 @@
                   <select name="operatore_id"><option value="">-- Seleziona operatore --</option></select>
                 </div>
                 <div class="form-group">
-                  <label>Cliente</label>
-                  <select name="cliente_id"><option value="">-- Seleziona cliente --</option></select>
+                  <label>Contratto</label>
+                  <select name="contratto_id"><option value="">-- Seleziona contratto --</option></select>
                 </div>
                 <div class="form-group">
                   <label>Sede</label>
-                  <select name="sede_id"><option value="">-- Seleziona sede --</option></select>
-                </div>
-                <div class="form-group">
-                  <label>Contratto</label>
-                  <select name="contratto_id"><option value="">-- Seleziona contratto --</option></select>
+                  <select name="sede_id"><option value="">-- Prima seleziona contratto --</option></select>
                 </div>
                 <div class="form-group">
                   <label>Data</label>
@@ -587,6 +643,7 @@
       import { initFatture } from '../js/admin/fatture.js'
       import { initCruscotto } from '../js/admin/cruscotto.js'
       import { initContratti } from '../js/admin/contratti.js'
+      import { initSedi } from '../js/admin/sedi.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -631,6 +688,7 @@
         initCruscotto()
         initClienti()
         initContratti()
+        initSedi()
         initInterventi()
         initOperatori()
         initFatture()

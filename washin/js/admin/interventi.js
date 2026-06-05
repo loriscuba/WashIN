@@ -152,6 +152,19 @@ export async function cambiaStatoIntervento(id, nuovoStato, motivo = null){
   }
 }
 
+async function loadSediByContratto(contrattoId, sedeSelect, currentSedeId = null){
+  sedeSelect.innerHTML = '<option value="">-- Seleziona sede --</option>'
+  if (!contrattoId) return
+  const { data: sedi } = await supabase.from('sedi_cliente').select('id,nome_sede').eq('contratto_id', contrattoId)
+  ;(sedi || []).forEach(s => {
+    const o = document.createElement('option')
+    o.value = s.id
+    o.textContent = s.nome_sede
+    if (currentSedeId && s.id === currentSedeId) o.selected = true
+    sedeSelect.appendChild(o)
+  })
+}
+
 export async function openModalIntervento(id = null){
   try{
     const modal = document.getElementById('intervento-modal')
@@ -172,41 +185,39 @@ export async function openModalIntervento(id = null){
       })
     }
 
-    // carica clienti
-    const { data: clienti, error: errClients } = await supabase.from('clienti').select('id,ragione_sociale').eq('attivo', true)
-    if (errClients) throw errClients
-    const clientSelect = form.querySelector('[name="cliente_id"]')
-    if (clientSelect){
-      clientSelect.innerHTML = '<option value="">-- Seleziona cliente --</option>'
-      clienti.forEach(c=>{
+    // carica contratti attivi (con nome cliente)
+    const { data: contratti, error: errContr } = await supabase
+      .from('contratti')
+      .select('id, numero_contratto, clienti(ragione_sociale)')
+      .eq('stato', 'attivo')
+      .order('numero_contratto')
+    if (errContr) throw errContr
+    const contrattoSelect = form.querySelector('[name="contratto_id"]')
+    const sedeSelect = form.querySelector('[name="sede_id"]')
+    if (contrattoSelect){
+      contrattoSelect.innerHTML = '<option value="">-- Seleziona contratto --</option>'
+      ;(contratti || []).forEach(c => {
         const opt = document.createElement('option')
         opt.value = c.id
-        opt.textContent = c.ragione_sociale
-        clientSelect.appendChild(opt)
+        opt.textContent = `${c.numero_contratto || c.id.slice(0,8)} — ${c.clienti?.ragione_sociale || ''}`
+        contrattoSelect.appendChild(opt)
       })
-      clientSelect.addEventListener('change', async (e)=>{
-        const cid = e.target.value
-        // carica sedi
-        const { data: sedi } = await supabase.from('sedi_cliente').select('id,nome_sede').eq('cliente_id', cid)
-        const sedeSelect = form.querySelector('[name="sede_id"]')
-        sedeSelect.innerHTML = '<option value="">-- Seleziona sede --</option>'
-        (sedi||[]).forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.nome_sede; sedeSelect.appendChild(o) })
-        // carica contratti
-        const { data: contratti } = await supabase.from('contratti').select('id,numero_contratto').eq('cliente_id', cid).eq('stato','attivo')
-        const contrattoSelect = form.querySelector('[name="contratto_id"]')
-        contrattoSelect.innerHTML = '<option value="">-- Seleziona contratto --</option>'
-        (contratti||[]).forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.numero_contratto; contrattoSelect.appendChild(o) })
+      // quando cambia contratto → ricarica sedi
+      contrattoSelect.addEventListener('change', e => {
+        loadSediByContratto(e.target.value, sedeSelect)
       })
     }
 
     if (id){
       const { data, error } = await supabase.from('interventi').select('*').eq('id', id).single()
       if (error) throw error
-      // popola form
       Object.entries(data).forEach(([k,v])=>{
         const el = form.querySelector(`[name="${k}"]`)
-        if (el){ el.value = v ?? '' }
+        if (el) el.value = v ?? ''
       })
+      // ricarica sedi per il contratto salvato, poi seleziona la sede corretta
+      if (data.contratto_id && contrattoSelect) contrattoSelect.value = data.contratto_id
+      if (sedeSelect) await loadSediByContratto(data.contratto_id, sedeSelect, data.sede_id)
       form.dataset.interventoId = id
     } else {
       form.reset()
