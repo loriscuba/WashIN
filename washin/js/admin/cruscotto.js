@@ -105,6 +105,9 @@ async function ensureChartJs(){
 }
 
 export async function loadGrafici(){
+  const barCanvas = document.getElementById('chart-interventi-mesi')
+  const pieCanvas = document.getElementById('chart-stati-mese')
+  if (!barCanvas && !pieCanvas) return null
   try{
     const now = new Date()
     const months = []
