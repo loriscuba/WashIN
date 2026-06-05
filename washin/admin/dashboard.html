@@ -70,8 +70,8 @@
       <aside class="sidebar">
         <div class="sidebar-logo">Wash<span class="in">IN</span></div>
         <div class="sidebar-user card" style="margin: 0 16px 16px;">
-          <p style="margin:0 0 2px; font-weight:700; color:var(--white);" id="user-name">Utente</p>
-          <p style="margin:0 0 10px; font-size:13px; color:var(--gray-300);" id="user-role">Ruolo</p>
+          <p style="margin:0 0 2px; font-weight:700; color:var(--gray-900);" id="user-name">Utente</p>
+          <p style="margin:0 0 10px; font-size:13px; color:var(--gray-500);" id="user-role">Ruolo</p>
           <button id="btn-profilo-admin" type="button" style="width:100%;background:#fff;color:#0D9488;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Il mio profilo</button>
         </div>
         <nav class="sidebar-nav" id="sidebar-nav">
@@ -818,7 +818,7 @@
         const userId = data?.session?.user?.id
         if (!userId) return
         const profile = await getUserProfile(userId)
-        const name = profile?.nome || profile?.email || 'Amministratore'
+        const name = profile ? `${profile.nome || ''} ${profile.cognome || ''}`.trim() || profile.email : 'Amministratore'
         userName.textContent = name
         userRole.textContent = profile?.ruolo === 'admin' ? 'Admin' : 'Operatore'
         greetingName.textContent = name
