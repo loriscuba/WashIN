@@ -149,6 +149,17 @@ async function checkChecklistComplete(interventoId) {
   }
 }
 
+function getGeolocation(){
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation){ reject(new Error('Geolocalizzazione non supportata')); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      err => reject(err),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  })
+}
+
 export async function cambiaStatoIntervento(id, stato) {
   try {
     if (stato === 'completato') {
@@ -158,9 +169,34 @@ export async function cambiaStatoIntervento(id, stato) {
         return false
       }
     }
-    const { error } = await supabase.from('interventi').update({ stato }).eq('id', id)
+
+    const payload = { stato }
+
+    if (stato === 'in_corso') {
+      payload.inizio_effettivo = new Date().toISOString()
+      try {
+        const geo = await getGeolocation()
+        payload.geo_inizio_lat = geo.lat
+        payload.geo_inizio_lng = geo.lng
+      } catch {
+        showToast('Posizione non disponibile — avvio senza geolocalizzazione', 'warning')
+      }
+    }
+
+    if (stato === 'completato') {
+      payload.fine_effettivo = new Date().toISOString()
+      try {
+        const geo = await getGeolocation()
+        payload.geo_fine_lat = geo.lat
+        payload.geo_fine_lng = geo.lng
+      } catch {
+        showToast('Posizione non disponibile — stop senza geolocalizzazione', 'warning')
+      }
+    }
+
+    const { error } = await supabase.from('interventi').update(payload).eq('id', id)
     if (error) throw error
-    showToast('Stato intervento aggiornato', 'success')
+    showToast(stato === 'in_corso' ? 'Intervento avviato' : 'Intervento completato', 'success')
     return true
   } catch (error) {
     showToast('Errore aggiornamento stato intervento', 'error')

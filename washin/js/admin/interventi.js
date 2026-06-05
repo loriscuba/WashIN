@@ -111,6 +111,14 @@ export function renderCalendarioSettimana(interventi, dataRiferimento = new Date
   }
 }
 
+const STATO_BADGE = { pianificato:'badge-warning', in_corso:'badge-info', completato:'badge-success', approvato:'badge-success', annullato:'badge-danger' }
+
+function fmtTime(ts){ return ts ? new Date(ts).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '' }
+function geoTag(lat, lng, ts, emoji){
+  if (!lat) return ''
+  return `<span style="font-size:11px;color:var(--gray-500);display:block;" title="Lat ${Number(lat).toFixed(5)}, Lng ${Number(lng).toFixed(5)}">${emoji} ${fmtTime(ts)}</span>`
+}
+
 export function renderListaInterventi(interventi){
   try{
     const tbody = document.getElementById('interventi-table-body')
@@ -120,15 +128,26 @@ export function renderListaInterventi(interventi){
       const tr = document.createElement('tr')
       const operatorName = iv.profili ? `${iv.profili.nome || ''} ${iv.profili.cognome || ''}`.trim() : '-'
       const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || '-'
+      const badgeClass = STATO_BADGE[iv.stato] || 'badge-warning'
+      const avviaBtn = iv.stato === 'pianificato'
+        ? `<button class="btn btn-sm btn-primary" data-action="avvia-intervento" data-id="${iv.id}">▶ Avvia</button>`
+        : ''
+      const stopBtn = iv.stato === 'in_corso'
+        ? `<button class="btn btn-sm btn-danger" data-action="stop-intervento" data-id="${iv.id}">■ Stop</button>`
+        : ''
       tr.innerHTML = `
         <td>${iv.data_pianificata}</td>
         <td>${operatorName}</td>
         <td>${cliente} / ${iv.sedi_cliente?.nome_sede || '-'}</td>
         <td>${iv.tipo_pulizia || '-'}</td>
-        <td><span class="badge ${iv.stato === 'completato' ? 'badge-success' : iv.stato === 'annullato' ? 'badge-danger' : 'badge-warning'}">${iv.stato}</span></td>
         <td>
+          <span class="badge ${badgeClass}">${iv.stato}</span>
+          ${geoTag(iv.geo_inizio_lat, iv.geo_inizio_lng, iv.inizio_effettivo, '▶')}
+          ${geoTag(iv.geo_fine_lat, iv.geo_fine_lng, iv.fine_effettivo, '■')}
+        </td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${iv.id}">Modifica</button>
-          <button class="btn btn-sm btn-primary" data-action="start" data-id="${iv.id}">Avvia</button>
+          ${avviaBtn}${stopBtn}
         </td>
       `
       tbody.appendChild(tr)
@@ -139,7 +158,62 @@ export function renderListaInterventi(interventi){
   }
 }
 
-export async function cambiaStatoIntervento(id, nuovoStato, motivo = null){
+function getGeolocation(){
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Geolocalizzazione non supportata')); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      err => reject(err),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  })
+}
+
+export async function avviaIntervento(id){
+  try{
+    let geoData = {}
+    try{
+      const geo = await getGeolocation()
+      geoData = { geo_inizio_lat: geo.lat, geo_inizio_lng: geo.lng }
+    }catch{
+      showToast('Geolocalizzazione non disponibile — avvio senza posizione', 'warning')
+    }
+    const { error } = await supabase.from('interventi').update({
+      stato: 'in_corso',
+      inizio_effettivo: new Date().toISOString(),
+      ...geoData
+    }).eq('id', id)
+    if (error) throw error
+    showToast('Intervento avviato', 'success')
+  }catch(err){
+    showToast('Errore avvio intervento', 'error')
+    console.error(err)
+  }
+}
+
+export async function stopIntervento(id){
+  try{
+    let geoData = {}
+    try{
+      const geo = await getGeolocation()
+      geoData = { geo_fine_lat: geo.lat, geo_fine_lng: geo.lng }
+    }catch{
+      showToast('Geolocalizzazione non disponibile — stop senza posizione', 'warning')
+    }
+    const { error } = await supabase.from('interventi').update({
+      stato: 'completato',
+      fine_effettivo: new Date().toISOString(),
+      ...geoData
+    }).eq('id', id)
+    if (error) throw error
+    showToast('Intervento completato', 'success')
+  }catch(err){
+    showToast('Errore stop intervento', 'error')
+    console.error(err)
+  }
+}
+
+
   try{
     const payload = { stato: nuovoStato }
     if (nuovoStato === 'annullato' && motivo) payload.note_operatore = motivo
@@ -310,7 +384,7 @@ export function initInterventi(){
       })
     }
 
-    // delegate clicks for edit/start
+    // delegate clicks for edit/avvia/stop
     document.addEventListener('click', async (e)=>{
       const t = e.target
       if (!(t instanceof HTMLElement)) return
@@ -318,7 +392,8 @@ export function initInterventi(){
       const id = t.dataset.id
       if (!action || !id) return
       if (action === 'edit') await openModalIntervento(id)
-      if (action === 'start') await cambiaStatoIntervento(id, 'in_corso')
+      if (action === 'avvia-intervento'){ await avviaIntervento(id); refreshView() }
+      if (action === 'stop-intervento'){ await stopIntervento(id); refreshView() }
     })
 
     // initial load
