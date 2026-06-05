@@ -7,10 +7,11 @@ function showSection(sectionId) {
   const sections = ['agenda', 'checklist', 'documenti', 'cedolini', 'profilo']
   sections.forEach((id) => {
     const el = document.getElementById(id)
-    const link = document.querySelector(`[data-section="${id}"]`)
-    if (!el || !link) return
+    if (!el) return
     el.classList.toggle('hidden', id !== sectionId)
-    link.classList.toggle('active', id === sectionId)
+    document.querySelectorAll(`[data-section="${id}"]`).forEach(link => {
+      link.classList.toggle('active', id === sectionId)
+    })
   })
 }
 
@@ -41,17 +42,15 @@ function updateTodayDate() {
 }
 
 function bindNavigation() {
-  const nav = document.getElementById('sidebar-nav')
-  nav?.addEventListener('click', (event) => {
+  function handleNavClick(event) {
     const target = event.target.closest('a[data-section]')
     if (!target) return
     event.preventDefault()
     showSection(target.dataset.section)
-  })
+  }
 
-  document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
-    document.getElementById('sidebar')?.classList.toggle('hidden')
-  })
+  document.getElementById('sidebar-nav')?.addEventListener('click', handleNavClick)
+  document.getElementById('bottom-nav')?.addEventListener('click', handleNavClick)
 
   document.getElementById('toggle-week')?.addEventListener('change', (event) => {
     document.getElementById('week-view')?.classList.toggle('hidden', !event.target.checked)
