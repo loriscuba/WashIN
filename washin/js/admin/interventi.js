@@ -1,5 +1,8 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
+import { loadMagazzino } from './magazzino.js'
+
+let _prodottiMagazzino = []
 
 function formatDateISO(d){
   const dd = String(d.getDate()).padStart(2,'0')
@@ -309,6 +312,9 @@ export async function openModalIntervento(id = null){
       if (matList) matList.innerHTML = ''
     }
 
+    // carica prodotti magazzino per il dropdown materiali
+    _prodottiMagazzino = await loadMagazzino({ attivo: true })
+
     modal.classList.add('active')
   }catch(err){
     showToast('Errore apertura modal intervento','error')
@@ -368,20 +374,47 @@ function addMaterialeRow(m = {}) {
   const row = document.createElement('div')
   row.className = 'materiale-row'
   row.style.cssText = 'display:grid;grid-template-columns:1fr 70px 70px 36px;gap:6px;align-items:center;margin-bottom:8px;'
+
+  const isCustom = m.prodotto && !_prodottiMagazzino.find(p => p.nome === m.prodotto)
+  const optsHtml = _prodottiMagazzino
+    .map(p => `<option value="${p.nome}" data-unita="${p.unita_misura || 'lt'}" ${(!isCustom && m.prodotto === p.nome) ? 'selected' : ''}>${p.nome}</option>`)
+    .join('')
+  const unitOptions = ['lt','kg','pz','m²'].map(u =>
+    `<option value="${u}" ${(m.unita || 'lt') === u ? 'selected' : ''}>${u}</option>`
+  ).join('')
+
+  const inp = 'padding:8px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;'
   row.innerHTML = `
-    <input class="mat-prodotto" type="text" placeholder="Prodotto/materiale" value="${m.prodotto || ''}"
-      style="padding:8px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;" />
-    <input class="mat-quantita" type="number" placeholder="Qtà" value="${m.quantita ?? 1}" min="0" step="0.1"
-      style="padding:8px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;" />
-    <select class="mat-unita" style="padding:8px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;">
-      <option value="lt" ${(m.unita || 'lt') === 'lt' ? 'selected' : ''}>lt</option>
-      <option value="kg" ${(m.unita || '') === 'kg' ? 'selected' : ''}>kg</option>
-      <option value="pz" ${(m.unita || '') === 'pz' ? 'selected' : ''}>pz</option>
-      <option value="m²" ${(m.unita || '') === 'm²' ? 'selected' : ''}>m²</option>
-    </select>
+    <div>
+      <select class="mat-prodotto" style="${inp}width:100%;display:${isCustom ? 'none' : 'block'};">
+        <option value="">-- Seleziona prodotto --</option>
+        ${optsHtml}
+        <option value="__custom__">Altro (libero)...</option>
+      </select>
+      <input class="mat-custom-name" type="text" placeholder="Nome prodotto" value="${isCustom ? (m.prodotto || '') : ''}"
+        style="${inp}width:100%;box-sizing:border-box;display:${isCustom ? 'block' : 'none'};" />
+    </div>
+    <input class="mat-quantita" type="number" placeholder="Qtà" value="${m.quantita ?? 1}" min="0" step="0.1" style="${inp}" />
+    <select class="mat-unita" style="${inp}">${unitOptions}</select>
     <button type="button" data-action="remove-materiale"
       style="padding:0;width:32px;height:32px;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
   `
+
+  const sel = row.querySelector('.mat-prodotto')
+  const customInput = row.querySelector('.mat-custom-name')
+  const unitSel = row.querySelector('.mat-unita')
+
+  sel.addEventListener('change', () => {
+    if (sel.value === '__custom__') {
+      sel.style.display = 'none'
+      customInput.style.display = 'block'
+      customInput.focus()
+    } else {
+      const u = sel.options[sel.selectedIndex]?.dataset?.unita
+      if (u) { const o = unitSel.querySelector(`option[value="${u}"]`); if (o) o.selected = true }
+    }
+  })
+
   if (m.id) row.dataset.materialeId = m.id
   container.appendChild(row)
 }
@@ -395,8 +428,10 @@ async function saveMateriali(interventoId) {
 
   const toInsert = []
   rows.forEach(row => {
-    const prodotto = row.querySelector('.mat-prodotto')?.value?.trim()
-    if (!prodotto) return
+    const prodSel = row.querySelector('.mat-prodotto')
+    const customInp = row.querySelector('.mat-custom-name')
+    const prodotto = (customInp?.style.display !== 'none' ? customInp?.value : prodSel?.value)?.trim()
+    if (!prodotto || prodotto === '__custom__') return
     toInsert.push({
       intervento_id: interventoId,
       prodotto,
