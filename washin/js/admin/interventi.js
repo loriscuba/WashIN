@@ -289,6 +289,11 @@ export async function openModalIntervento(id = null){
         const el = form.querySelector(`[name="${k}"]`)
         if (el) el.value = v ?? ''
       })
+      // mappa manuale campi con nome diverso tra DB e form
+      const oraInEl = form.querySelector('[name="ora_inizio"]')
+      const oraFinEl = form.querySelector('[name="ora_fine"]')
+      if (oraInEl) oraInEl.value = data.ora_inizio_pianificata || ''
+      if (oraFinEl) oraFinEl.value = data.ora_fine_pianificata || ''
       // ricarica sedi per il contratto salvato, poi seleziona la sede corretta
       if (data.contratto_id && contrattoSelect) contrattoSelect.value = data.contratto_id
       if (sedeSelect) await loadSediByContratto(data.contratto_id, sedeSelect, data.sede_id)
