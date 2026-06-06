@@ -23,7 +23,7 @@ export async function loadPresenze(filtri = {}) {
     const end = new Date(year, month, 0).toISOString().slice(0, 10)
 
     let query = supabase.from('interventi')
-      .select('id, data_pianificata, ora_inizio_effettiva, ora_fine_effettiva, stato, operatore_id, profili(id, nome, cognome)')
+      .select('id, data_pianificata, inizio_effettivo, fine_effettivo, ora_inizio_pianificata, ora_fine_pianificata, stato, operatore_id, operatore:profili!operatore_id(id, nome, cognome)')
       .in('stato', ['completato', 'approvato'])
       .gte('data_pianificata', start)
       .lte('data_pianificata', end)
@@ -47,12 +47,17 @@ export function renderTabellaPresenze(interventi) {
 
   const byOp = {}
   interventi.forEach(iv => {
-    const opId = iv.profili?.id || iv.operatore_id || '__sconosciuto__'
-    const opName = iv.profili ? `${iv.profili.nome || ''} ${iv.profili.cognome || ''}`.trim() : 'Sconosciuto'
+    const opId = iv.operatore?.id || iv.operatore_id || '__sconosciuto__'
+    const opName = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : 'Sconosciuto'
     if (!byOp[opId]) byOp[opId] = { name: opName, count: 0, seconds: 0, days: new Set() }
     byOp[opId].count++
     byOp[opId].days.add(iv.data_pianificata)
-    const secs = Math.max(0, parseTimeToSeconds(iv.ora_fine_effettiva) - parseTimeToSeconds(iv.ora_inizio_effettiva))
+    let secs = 0
+    if (iv.inizio_effettivo && iv.fine_effettivo) {
+      secs = Math.max(0, (new Date(iv.fine_effettivo) - new Date(iv.inizio_effettivo)) / 1000)
+    } else {
+      secs = Math.max(0, parseTimeToSeconds(iv.ora_fine_pianificata) - parseTimeToSeconds(iv.ora_inizio_pianificata))
+    }
     byOp[opId].seconds += secs
   })
 

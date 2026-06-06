@@ -20,7 +20,7 @@ function endOfMonth(date){
 
 export async function loadInterventi(filtri = {}){
   try{
-    let query = supabase.from('interventi').select("*, profili(nome,cognome), sedi_cliente(nome_sede,indirizzo, clienti(ragione_sociale))")
+    let query = supabase.from('interventi').select("*, operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome), sedi_cliente(nome_sede,indirizzo, clienti(ragione_sociale))")
 
     if (filtri.month){
       // filtri.month può essere string 'YYYY-MM' o Date
@@ -50,7 +50,9 @@ function createPill(intervento){
   span.style.margin = '4px 0'
   span.style.cursor = 'pointer'
   span.dataset.id = intervento.id
-  const operatorName = intervento.profili ? `${intervento.profili.nome || ''} ${intervento.profili.cognome || ''}`.trim() : 'Operatore'
+  const op1 = intervento.operatore ? `${intervento.operatore.nome || ''} ${intervento.operatore.cognome || ''}`.trim() : ''
+  const op2 = intervento.operatore2 ? `${intervento.operatore2.nome || ''} ${intervento.operatore2.cognome || ''}`.trim() : ''
+  const operatorName = [op1, op2].filter(Boolean).join(' + ') || 'Operatore'
   const cliente = intervento.sedi_cliente?.clienti?.ragione_sociale || ''
   span.textContent = `${operatorName} — ${cliente}`
   // color by stato
@@ -129,7 +131,9 @@ export function renderListaInterventi(interventi){
     tbody.innerHTML = ''
     interventi.forEach(iv=>{
       const tr = document.createElement('tr')
-      const operatorName = iv.profili ? `${iv.profili.nome || ''} ${iv.profili.cognome || ''}`.trim() : '-'
+      const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
+      const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
+      const operatorName = [op1, op2].filter(Boolean).join(' + ') || '-'
       const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || '-'
       const badgeClass = STATO_BADGE[iv.stato] || 'badge-warning'
       const avviaBtn = iv.stato === 'pianificato'
@@ -251,16 +255,19 @@ export async function openModalIntervento(id = null){
     // carica operatori
     const { data: ops, error: errOps } = await supabase.from('profili').select('id,nome,cognome').eq('ruolo','operatore').eq('attivo', true)
     if (errOps) throw errOps
-    const opSelect = form.querySelector('[name="operatore_id"]')
-    if (opSelect){
-      opSelect.innerHTML = '<option value="">-- Seleziona operatore --</option>'
-      ops.forEach(o=>{
+    const buildOpOptions = (select, selectedId = null) => {
+      if (!select) return
+      select.innerHTML = '<option value="">-- Nessuno --</option>'
+      ops.forEach(o => {
         const opt = document.createElement('option')
         opt.value = o.id
         opt.textContent = `${o.nome || ''} ${o.cognome || ''}`.trim()
-        opSelect.appendChild(opt)
+        if (selectedId && o.id === selectedId) opt.selected = true
+        select.appendChild(opt)
       })
     }
+    buildOpOptions(form.querySelector('[name="operatore_id"]'))
+    buildOpOptions(form.querySelector('[name="operatore2_id"]'))
 
     // carica contratti attivi (con nome cliente)
     const { data: contratti, error: errContr } = await supabase
@@ -297,6 +304,10 @@ export async function openModalIntervento(id = null){
       const oraFinEl = form.querySelector('[name="ora_fine"]')
       if (oraInEl) oraInEl.value = data.ora_inizio_pianificata || ''
       if (oraFinEl) oraFinEl.value = data.ora_fine_pianificata || ''
+      // seleziona operatore 2 se presente
+      if (data.operatore2_id) {
+        buildOpOptions(form.querySelector('[name="operatore2_id"]'), data.operatore2_id)
+      }
       // ricarica sedi per il contratto salvato, poi seleziona la sede corretta
       if (data.contratto_id && contrattoSelect) contrattoSelect.value = data.contratto_id
       if (sedeSelect) await loadSediByContratto(data.contratto_id, sedeSelect, data.sede_id)
@@ -328,6 +339,7 @@ export async function saveIntervento(formData){
       contratto_id: formData.contratto_id || null,
       sede_id: formData.sede_id || null,
       operatore_id: formData.operatore_id || null,
+      operatore2_id: formData.operatore2_id || null,
       data_pianificata: formData.data_pianificata || null,
       ora_inizio_pianificata: formData.ora_inizio || null,
       ora_fine_pianificata: formData.ora_fine || null,
@@ -345,14 +357,15 @@ export async function saveIntervento(formData){
       if (!errIns) savedId = ins.id
     }
     if (error) throw error
-    // fire-and-forget notification
-    if (savedId && fields.operatore_id) {
+    // fire-and-forget notifications to both operators
+    const notifyOps = [fields.operatore_id, fields.operatore2_id].filter(Boolean)
+    notifyOps.forEach(uid => {
       supabase.from('notifiche').insert({
-        utente_id: fields.operatore_id,
+        utente_id: uid,
         messaggio: `Intervento assegnato: ${fields.data_pianificata || ''} — ${fields.tipo_pulizia || 'pulizia'}`,
         tipo: 'info'
       }).then(({ error: ne }) => { if (ne) console.warn('Notifica:', ne.message) })
-    }
+    })
     showToast('Intervento salvato','success')
     return savedId
   }catch(err){
@@ -464,6 +477,72 @@ async function saveMateriali(interventoId) {
   }
 }
 
+export function renderCalendarioMese(interventi, mese) {
+  try {
+    const container = document.getElementById('calendar-month')
+    if (!container) return
+    container.innerHTML = ''
+    const ref = typeof mese === 'string' ? new Date(mese + '-01') : new Date(mese)
+    const year = ref.getFullYear()
+    const month = ref.getMonth()
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const table = document.createElement('table')
+    table.style.cssText = 'width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;'
+    const thead = document.createElement('thead')
+    const trh = document.createElement('tr')
+    ;['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].forEach(d => {
+      const th = document.createElement('th')
+      th.textContent = d
+      th.style.cssText = 'text-align:center;padding:6px 2px;font-size:11px;font-weight:600;border-bottom:2px solid var(--gray-200);'
+      trh.appendChild(th)
+    })
+    thead.appendChild(trh)
+    table.appendChild(thead)
+    const tbody = document.createElement('tbody')
+    const firstOfMonth = new Date(year, month, 1)
+    const lastOfMonth = new Date(year, month + 1, 0)
+    const startOffset = (firstOfMonth.getDay() + 6) % 7
+    const cur = new Date(firstOfMonth)
+    cur.setDate(cur.getDate() - startOffset)
+    while (cur <= lastOfMonth) {
+      const tr = document.createElement('tr')
+      for (let i = 0; i < 7; i++) {
+        const iso = formatDateISO(cur)
+        const isThisMonth = cur.getMonth() === month
+        const td = document.createElement('td')
+        td.style.cssText = `vertical-align:top;min-height:64px;padding:3px;border:1px solid var(--gray-200);${!isThisMonth ? 'background:#f8fafc;' : ''}`
+        const numEl = document.createElement('div')
+        if (iso === todayStr) {
+          numEl.innerHTML = `<span style="background:#0D9488;color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">${cur.getDate()}</span>`
+        } else {
+          numEl.textContent = cur.getDate()
+          numEl.style.cssText = `font-size:11px;font-weight:600;color:${isThisMonth ? 'var(--gray-700)' : 'var(--gray-400)'};margin-bottom:2px;`
+        }
+        td.appendChild(numEl)
+        const items = interventi.filter(iv => iv.data_pianificata === iso)
+        items.slice(0, 2).forEach(iv => {
+          const pill = createPill(iv)
+          pill.style.cssText += ';font-size:10px;padding:1px 4px;margin:1px 0;display:block;'
+          td.appendChild(pill)
+        })
+        if (items.length > 2) {
+          const more = document.createElement('div')
+          more.textContent = `+${items.length - 2}`
+          more.style.cssText = 'font-size:9px;color:var(--gray-400);'
+          td.appendChild(more)
+        }
+        tr.appendChild(td)
+        cur.setDate(cur.getDate() + 1)
+      }
+      tbody.appendChild(tr)
+    }
+    table.appendChild(tbody)
+    container.appendChild(table)
+  } catch(err) {
+    console.error('Errore render calendario mese:', err)
+  }
+}
+
 export function initInterventi(){
   try{
     const prevBtn = document.getElementById('prev-week')
@@ -474,16 +553,54 @@ export function initInterventi(){
     const modal = document.getElementById('intervento-modal')
     const form = modal?.querySelector('form')
     let refDate = new Date()
+    let currentView = 'week'
+
+    // auto-set current month
+    if (monthInput) {
+      monthInput.value = `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
+    }
+
+    function setView(v) {
+      currentView = v
+      const wk = document.getElementById('calendar-week')
+      const mo = document.getElementById('calendar-month')
+      if (wk) wk.style.display = v === 'week' ? '' : 'none'
+      if (mo) mo.style.display = v === 'month' ? '' : 'none'
+      document.getElementById('view-week')?.classList.toggle('btn-primary', v === 'week')
+      document.getElementById('view-week')?.classList.toggle('btn-secondary', v !== 'week')
+      document.getElementById('view-month')?.classList.toggle('btn-primary', v === 'month')
+      document.getElementById('view-month')?.classList.toggle('btn-secondary', v !== 'month')
+    }
 
     async function refreshView(){
       const month = monthInput?.value || `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
       const interventi = await loadInterventi({ month })
-      renderCalendarioSettimana(interventi, refDate)
+      if (currentView === 'week') renderCalendarioSettimana(interventi, refDate)
+      else renderCalendarioMese(interventi, month)
       renderListaInterventi(interventi)
     }
 
-    prevBtn?.addEventListener('click', ()=>{ refDate.setDate(refDate.getDate()-7); refreshView() })
-    nextBtn?.addEventListener('click', ()=>{ refDate.setDate(refDate.getDate()+7); refreshView() })
+    prevBtn?.addEventListener('click', () => {
+      if (currentView === 'month') {
+        refDate.setMonth(refDate.getMonth() - 1)
+        if (monthInput) monthInput.value = `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
+      } else {
+        refDate.setDate(refDate.getDate() - 7)
+      }
+      refreshView()
+    })
+    nextBtn?.addEventListener('click', () => {
+      if (currentView === 'month') {
+        refDate.setMonth(refDate.getMonth() + 1)
+        if (monthInput) monthInput.value = `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
+      } else {
+        refDate.setDate(refDate.getDate() + 7)
+      }
+      refreshView()
+    })
+
+    document.getElementById('view-week')?.addEventListener('click', () => { setView('week'); refreshView() })
+    document.getElementById('view-month')?.addEventListener('click', () => { setView('month'); refreshView() })
     monthInput?.addEventListener('change', refreshView)
     refresh?.addEventListener('click', refreshView)
 
@@ -501,6 +618,7 @@ export function initInterventi(){
         const payload = {
           id: form.dataset.interventoId || undefined,
           operatore_id: fd.get('operatore_id') || null,
+          operatore2_id: fd.get('operatore2_id') || null,
           cliente_id: fd.get('cliente_id') || null,
           sede_id: fd.get('sede_id') || null,
           contratto_id: fd.get('contratto_id') || null,
