@@ -123,6 +123,20 @@
             </div>
           </div>
 
+          <!-- Magazzino alert: shown only when low stock or expiring -->
+          <div class="card" id="magazzino-alert-card" style="margin-top:24px;border-left:4px solid #f59e0b;display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+              <h2 style="margin:0;font-size:18px;color:var(--gray-900);">Magazzino — Avvisi</h2>
+              <span class="badge badge-warning">Scorte / Scadenze</span>
+            </div>
+            <div class="table-container">
+              <table class="washin-table">
+                <thead><tr><th>Prodotto</th><th>Disponibile</th><th>Scadenza</th><th>Avvisi</th></tr></thead>
+                <tbody id="magazzino-alert-body"></tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="card" style="margin-top:24px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
               <h2 style="margin:0; font-size:18px; color: var(--gray-900);">Interventi di oggi</h2>
@@ -496,6 +510,7 @@
                 <tr>
                   <th>Nome</th>
                   <th>Unità</th>
+                  <th>Scadenza</th>
                   <th>Descrizione</th>
                   <th>Disponibile</th>
                   <th>Stato</th>
@@ -810,6 +825,7 @@
           </div>
           <div class="form-group"><label>Descrizione</label><textarea name="descrizione" rows="2" placeholder="Descrizione opzionale"></textarea></div>
           <div class="form-group"><label>Quantità disponibile</label><input name="quantita_disponibile" type="number" step="0.1" min="0" value="0"></div>
+          <div class="form-group"><label>Data scadenza</label><input name="scadenza" type="date"></div>
           <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-weight:400;"><input name="attivo" type="checkbox" checked style="width:auto;"> Attivo</label></div>
           <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
             <button type="button" class="btn btn-secondary btn-sm" id="magazzino-cancel">Annulla</button>

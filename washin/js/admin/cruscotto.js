@@ -164,12 +164,60 @@ export async function loadGrafici(){
   }
 }
 
+export async function loadMagazzinoAlert() {
+  try {
+    const today = todayISO()
+    const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)
+    const { data, error } = await supabase.from('magazzino').select('*').eq('attivo', true)
+    if (error) throw error
+    const items = (data || []).filter(p =>
+      (p.quantita_disponibile ?? 0) <= 5 || (p.scadenza && p.scadenza <= in30)
+    ).sort((a, b) => {
+      if (a.scadenza && b.scadenza) return a.scadenza.localeCompare(b.scadenza)
+      if (a.scadenza) return -1
+      if (b.scadenza) return 1
+      return 0
+    })
+
+    const card = document.getElementById('magazzino-alert-card')
+    const tbody = document.getElementById('magazzino-alert-body')
+    if (!card || !tbody) return
+
+    if (!items.length) { card.style.display = 'none'; return }
+    card.style.display = 'block'
+    tbody.innerHTML = ''
+    items.forEach(p => {
+      const isExpired = p.scadenza && p.scadenza < today
+      const isExpiring = p.scadenza && p.scadenza <= in30
+      const isLowStock = (p.quantita_disponibile ?? 0) <= 5
+      const badges = []
+      if (isExpired) badges.push('<span class="badge badge-danger">Scaduto</span>')
+      else if (isExpiring) badges.push('<span class="badge badge-warning">In scadenza</span>')
+      if (isLowStock) badges.push('<span class="badge badge-warning">Scorte basse</span>')
+      const dateLabel = p.scadenza
+        ? new Date(p.scadenza + 'T00:00:00').toLocaleDateString('it-IT')
+        : '-'
+      const tr = document.createElement('tr')
+      tr.innerHTML = `
+        <td><strong>${p.nome}</strong></td>
+        <td>${p.quantita_disponibile ?? 0} ${p.unita_misura || ''}</td>
+        <td>${dateLabel}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap;">${badges.join('')}</td>
+      `
+      tbody.appendChild(tr)
+    })
+  } catch(err) {
+    console.error('Errore alert magazzino:', err)
+  }
+}
+
 export function initCruscotto(){
   try{
     async function refreshAll(){
       await loadKPI()
       await loadInterventiOggi()
       await loadGrafici()
+      await loadMagazzinoAlert()
     }
     const refresh = document.getElementById('refresh-cruscotto')
     refresh?.addEventListener('click', refreshAll)
