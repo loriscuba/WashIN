@@ -331,12 +331,15 @@
               <button id="prev-week" class="btn btn-secondary btn-sm">◀</button>
               <button id="next-week" class="btn btn-secondary btn-sm">▶</button>
               <input id="interventi-month" type="month" style="max-width:160px;" />
+              <button id="view-week" class="btn btn-primary btn-sm">Settimana</button>
+              <button id="view-month" class="btn btn-secondary btn-sm">Mese</button>
               <button id="refresh-interventi" class="btn btn-sm btn-secondary">Aggiorna</button>
               <button id="add-intervento-button" class="btn btn-primary">+ Nuovo intervento</button>
             </div>
           </div>
 
           <div class="card" id="calendar-week" style="overflow-x:auto; min-height:80px; margin-bottom:20px;"></div>
+          <div class="card" id="calendar-month" style="overflow-x:auto; margin-bottom:20px; display:none;"></div>
 
           <div class="table-container card">
             <table class="washin-table">
@@ -792,9 +795,15 @@
       <div class="modal-box">
         <h2>Nuovo/Modifica Intervento</h2>
         <form id="intervento-form">
-          <div class="form-group">
-            <label>Operatore</label>
-            <select name="operatore_id"><option value="">-- Seleziona operatore --</option></select>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group">
+              <label>Operatore 1</label>
+              <select name="operatore_id"><option value="">-- Nessuno --</option></select>
+            </div>
+            <div class="form-group">
+              <label>Operatore 2 <span style="font-size:11px;color:var(--gray-400);font-weight:400;">(opzionale)</span></label>
+              <select name="operatore2_id"><option value="">-- Nessuno --</option></select>
+            </div>
           </div>
           <div class="form-group">
             <label>Contratto</label>

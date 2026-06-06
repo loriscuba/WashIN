@@ -48,7 +48,7 @@ export async function openStoricSede(sedeId, sedeName) {
     modal.classList.add('active')
 
     const { data, error } = await supabase.from('interventi')
-      .select('*, profili(nome,cognome)')
+      .select('*, operatore:profili!operatore_id(nome,cognome)')
       .eq('sede_id', sedeId)
       .order('data_pianificata', { ascending: false })
       .limit(60)
@@ -62,7 +62,7 @@ export async function openStoricSede(sedeId, sedeName) {
     tbody.innerHTML = ''
     data.forEach(iv => {
       const tr = document.createElement('tr')
-      const op = iv.profili ? `${iv.profili.nome || ''} ${iv.profili.cognome || ''}`.trim() : '-'
+      const op = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : '-'
       const badge = STORICO_BADGE[iv.stato] || 'badge-warning'
       tr.innerHTML = `
         <td>${iv.data_pianificata}</td>

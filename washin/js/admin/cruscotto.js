@@ -76,14 +76,14 @@ export async function loadKPI(){
 export async function loadInterventiOggi(){
   try{
     const today = todayISO()
-    const { data, error } = await supabase.from('interventi').select('*, profili(nome,cognome), sedi_cliente(nome_sede,indirizzo, clienti(ragione_sociale))').eq('data_pianificata', today).order('ora_inizio_pianificata', { ascending: true })
+    const { data, error } = await supabase.from('interventi').select('*, operatore:profili!operatore_id(nome,cognome), sedi_cliente(nome_sede,indirizzo, clienti(ragione_sociale))').eq('data_pianificata', today).order('ora_inizio_pianificata', { ascending: true })
     if (error) throw error
     const tbody = document.getElementById('interventi-oggi-body')
     if (!tbody) return data || []
     tbody.innerHTML = ''
     ;(data||[]).forEach(iv => {
       const tr = document.createElement('tr')
-      const op = iv.profili ? `${iv.profili.nome || ''} ${iv.profili.cognome || ''}`.trim() : '-'
+      const op = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : '-'
       const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || '-'
       tr.innerHTML = `
         <td>${iv.ora_inizio_pianificata || '-'}</td>
