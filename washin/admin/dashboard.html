@@ -85,6 +85,7 @@
           <a href="#presenze" data-target="presenze"><span data-lucide="clock"></span> Presenze</a>
           <a href="#preventivi" data-target="preventivi"><span data-lucide="file-plus"></span> Preventivi</a>
           <a href="#magazzino" data-target="magazzino"><span data-lucide="package"></span> Magazzino</a>
+          <a href="#veicoli" data-target="veicoli"><span data-lucide="truck"></span> Veicoli</a>
           <a href="#impostazioni" data-target="impostazioni"><span data-lucide="settings"></span> Impostazioni</a>
         </nav>
         <div style="margin-top:auto; padding: 0 20px;">
@@ -133,6 +134,20 @@
               <table class="washin-table">
                 <thead><tr><th>Prodotto</th><th>Disponibile</th><th>Scadenza</th><th>Avvisi</th></tr></thead>
                 <tbody id="magazzino-alert-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Veicoli alert: shown only when revision/insurance expiring -->
+          <div class="card" id="veicoli-alert-card" style="margin-top:24px;border-left:4px solid #ef4444;display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+              <h2 style="margin:0;font-size:18px;color:var(--gray-900);">Veicoli — Scadenze</h2>
+              <span class="badge badge-danger">Revisione / Assicurazione</span>
+            </div>
+            <div class="table-container">
+              <table class="washin-table">
+                <thead><tr><th>Targa</th><th>Veicolo</th><th>Scadenze</th></tr></thead>
+                <tbody id="veicoli-alert-body"></tbody>
               </table>
             </div>
           </div>
@@ -495,6 +510,34 @@
           </div>
         </section>
 
+        <!-- ── Veicoli ───────────────────────────────── -->
+        <section id="veicoli" class="section hidden">
+          <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+              <h1>Veicoli aziendali</h1>
+              <p style="color: var(--gray-500); margin-top:8px;">Gestisci la flotta e le scadenze documenti.</p>
+            </div>
+            <button id="add-veicolo-button" class="btn btn-primary">+ Nuovo veicolo</button>
+          </div>
+          <div class="table-container card">
+            <table class="washin-table">
+              <thead>
+                <tr>
+                  <th>Targa</th>
+                  <th>Marca/Modello</th>
+                  <th>Anno</th>
+                  <th>Km</th>
+                  <th>Revisione</th>
+                  <th>Assicurazione</th>
+                  <th>Stato</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="veicoli-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- ── Magazzino ─────────────────────────────── -->
         <section id="magazzino" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -807,6 +850,67 @@
       </div>
     </div>
 
+    <!-- ── Modal Veicolo ── -->
+    <div class="modal-overlay" id="veicolo-modal">
+      <div class="modal-box">
+        <h2>Nuovo Veicolo</h2>
+        <form>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Targa</label><input name="targa" type="text" required placeholder="AB123CD" style="text-transform:uppercase;"></div>
+            <div class="form-group"><label>Anno</label><input name="anno" type="number" min="1990" max="2099" placeholder="2022"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Marca</label><input name="marca" type="text" placeholder="Fiat"></div>
+            <div class="form-group"><label>Modello</label><input name="modello" type="text" placeholder="Doblò"></div>
+          </div>
+          <div class="form-group"><label>Km attuali</label><input name="km_attuali" type="number" step="1" min="0" value="0"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Scadenza revisione</label><input name="revisione_scadenza" type="date"></div>
+            <div class="form-group"><label>Scadenza assicurazione</label><input name="assicurazione_scadenza" type="date"></div>
+          </div>
+          <div class="form-group"><label>Note</label><textarea name="note" rows="2"></textarea></div>
+          <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-weight:400;"><input name="attivo" type="checkbox" checked style="width:auto;"> Attivo</label></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="veicolo-cancel">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva veicolo</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Modal Documenti Veicolo ── -->
+    <div class="modal-overlay" id="veicolo-documenti-modal">
+      <div class="modal-box" style="max-width:600px;">
+        <h2>Documenti</h2>
+        <div id="documenti-list" style="margin:16px 0;min-height:60px;max-height:320px;overflow-y:auto;"></div>
+        <hr style="border:none;border-top:1px solid var(--gray-200);margin:16px 0;">
+        <strong style="font-size:14px;color:var(--gray-700);">Carica nuovo documento</strong>
+        <form id="upload-doc-form" style="margin-top:12px;display:grid;gap:10px;">
+          <div style="display:grid;grid-template-columns:1fr 140px;gap:10px;align-items:end;">
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:13px;">File</label>
+              <input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                style="padding:6px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:13px;">Tipo</label>
+              <select name="tipo" style="padding:8px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;width:100%;">
+                <option value="assicurazione">Assicurazione</option>
+                <option value="revisione">Revisione</option>
+                <option value="libretto">Libretto</option>
+                <option value="altro">Altro</option>
+              </select>
+            </div>
+          </div>
+          <span id="upload-progress" style="font-size:12px;color:var(--gray-500);"></span>
+          <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <button type="button" class="btn btn-secondary btn-sm" id="documenti-close">Chiudi</button>
+            <button type="submit" class="btn btn-primary btn-sm">⬆ Carica</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- ── Modal Magazzino ── -->
     <div class="modal-overlay" id="magazzino-modal">
       <div class="modal-box">
@@ -887,6 +991,7 @@
       import { initPresenze } from '../js/admin/presenze.js'
       import { initPreventivi } from '../js/admin/preventivi.js'
       import { initMagazzino } from '../js/admin/magazzino.js'
+      import { initVeicoli } from '../js/admin/veicoli.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -976,6 +1081,7 @@
         initPresenze()
         initPreventivi()
         initMagazzino()
+        initVeicoli()
       })
     </script>
   </body>
