@@ -86,18 +86,20 @@ export async function generaFatturaDaContratto(clienteId, meseDate){
     // determina imponibile: usa importo_mensile se presente, altrimenti conta interventi * 0 (default 0)
     const imponibile = contratto?.importo_mensile ? Number(contratto.importo_mensile) : ((interventi?.length || 0) * 0)
 
-    // prefill form
+    // prefill form (popola selects poi setta valori)
     const modal = document.getElementById('fattura-modal')
     const form = modal?.querySelector('form')
     if (!form) return null
-    form.querySelector('[name="cliente_id"]').value = clienteId
-    if (contratto) form.querySelector('[name="contratto_id"]').value = contratto.id
+    form.reset()
+    delete form.dataset.fatturaId
+    await populateClientiSelect(form.querySelector('[name="cliente_id"]'), clienteId)
+    await populateContrattiSelect(form.querySelector('[name="contratto_id"]'), clienteId, contratto?.id)
     form.querySelector('[name="mese"]').value = (new Date(meseDate)).toISOString().slice(0,7)
     form.querySelector('[name="imponibile"]').value = imponibile
     form.querySelector('[name="iva_pct"]').value = contratto?.iva_pct ?? 22
     const calc = calcolaTotale(imponibile, form.querySelector('[name="iva_pct"]').value)
-    form.querySelector('[name="totale"]').value = calc.totale
-    // apri modal
+    if (form.querySelector('[name="totale"]')) form.querySelector('[name="totale"]').value = calc.totale
+    modal.querySelector('h2').textContent = 'Nuova Fattura da Contratto'
     modal.classList.add('active')
     return { contratto, interventi, imponibile, calc }
   }catch(err){
@@ -185,6 +187,69 @@ export function exportCSV(fatture){
   }
 }
 
+async function populateClientiSelect(sel, selectedId = null) {
+  const { data } = await supabase.from('clienti').select('id,ragione_sociale').eq('attivo', true).order('ragione_sociale')
+  if (!sel) return
+  const first = sel.options[0]?.value === '' ? sel.options[0].outerHTML : '<option value="">-- Seleziona cliente --</option>'
+  sel.innerHTML = first
+  ;(data || []).forEach(c => {
+    const o = document.createElement('option')
+    o.value = c.id
+    o.textContent = c.ragione_sociale || c.id.slice(0, 8)
+    if (selectedId && c.id === selectedId) o.selected = true
+    sel.appendChild(o)
+  })
+}
+
+async function populateContrattiSelect(sel, clienteId = null, selectedId = null) {
+  if (!sel) return
+  let q = supabase.from('contratti').select('id,numero_contratto,clienti(ragione_sociale)').eq('stato', 'attivo').order('numero_contratto')
+  if (clienteId) q = q.eq('cliente_id', clienteId)
+  const { data } = await q
+  sel.innerHTML = '<option value="">-- Seleziona contratto --</option>'
+  ;(data || []).forEach(c => {
+    const o = document.createElement('option')
+    o.value = c.id
+    o.textContent = `${c.numero_contratto || c.id.slice(0,8)}${c.clienti?.ragione_sociale ? ' — ' + c.clienti.ragione_sociale : ''}`
+    if (selectedId && c.id === selectedId) o.selected = true
+    sel.appendChild(o)
+  })
+}
+
+async function openFatturaModal(fatturaId = null) {
+  const modal = document.getElementById('fattura-modal')
+  const form = modal?.querySelector('form')
+  if (!modal || !form) return
+
+  const clienteSel = form.querySelector('[name="cliente_id"]')
+  const contrattoSel = form.querySelector('[name="contratto_id"]')
+
+  // ricarica dinamica contratti al cambio cliente
+  clienteSel?.addEventListener('change', () => {
+    populateContrattiSelect(contrattoSel, clienteSel.value || null)
+  }, { once: false })
+
+  if (fatturaId) {
+    const { data, error } = await supabase.from('fatture').select('*').eq('id', fatturaId).single()
+    if (error) { showToast('Errore caricamento fattura', 'error'); return }
+    await populateClientiSelect(clienteSel, data.cliente_id)
+    await populateContrattiSelect(contrattoSel, data.cliente_id, data.contratto_id)
+    Object.entries(data).forEach(([k, v]) => {
+      const el = form.querySelector(`[name="${k}"]`)
+      if (el && k !== 'cliente_id' && k !== 'contratto_id') el.value = v ?? ''
+    })
+    form.dataset.fatturaId = fatturaId
+    modal.querySelector('h2').textContent = 'Modifica Fattura'
+  } else {
+    form.reset()
+    delete form.dataset.fatturaId
+    await populateClientiSelect(clienteSel)
+    await populateContrattiSelect(contrattoSel)
+    modal.querySelector('h2').textContent = 'Nuova Fattura'
+  }
+  modal.classList.add('active')
+}
+
 export function initFatture(){
   try{
     const addBtn = document.getElementById('add-fattura-button')
@@ -192,13 +257,12 @@ export function initFatture(){
     const form = document.querySelector('#fattura-modal form')
     const exportBtn = document.getElementById('export-fatture-csv')
     const genFromContr = document.getElementById('gen-fattura-contratto')
+    const filterForm = document.getElementById('fatture-filters')
 
-    addBtn?.addEventListener('click', () => {
-      const modal = document.getElementById('fattura-modal')
-      form?.reset()
-      delete form?.dataset.fatturaId
-      modal?.classList.add('active')
-    })
+    // popola select cliente nel filtro
+    populateClientiSelect(filterForm?.querySelector('[name="cliente_id"]'))
+
+    addBtn?.addEventListener('click', () => openFatturaModal())
     modalClose?.addEventListener('click', () => document.getElementById('fattura-modal')?.classList.remove('active'))
 
     if (form){
@@ -227,21 +291,24 @@ export function initFatture(){
       })
     }
 
+    // filtri
+    filterForm?.addEventListener('change', async () => {
+      const filtri = {
+        cliente_id: filterForm.querySelector('[name="cliente_id"]')?.value || null,
+        stato: filterForm.querySelector('[name="stato"]')?.value || null,
+        mese: filterForm.querySelector('[name="mese"]')?.value || null,
+      }
+      const fatture = await loadFatture(filtri)
+      renderTabella(fatture)
+    })
+
     document.addEventListener('click', async (e) => {
       const t = e.target
       if (!(t instanceof HTMLElement)) return
       const action = t.dataset.action
       const id = t.dataset.id
       if (!action || !id) return
-      if (action === 'edit-fattura') {
-        const modal = document.getElementById('fattura-modal')
-        const { data, error } = await supabase.from('fatture').select('*').eq('id', id).single()
-        if (error) { showToast('Errore caricamento fattura','error'); return }
-        const form = modal.querySelector('form')
-        Object.entries(data).forEach(([k,v])=>{ const el = form.querySelector(`[name="${k}"]`); if (el) el.value = v ?? '' })
-        form.dataset.fatturaId = id
-        modal.classList.add('active')
-      }
+      if (action === 'edit-fattura') await openFatturaModal(id)
       if (action === 'change-state'){
         const newState = prompt('Inserisci nuovo stato (bozza, emessa, pagata, scaduta):')
         if (newState) await cambiaStatoFattura(id, newState)
@@ -256,9 +323,9 @@ export function initFatture(){
     })
 
     genFromContr?.addEventListener('click', async ()=>{
-      const clienteId = document.querySelector('#fatture-filters [name="cliente_id"]').value
-      const mese = document.querySelector('#fatture-filters [name="mese"]').value
-      if (!clienteId || !mese) { showToast('Seleziona cliente e mese', 'warning'); return }
+      const clienteId = filterForm?.querySelector('[name="cliente_id"]').value
+      const mese = filterForm?.querySelector('[name="mese"]').value
+      if (!clienteId || !mese) { showToast('Seleziona cliente e mese nei filtri', 'warning'); return }
       await generaFatturaDaContratto(clienteId, mese)
     })
 
