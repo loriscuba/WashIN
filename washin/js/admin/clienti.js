@@ -83,7 +83,7 @@ function createClienteRow(cliente) {
 		<td>${cliente.telefono || ''}</td>
 		<td>${cliente.contratti_attivi ?? '-'}</td>
 		<td>
-			<button class="btn btn-sm btn-secondary" data-action="edit" data-id="${cliente.id}">Modifica</button>
+			<button class="btn btn-sm btn-secondary" data-action="edit-cliente" data-id="${cliente.id}">Modifica</button>
 			<button class="btn btn-sm btn-danger" data-action="toggle" data-id="${cliente.id}" data-active="${cliente.attivo}">${cliente.attivo ? 'Disattiva' : 'Attiva'}</button>
 		</td>
 	`
@@ -262,7 +262,7 @@ export function initClienti() {
 			if (!(target instanceof HTMLElement)) return
 			const action = target.dataset.action
 			const id = target.dataset.id
-			if (action === 'edit' && id) {
+			if (action === 'edit-cliente' && id) {
 				await openModalCliente(id)
 			}
 			if (action === 'toggle' && id) {

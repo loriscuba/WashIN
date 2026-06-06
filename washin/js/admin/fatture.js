@@ -53,7 +53,7 @@ function createFatturaRow(f){
     <td>${calc.totaleFmt}</td>
     <td><span class="badge ${f.stato === 'pagata' ? 'badge-success' : f.stato === 'bozza' ? 'badge-warning' : 'badge-info'}">${f.stato}</span></td>
     <td>
-      <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${f.id}">Modifica</button>
+      <button class="btn btn-sm btn-secondary" data-action="edit-fattura" data-id="${f.id}">Modifica</button>
       <button class="btn btn-sm btn-primary" data-action="change-state" data-id="${f.id}">Cambia stato</button>
     </td>
   `
@@ -233,7 +233,7 @@ export function initFatture(){
       const action = t.dataset.action
       const id = t.dataset.id
       if (!action || !id) return
-      if (action === 'edit') {
+      if (action === 'edit-fattura') {
         const modal = document.getElementById('fattura-modal')
         const { data, error } = await supabase.from('fatture').select('*').eq('id', id).single()
         if (error) { showToast('Errore caricamento fattura','error'); return }
