@@ -22,7 +22,7 @@ function createOperatoreRow(op) {
     <td>${op.qualifica || ''}</td>
     <td>${op.attivo ? 'Sì' : 'No'}</td>
     <td>
-      <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${op.id}">Modifica</button>
+      <button class="btn btn-sm btn-secondary" data-action="edit-operatore" data-id="${op.id}">Modifica</button>
       <button class="btn btn-sm btn-danger" data-action="toggle" data-id="${op.id}" data-active="${op.attivo}">${op.attivo ? 'Disattiva' : 'Attiva'}</button>
     </td>
   `
@@ -140,7 +140,7 @@ export function initOperatori() {
       const action = t.dataset.action
       const id = t.dataset.id
       if (!action || !id) return
-      if (action === 'edit') await openModalOperatore(id)
+      if (action === 'edit-operatore') await openModalOperatore(id)
       if (action === 'toggle') {
         const isActive = t.dataset.active === 'true'
         await toggleAttivoOperatore(id, !isActive)

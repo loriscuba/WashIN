@@ -146,7 +146,7 @@ export function renderListaInterventi(interventi){
           ${geoTag(iv.geo_fine_lat, iv.geo_fine_lng, iv.fine_effettivo, '■')}
         </td>
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${iv.id}">Modifica</button>
+          <button class="btn btn-sm btn-secondary" data-action="edit-intervento" data-id="${iv.id}">Modifica</button>
           ${avviaBtn}${stopBtn}
         </td>
       `
@@ -467,7 +467,7 @@ export function initInterventi(){
       if (action === 'remove-materiale') { t.closest('.materiale-row')?.remove(); return }
       const id = t.dataset.id
       if (!id) return
-      if (action === 'edit') await openModalIntervento(id)
+      if (action === 'edit-intervento') await openModalIntervento(id)
       if (action === 'avvia-intervento'){ await avviaIntervento(id); refreshView() }
       if (action === 'stop-intervento'){ await stopIntervento(id); refreshView() }
     })
