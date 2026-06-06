@@ -155,6 +155,28 @@
             </div>
           </div>
 
+          <div class="card" style="margin-top:24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <h2 style="margin:0; font-size:18px; color: var(--gray-900);">Interventi di oggi</h2>
+              <span class="badge badge-info">Live</span>
+            </div>
+            <div class="table-container">
+              <table class="washin-table">
+                <thead>
+                  <tr>
+                    <th>Orario</th>
+                    <th>Operatore</th>
+                    <th>Cliente/Sede</th>
+                    <th>Tipo</th>
+                    <th>Stato</th>
+                    <th>Azioni</th>
+                  </tr>
+                </thead>
+                <tbody id="interventi-oggi-body"></tbody>
+              </table>
+            </div>
+          </div>
+
           <!-- Magazzino alert: shown only when low stock or expiring -->
           <div class="card" id="magazzino-alert-card" style="margin-top:24px;border-left:4px solid #f59e0b;display:none;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -179,28 +201,6 @@
               <table class="washin-table">
                 <thead><tr><th>Targa</th><th>Veicolo</th><th>Scadenze</th></tr></thead>
                 <tbody id="veicoli-alert-body"></tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="card" style="margin-top:24px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-              <h2 style="margin:0; font-size:18px; color: var(--gray-900);">Interventi di oggi</h2>
-              <span class="badge badge-info">Live</span>
-            </div>
-            <div class="table-container">
-              <table class="washin-table">
-                <thead>
-                  <tr>
-                    <th>Orario</th>
-                    <th>Operatore</th>
-                    <th>Cliente/Sede</th>
-                    <th>Tipo</th>
-                    <th>Stato</th>
-                    <th>Azioni</th>
-                  </tr>
-                </thead>
-                <tbody id="interventi-oggi-body"></tbody>
               </table>
             </div>
           </div>

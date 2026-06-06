@@ -28,7 +28,7 @@ export async function loadKPI(){
       .select('inizio_effettivo,fine_effettivo,ora_inizio_pianificata,ora_fine_pianificata,stato,data_pianificata')
       .in('stato', ['completato','approvato'])
       .gte('data_pianificata', start).lte('data_pianificata', end)
-    const p3 = supabase.from('fatture').select('totale,stato,mese').in('stato', ['emessa','pagata']).gte('mese', start).lte('mese', end)
+    const p3 = supabase.from('fatture').select('totale,mese').gte('mese', start).lte('mese', end)
     const p4 = supabase.from('clienti').select('id', { count: 'exact' }).eq('attivo', true)
 
     const [r1, r2, r3, r4] = await Promise.all([p1, p2, p3, p4])
