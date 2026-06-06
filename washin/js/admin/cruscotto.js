@@ -24,7 +24,10 @@ export async function loadKPI(){
     const { start, end } = monthRange()
 
     const p1 = supabase.from('interventi').select('id', { count: 'exact' }).eq('data_pianificata', today)
-    const p2 = supabase.from('interventi').select('ora_inizio_effettiva,ora_fine_effettiva,stato,data_pianificata').in('stato', ['completato','approvato']).gte('data_pianificata', start).lte('data_pianificata', end)
+    const p2 = supabase.from('interventi')
+      .select('inizio_effettivo,fine_effettivo,ora_inizio_pianificata,ora_fine_pianificata,stato,data_pianificata')
+      .in('stato', ['completato','approvato'])
+      .gte('data_pianificata', start).lte('data_pianificata', end)
     const p3 = supabase.from('fatture').select('totale,stato,mese').in('stato', ['emessa','pagata']).gte('mese', start).lte('mese', end)
     const p4 = supabase.from('clienti').select('id', { count: 'exact' }).eq('attivo', true)
 
@@ -40,9 +43,15 @@ export async function loadKPI(){
     const rows2 = r2.data || []
     let totalSeconds = 0
     rows2.forEach(row => {
-      totalSeconds += Math.max(0, parseTimeToSeconds(row.ora_fine_effettiva) - parseTimeToSeconds(row.ora_inizio_effettiva))
+      if (row.inizio_effettivo && row.fine_effettivo) {
+        // usa i timestamp reali se l'operatore ha usato avvia/stop
+        totalSeconds += Math.max(0, (new Date(row.fine_effettivo) - new Date(row.inizio_effettivo)) / 1000)
+      } else {
+        // fallback: ore pianificate
+        totalSeconds += Math.max(0, parseTimeToSeconds(row.ora_fine_pianificata) - parseTimeToSeconds(row.ora_inizio_pianificata))
+      }
     })
-    const oreMese = +(totalSeconds/3600).toFixed(2)
+    const oreMese = +(totalSeconds / 3600).toFixed(1)
 
     const rows3 = r3.data || []
     const fatturato = rows3.reduce((s,x)=> s + (Number(x.totale)||0), 0)
