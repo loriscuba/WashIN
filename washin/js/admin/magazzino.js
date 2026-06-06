@@ -132,6 +132,7 @@ export function initMagazzino() {
           unita_misura: fd.get('unita_misura'),
           descrizione: fd.get('descrizione'),
           quantita_disponibile: fd.get('quantita_disponibile'),
+          scadenza: fd.get('scadenza'),
           attivo: form.querySelector('[name="attivo"]').checked
         }
         await saveMagazzino(payload)
