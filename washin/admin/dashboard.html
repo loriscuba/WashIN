@@ -64,6 +64,37 @@
       .admin-bottom-nav a.active,
       .admin-bottom-nav a:hover,
       .admin-bottom-nav button:hover { color: #fff; }
+
+      /* ── Mobile bottom sheet ── */
+      .mobile-menu-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.42);
+        z-index: 299;
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.25s ease;
+      }
+      .mobile-menu-backdrop.open { opacity: 1; pointer-events: auto; }
+      .mobile-menu-sheet {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 300;
+        background: #fff;
+        border-radius: 20px 20px 0 0;
+        box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
+        transform: translateY(100%);
+        transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+        pointer-events: none;
+      }
+      .mobile-menu-sheet.open { transform: translateY(0); pointer-events: auto; }
+      .menu-sheet-btn {
+        display: flex; flex-direction: column; align-items: center; gap: 5px;
+        padding: 13px 6px;
+        background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
+        cursor: pointer; font-size: 11px; font-weight: 600; color: #374151;
+        transition: background 0.12s; width: 100%;
+      }
+      .menu-sheet-btn:active { background: #e2e8f0; }
+      .menu-sheet-btn .sheet-icon { font-size: 20px; line-height: 1; }
     </style>
   <body>
     <div class="app-layout">
@@ -959,6 +990,31 @@
 
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
+    <!-- ── Mobile bottom sheet (tutte le sezioni extra) ── -->
+    <div class="mobile-menu-backdrop" id="mobile-menu-backdrop"></div>
+    <div class="mobile-menu-sheet" id="mobile-menu-sheet">
+      <div style="display:flex;justify-content:center;padding:10px 0 4px;">
+        <div style="width:40px;height:4px;background:#cbd5e1;border-radius:2px;"></div>
+      </div>
+      <div style="padding:10px 16px 0;">
+        <p style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.08em;margin:0 0 10px 2px;">SEZIONI</p>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+          <button class="menu-sheet-btn" data-sheet-target="contratti"><span class="sheet-icon">📋</span><span>Contratti</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="sedi"><span class="sheet-icon">📍</span><span>Sedi</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="operatori"><span class="sheet-icon">👷</span><span>Operatori</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="presenze"><span class="sheet-icon">🕐</span><span>Presenze</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="preventivi"><span class="sheet-icon">📄</span><span>Preventivi</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="magazzino"><span class="sheet-icon">📦</span><span>Magazzino</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="veicoli"><span class="sheet-icon">🚐</span><span>Veicoli</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="impostazioni"><span class="sheet-icon">⚙️</span><span>Impost.</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="profilo"><span class="sheet-icon">👤</span><span>Profilo</span></button>
+        </div>
+        <div style="margin-top:12px;padding-bottom:max(16px,env(safe-area-inset-bottom,16px));">
+          <button id="sheet-logout-btn" style="width:100%;padding:13px;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;">Logout</button>
+        </div>
+      </div>
+    </div>
+
     <nav class="admin-bottom-nav" id="admin-bottom-nav">
       <a href="#cruscotto" data-target="cruscotto" class="active">
         <span class="bnav-icon">📊</span><span>Cruscotto</span>
@@ -1024,10 +1080,21 @@
         if (link) { e.preventDefault(); setActiveSection(link.dataset.target) }
       })
 
-      document.getElementById('admin-nav-toggle')?.addEventListener('click', () => {
-        document.querySelector('.sidebar')?.classList.toggle('open')
-        document.getElementById('sidebar-backdrop')?.classList.toggle('open')
+      function openMenuSheet() {
+        document.getElementById('mobile-menu-sheet')?.classList.add('open')
+        document.getElementById('mobile-menu-backdrop')?.classList.add('open')
+      }
+      function closeMenuSheet() {
+        document.getElementById('mobile-menu-sheet')?.classList.remove('open')
+        document.getElementById('mobile-menu-backdrop')?.classList.remove('open')
+      }
+      document.getElementById('admin-nav-toggle')?.addEventListener('click', openMenuSheet)
+      document.getElementById('mobile-menu-backdrop')?.addEventListener('click', closeMenuSheet)
+      document.getElementById('mobile-menu-sheet')?.addEventListener('click', e => {
+        const btn = e.target.closest('[data-sheet-target]')
+        if (btn) { setActiveSection(btn.dataset.sheetTarget); closeMenuSheet() }
       })
+      document.getElementById('sheet-logout-btn')?.addEventListener('click', () => { closeMenuSheet(); logout() })
       document.getElementById('sidebar-backdrop')?.addEventListener('click', closeSidebar)
 
       document.getElementById('btn-profilo-admin')?.addEventListener('click', () => {
