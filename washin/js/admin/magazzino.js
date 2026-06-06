@@ -18,9 +18,22 @@ export async function loadMagazzino(filtri = {}) {
 function createMagazzinoRow(p) {
   const tr = document.createElement('tr')
   const qty = p.quantita_disponibile != null ? p.quantita_disponibile : '-'
+  const today = new Date().toISOString().slice(0, 10)
+  const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)
+  let scadenzaHtml = '-'
+  if (p.scadenza) {
+    const label = new Date(p.scadenza + 'T00:00:00').toLocaleDateString('it-IT')
+    if (p.scadenza < today)
+      scadenzaHtml = `<span style="color:#dc2626;font-weight:600;" title="Scaduto">${label} ⚠</span>`
+    else if (p.scadenza <= in30)
+      scadenzaHtml = `<span style="color:#d97706;font-weight:600;" title="In scadenza">${label} ⚠</span>`
+    else
+      scadenzaHtml = label
+  }
   tr.innerHTML = `
     <td><strong>${p.nome}</strong></td>
     <td>${p.unita_misura || '-'}</td>
+    <td>${scadenzaHtml}</td>
     <td style="color:var(--gray-600);font-size:13px;">${p.descrizione || '-'}</td>
     <td>${qty} ${p.unita_misura || ''}</td>
     <td><span class="badge ${p.attivo ? 'badge-success' : 'badge-warning'}">${p.attivo ? 'Attivo' : 'Inattivo'}</span></td>
@@ -36,7 +49,7 @@ export function renderTabellaMagazzino(prodotti) {
   if (!tbody) return
   tbody.innerHTML = ''
   if (!prodotti.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun prodotto in magazzino</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun prodotto in magazzino</td></tr>'
     return
   }
   prodotti.forEach(p => tbody.appendChild(createMagazzinoRow(p)))
@@ -80,6 +93,7 @@ export async function saveMagazzino(payload) {
       unita_misura: payload.unita_misura || 'lt',
       descrizione: payload.descrizione || null,
       quantita_disponibile: payload.quantita_disponibile !== '' ? parseFloat(payload.quantita_disponibile) : 0,
+      scadenza: payload.scadenza || null,
       attivo: Boolean(payload.attivo)
     }
     let error

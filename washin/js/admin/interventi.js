@@ -419,10 +419,27 @@ function addMaterialeRow(m = {}) {
   container.appendChild(row)
 }
 
+async function adjustMagazzinoQty(prodottoNome, delta) {
+  const { data } = await supabase.from('magazzino')
+    .select('id, quantita_disponibile').eq('nome', prodottoNome).limit(1)
+  if (!data || !data.length) return
+  const p = data[0]
+  await supabase.from('magazzino').update({
+    quantita_disponibile: Math.max(0, (p.quantita_disponibile || 0) + delta)
+  }).eq('id', p.id)
+}
+
 async function saveMateriali(interventoId) {
   const container = document.getElementById('materiali-list')
   if (!container) return
   const rows = container.querySelectorAll('.materiale-row')
+
+  // Restore old quantities before deleting
+  const { data: oldMat } = await supabase.from('materiali_intervento')
+    .select('prodotto, quantita').eq('intervento_id', interventoId)
+  if (oldMat) {
+    for (const m of oldMat) await adjustMagazzinoQty(m.prodotto, m.quantita || 0)
+  }
 
   await supabase.from('materiali_intervento').delete().eq('intervento_id', interventoId)
 
@@ -441,7 +458,9 @@ async function saveMateriali(interventoId) {
   })
   if (toInsert.length) {
     const { error } = await supabase.from('materiali_intervento').insert(toInsert)
-    if (error) console.error('Errore salvataggio materiali:', error)
+    if (error) { console.error('Errore salvataggio materiali:', error); return }
+    // Subtract new quantities from magazzino
+    for (const m of toInsert) await adjustMagazzinoQty(m.prodotto, -(m.quantita || 0))
   }
 }
 
