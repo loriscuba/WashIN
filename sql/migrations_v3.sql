@@ -12,4 +12,5 @@ CREATE TABLE IF NOT EXISTS magazzino (
 );
 
 ALTER TABLE magazzino ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "allow_all_magazzino" ON magazzino FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "allow_all_magazzino" ON magazzino;
+CREATE POLICY "allow_all_magazzino" ON magazzino FOR ALL USING (true) WITH CHECK (true);
