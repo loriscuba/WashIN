@@ -292,6 +292,9 @@ export async function openModalIntervento(id = null){
       })
     }
 
+    // carica prodotti magazzino prima di tutto, così addMaterialeRow li trova già pronti
+    _prodottiMagazzino = await loadMagazzino({ attivo: true })
+
     if (id){
       const { data, error } = await supabase.from('interventi').select('*').eq('id', id).single()
       if (error) throw error
@@ -312,7 +315,7 @@ export async function openModalIntervento(id = null){
       if (data.contratto_id && contrattoSelect) contrattoSelect.value = data.contratto_id
       if (sedeSelect) await loadSediByContratto(data.contratto_id, sedeSelect, data.sede_id)
       form.dataset.interventoId = id
-      // carica materiali
+      // carica materiali (dopo _prodottiMagazzino, così i select sono già popolati)
       const mat = await loadMaterialiPerIntervento(id)
       const matList = document.getElementById('materiali-list')
       if (matList) { matList.innerHTML = ''; mat.forEach(m => addMaterialeRow(m)) }
@@ -322,9 +325,6 @@ export async function openModalIntervento(id = null){
       const matList = document.getElementById('materiali-list')
       if (matList) matList.innerHTML = ''
     }
-
-    // carica prodotti magazzino per il dropdown materiali
-    _prodottiMagazzino = await loadMagazzino({ attivo: true })
 
     modal.classList.add('active')
   }catch(err){
@@ -433,13 +433,16 @@ function addMaterialeRow(m = {}) {
 }
 
 async function adjustMagazzinoQty(prodottoNome, delta) {
-  const { data } = await supabase.from('magazzino')
-    .select('id, quantita_disponibile').eq('nome', prodottoNome).limit(1)
-  if (!data || !data.length) return
+  if (!prodottoNome?.trim()) return
+  const { data, error: errSel } = await supabase.from('magazzino')
+    .select('id, quantita_disponibile').eq('nome', prodottoNome.trim()).limit(1)
+  if (errSel) { console.error('Magazzino lookup:', errSel); return }
+  if (!data || !data.length) { console.warn(`Prodotto non trovato in magazzino: "${prodottoNome}"`); return }
   const p = data[0]
-  await supabase.from('magazzino').update({
+  const { error: errUpd } = await supabase.from('magazzino').update({
     quantita_disponibile: Math.max(0, (p.quantita_disponibile || 0) + delta)
   }).eq('id', p.id)
+  if (errUpd) console.error('Magazzino update error:', errUpd)
 }
 
 async function saveMateriali(interventoId) {
@@ -474,6 +477,8 @@ async function saveMateriali(interventoId) {
     if (error) { console.error('Errore salvataggio materiali:', error); return }
     // Subtract new quantities from magazzino
     for (const m of toInsert) await adjustMagazzinoQty(m.prodotto, -(m.quantita || 0))
+    showToast('Scorte magazzino aggiornate', 'success')
+    window.dispatchEvent(new CustomEvent('magazzino-updated'))
   }
 }
 

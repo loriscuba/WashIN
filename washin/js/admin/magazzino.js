@@ -149,6 +149,8 @@ export function initMagazzino() {
       }
     })
 
+    window.addEventListener('magazzino-updated', () => loadMagazzino().then(renderTabellaMagazzino))
+
     loadMagazzino().then(renderTabellaMagazzino)
   } catch (err) {
     showToast('Errore inizializzazione magazzino', 'error')
