@@ -214,17 +214,18 @@ export async function loadMagazzinoAlert() {
 export async function loadVeicoliAlert() {
   try {
     const today = todayISO()
-    const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)
+    const in90 = new Date(Date.now() + 90 * 864e5).toISOString().slice(0, 10)
     const { data, error } = await supabase.from('veicoli').select('*').eq('attivo', true)
     if (error) throw error
-    const items = (data || []).filter(v =>
-      (v.revisione_scadenza && v.revisione_scadenza <= in30) ||
-      (v.assicurazione_scadenza && v.assicurazione_scadenza <= in30)
-    ).sort((a, b) => {
-      const aMin = [a.revisione_scadenza, a.assicurazione_scadenza].filter(Boolean).sort()[0] || '9999'
-      const bMin = [b.revisione_scadenza, b.assicurazione_scadenza].filter(Boolean).sort()[0] || '9999'
-      return aMin.localeCompare(bMin)
-    })
+
+    // Mostra tutti i veicoli che hanno almeno una scadenza impostata, ordinati per scadenza più vicina
+    const items = (data || [])
+      .filter(v => v.revisione_scadenza || v.assicurazione_scadenza)
+      .sort((a, b) => {
+        const aMin = [a.revisione_scadenza, a.assicurazione_scadenza].filter(Boolean).sort()[0] || '9999'
+        const bMin = [b.revisione_scadenza, b.assicurazione_scadenza].filter(Boolean).sort()[0] || '9999'
+        return aMin.localeCompare(bMin)
+      })
 
     const card = document.getElementById('veicoli-alert-card')
     const tbody = document.getElementById('veicoli-alert-body')
@@ -234,25 +235,28 @@ export async function loadVeicoliAlert() {
     card.style.display = 'block'
     tbody.innerHTML = ''
     items.forEach(v => {
-      function scadBadge(dateStr, label) {
-        if (!dateStr || dateStr > in30) return ''
+      function scadCell(dateStr, label) {
+        if (!dateStr) return ''
         const d = new Date(dateStr + 'T00:00:00').toLocaleDateString('it-IT')
-        return dateStr < today
-          ? `<span class="badge badge-danger">${label}: ${d}</span>`
-          : `<span class="badge badge-warning">${label}: ${d}</span>`
+        if (dateStr < today)
+          return `<span class="badge badge-danger">${label}: ${d} ⚠</span>`
+        if (dateStr <= in90)
+          return `<span class="badge badge-warning">${label}: ${d}</span>`
+        return `<span class="badge" style="background:var(--gray-200);color:var(--gray-700);">${label}: ${d}</span>`
       }
       const tr = document.createElement('tr')
       tr.innerHTML = `
         <td><strong>${v.targa}</strong></td>
         <td>${[v.marca, v.modello].filter(Boolean).join(' ') || '-'}</td>
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
-          ${scadBadge(v.revisione_scadenza, 'Revisione')}
-          ${scadBadge(v.assicurazione_scadenza, 'Assicurazione')}
+          ${scadCell(v.revisione_scadenza, 'Revisione')}
+          ${scadCell(v.assicurazione_scadenza, 'Assicurazione')}
         </td>
       `
       tbody.appendChild(tr)
     })
   } catch(err) {
+    showToast('Tabella veicoli non trovata — esegui migrations_v5.sql', 'error')
     console.error('Errore alert veicoli:', err)
   }
 }
