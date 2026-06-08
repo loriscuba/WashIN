@@ -231,7 +231,55 @@
         text-decoration: line-through;
         color: var(--gray-400);
       }
-        display: none !important;
+      /* ── Avatar ── */
+      .sidebar-avatar-wrap {
+        display: none;
+        justify-content: center;
+        padding: 6px 0 14px;
+      }
+      .sidebar-avatar, .profilo-avatar {
+        position: relative;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        transition: border-color 0.2s, transform 0.15s;
+        flex-shrink: 0;
+      }
+      .sidebar-avatar {
+        width: 72px; height: 72px;
+        border: 3px solid rgba(255,255,255,0.38);
+        background: rgba(255,255,255,0.18);
+      }
+      .sidebar-avatar:hover { border-color: rgba(255,255,255,0.8); transform: scale(1.05); }
+      .profilo-avatar {
+        width: 64px; height: 64px;
+        border: 3px solid rgba(255,255,255,0.38);
+        background: rgba(255,255,255,0.18);
+      }
+      .profilo-avatar:hover { border-color: rgba(255,255,255,0.8); transform: scale(1.05); }
+      .sidebar-avatar img, .profilo-avatar img {
+        width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: none;
+      }
+      .avatar-initials {
+        display: flex; align-items: center; justify-content: center;
+        width: 100%; height: 100%;
+        font-weight: 700; color: #fff; line-height: 1;
+      }
+      .sidebar-avatar .avatar-initials { font-size: 22px; }
+      .profilo-avatar .avatar-initials { font-size: 20px; }
+      .avatar-overlay {
+        position: absolute; inset: 0; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.45);
+        opacity: 0; transition: opacity 0.2s; font-size: 18px; pointer-events: none;
+      }
+      .sidebar-avatar:hover .avatar-overlay,
+      .profilo-avatar:hover .avatar-overlay { opacity: 1; }
+      @media(min-width: 900px) {
+        .sidebar-avatar-wrap { display: flex; }
       }
       .document-upload {
         display: grid;
@@ -272,6 +320,14 @@
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-top">
           <div class="sidebar-logo">WashIN <span class="pro">Pro</span></div>
+        </div>
+        <div class="sidebar-avatar-wrap">
+          <label class="sidebar-avatar" id="sidebar-avatar" title="Cambia foto profilo">
+            <img src="" alt="" />
+            <span class="avatar-initials"></span>
+            <div class="avatar-overlay">📷</div>
+            <input type="file" id="sidebar-avatar-input" accept="image/*" style="display:none;" />
+          </label>
         </div>
         <div class="sidebar-profile">
           <strong id="operator-name">Operatore</strong>
@@ -394,10 +450,16 @@
         <section id="profilo" class="section hidden">
           <!-- Card utente -->
           <div style="background:linear-gradient(135deg,#0d9488,#0f766e);border-radius:20px;padding:24px 20px;margin-bottom:20px;color:#fff;display:flex;align-items:center;gap:16px;">
-            <div style="width:56px;height:56px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">👤</div>
+            <label class="profilo-avatar" id="profilo-avatar" title="Cambia foto profilo">
+              <img src="" alt="" />
+              <span class="avatar-initials"></span>
+              <div class="avatar-overlay">📷</div>
+              <input type="file" id="profilo-avatar-input" accept="image/*" style="display:none;" />
+            </label>
             <div>
               <p style="font-weight:700;font-size:18px;margin:0 0 4px;" id="profilo-nome">Operatore</p>
               <p style="font-size:13px;opacity:.8;margin:0;" id="profilo-email">—</p>
+              <p style="font-size:11px;opacity:.6;margin:4px 0 0;">Tocca la foto per cambiarla</p>
             </div>
           </div>
 

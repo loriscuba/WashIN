@@ -2,6 +2,7 @@ import supabase, { getUserProfile } from '../supabase.js'
 import { checkAuth, logout } from '../auth.js'
 import { initAgenda, loadInterventiPassati, renderInterventiPassati, refreshAgenda } from './agenda.js'
 import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
+import { uploadAvatar, applyAvatar } from '../avatar.js'
 
 let _currentUserId = null
 
@@ -62,6 +63,7 @@ async function loadOperatorInfo() {
       const greetingEl = document.getElementById('greeting-name')
       if (nameEl) nameEl.textContent = name
       if (greetingEl) greetingEl.textContent = name
+      applyAvatar(document.getElementById('sidebar-avatar'), profile.avatar_url || null, name)
     }
     await loadNotificheBadge(_currentUserId)
     return profile
@@ -91,15 +93,29 @@ function bindNavigation() {
 }
 
 function initProfilo(profile) {
-  // Popola la card utente con i dati del profilo
+  const name = `${profile?.nome || ''} ${profile?.cognome || ''}`.trim() || 'Operatore'
   const nomeEl = document.getElementById('profilo-nome')
   const emailEl = document.getElementById('profilo-email')
-  if (nomeEl && profile) {
-    nomeEl.textContent = `${profile.nome || ''} ${profile.cognome || ''}`.trim() || 'Operatore'
+  if (nomeEl && profile) nomeEl.textContent = name
+  if (emailEl && profile) emailEl.textContent = profile.email || '—'
+
+  applyAvatar(document.getElementById('profilo-avatar'), profile?.avatar_url || null, name)
+
+  async function handleAvatarFile(e) {
+    const file = e.target.files?.[0]
+    if (!file || !_currentUserId) return
+    try {
+      const url = await uploadAvatar(_currentUserId, file)
+      applyAvatar(document.getElementById('sidebar-avatar'), url, name)
+      applyAvatar(document.getElementById('profilo-avatar'), url, name)
+    } catch (err) {
+      console.error('uploadAvatar', err)
+      alert('Errore nel caricamento della foto.')
+    }
   }
-  if (emailEl && profile) {
-    emailEl.textContent = profile.email || '—'
-  }
+
+  document.getElementById('sidebar-avatar-input')?.addEventListener('change', handleAvatarFile)
+  document.getElementById('profilo-avatar-input')?.addEventListener('change', handleAvatarFile)
 
   document.getElementById('form-cambia-email')?.addEventListener('submit', async (e) => {
     e.preventDefault()
