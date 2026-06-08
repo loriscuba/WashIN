@@ -26,7 +26,7 @@ export async function getUserProfile(userId){
   if (!userId) return null
   const { data, error } = await supabase
     .from('profili')
-    .select('nome,cognome,ruolo,avatar_url')
+    .select('*')
     .eq('id', userId)
     .single()
 
