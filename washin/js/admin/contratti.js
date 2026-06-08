@@ -1,6 +1,61 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
 
+let _allContratti = []
+let _search = ''
+let _sortCol = ''
+let _sortDir = 'asc'
+
+function sortValue(c, col) {
+  switch (col) {
+    case 'cliente':               return (c.clienti?.ragione_sociale || '').toLowerCase()
+    case 'numero_contratto':      return (c.numero_contratto || '').toLowerCase()
+    case 'tipo':                  return (c.tipo || '').toLowerCase()
+    case 'importo_mensile':       return c.importo_mensile ?? -Infinity
+    case 'ore_contratto_mensili': return c.ore_contratto_mensili ?? -Infinity
+    case 'data_inizio':           return c.data_inizio || ''
+    case 'data_fine':             return c.data_fine || ''
+    case 'stato':                 return c.stato || ''
+    default:                      return c.created_at || ''
+  }
+}
+
+function filterAndRender() {
+  let data = [..._allContratti]
+  const q = _search.trim().toLowerCase()
+  if (q) {
+    data = data.filter(c =>
+      (c.clienti?.ragione_sociale || '').toLowerCase().includes(q) ||
+      (c.numero_contratto || '').toLowerCase().includes(q)
+    )
+  }
+  if (_sortCol) {
+    data.sort((a, b) => {
+      const va = sortValue(a, _sortCol)
+      const vb = sortValue(b, _sortCol)
+      if (va < vb) return _sortDir === 'asc' ? -1 : 1
+      if (va > vb) return _sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }
+  renderTabellaContratti(data)
+  updateSortIndicators()
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll('#contratti-thead th[data-sort-col]').forEach(th => {
+    const icon = th.querySelector('.sort-icon')
+    if (!icon) return
+    if (th.dataset.sortCol === _sortCol) {
+      icon.textContent = _sortDir === 'asc' ? ' ▲' : ' ▼'
+      th.style.color = 'var(--teal)'
+    } else {
+      icon.textContent = ' ⇅'
+      th.style.color = ''
+    }
+  })
+}
+
 export async function loadContratti(filtri = {}) {
   try {
     let q = supabase.from('contratti').select('*, clienti(ragione_sociale)')
@@ -40,6 +95,10 @@ export function renderTabellaContratti(contratti) {
     const tbody = document.getElementById('contratti-table-body')
     if (!tbody) return
     tbody.innerHTML = ''
+    if (!contratti.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun contratto trovato.</td></tr>'
+      return
+    }
     contratti.forEach(c => tbody.appendChild(createContrattoRow(c)))
   } catch (err) {
     showToast('Errore render contratti', 'error')
@@ -121,6 +180,11 @@ export async function saveContratto(formData) {
   }
 }
 
+async function reload() {
+  _allContratti = await loadContratti()
+  filterAndRender()
+}
+
 export function initContratti() {
   try {
     const addBtn = document.getElementById('add-contratto-button')
@@ -130,6 +194,26 @@ export function initContratti() {
 
     addBtn?.addEventListener('click', () => openModalContratto())
     modalClose?.addEventListener('click', () => modal?.classList.remove('active'))
+
+    // Ricerca cliente
+    document.getElementById('contratti-search')?.addEventListener('input', e => {
+      _search = e.target.value
+      filterAndRender()
+    })
+
+    // Ordinamento colonne
+    document.getElementById('contratti-thead')?.addEventListener('click', e => {
+      const th = e.target.closest('th[data-sort-col]')
+      if (!th) return
+      const col = th.dataset.sortCol
+      if (_sortCol === col) {
+        _sortDir = _sortDir === 'asc' ? 'desc' : 'asc'
+      } else {
+        _sortCol = col
+        _sortDir = 'asc'
+      }
+      filterAndRender()
+    })
 
     if (form) {
       form.addEventListener('submit', async e => {
@@ -151,7 +235,7 @@ export function initContratti() {
         form.reset()
         delete form.dataset.contrattoId
         modal.classList.remove('active')
-        loadContratti().then(renderTabellaContratti)
+        reload()
       })
     }
 
@@ -163,7 +247,7 @@ export function initContratti() {
       }
     })
 
-    loadContratti().then(renderTabellaContratti)
+    reload()
   } catch (err) {
     showToast('Errore inizializzazione contratti', 'error')
     console.error(err)
