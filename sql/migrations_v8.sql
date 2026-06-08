@@ -1,7 +1,7 @@
 -- migrations_v8.sql
 -- Funzione RPC per reset password senza SMTP
 -- SECURITY DEFINER: gira con i privilegi del proprietario (può scrivere su auth.users)
--- Il controllo admin è interno alla funzione stessa.
+-- Usa extensions.crypt/gen_salt perché pgcrypto è nello schema extensions in Supabase
 
 CREATE OR REPLACE FUNCTION admin_set_user_password(target_user_id uuid, new_password text)
 RETURNS void
@@ -21,8 +21,9 @@ BEGIN
   END IF;
 
   -- Aggiorna direttamente in auth.users (bcrypt compatibile con GoTrue)
+  -- pgcrypto è nello schema extensions in Supabase
   UPDATE auth.users
-  SET encrypted_password = crypt(new_password, gen_salt('bf')),
+  SET encrypted_password = extensions.crypt(new_password, extensions.gen_salt('bf')),
       updated_at = now()
   WHERE id = target_user_id;
 
@@ -33,5 +34,4 @@ END;
 $$;
 
 -- Permetti l'esecuzione agli utenti autenticati
--- (la funzione verifica internamente il ruolo admin)
 GRANT EXECUTE ON FUNCTION admin_set_user_password(uuid, text) TO authenticated;
