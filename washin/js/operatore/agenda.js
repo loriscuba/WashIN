@@ -115,7 +115,9 @@ export function renderInterventi(interventi) {
     const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
     const sede = iv.sedi_cliente?.nome_sede || ''
     const indirizzo = iv.sedi_cliente?.indirizzo || ''
-    const orario = `${iv.ora_inizio_pianificata || '-'} - ${iv.ora_fine_pianificata || '-'}`
+    const orario = iv.ora_inizio_pianificata
+      ? `${iv.ora_inizio_pianificata}${iv.ora_fine_pianificata ? ' — ' + iv.ora_fine_pianificata : ''}`
+      : 'Orario non definito'
     const mapsUrl = buildMapsUrl(indirizzo, '')
     const stato = iv.stato || 'pianificato'
     const actionLabel = stato === 'pianificato' ? 'Inizia' : stato === 'in_corso' ? 'Termina' : 'Vedi dettaglio'
