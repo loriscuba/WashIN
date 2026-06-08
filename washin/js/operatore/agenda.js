@@ -170,11 +170,32 @@ export function renderInterventi(interventi) {
   container.innerHTML = ''
 
   if (!interventi.length) {
-    container.innerHTML = '<div class="intervento-card"><p style="margin:0;color:var(--gray-500);">Nessun intervento pianificato per questo periodo.</p></div>'
+    container.innerHTML = `
+      <div style="text-align:center;padding:48px 20px;background:#fff;border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,0.07);">
+        <div style="font-size:44px;margin-bottom:12px;">📅</div>
+        <p style="font-weight:700;font-size:16px;color:var(--gray-600);margin:0 0 6px;">Tutto libero</p>
+        <p style="font-size:14px;color:var(--gray-400);margin:0;">Nessun intervento per questo periodo.</p>
+      </div>`
     return
   }
 
+  let lastDate = null
   interventi.forEach((iv) => {
+    const stato = iv.stato || 'pianificato'
+    const datePianificata = iv.data_pianificata || ''
+
+    if (datePianificata !== lastDate) {
+      lastDate = datePianificata
+      const d = new Date(datePianificata + 'T00:00:00')
+      const isToday = localDateStr(d) === localDateStr(new Date())
+      const lbl = document.createElement('p')
+      lbl.className = 'date-label'
+      lbl.textContent = isToday
+        ? 'Oggi — ' + d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+        : d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+      container.appendChild(lbl)
+    }
+
     const card = document.createElement('div')
     card.className = 'intervento-card'
     const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
@@ -183,23 +204,27 @@ export function renderInterventi(interventi) {
     const orario = iv.ora_inizio_pianificata
       ? `${iv.ora_inizio_pianificata}${iv.ora_fine_pianificata ? ' — ' + iv.ora_fine_pianificata : ''}`
       : 'Orario non definito'
+    const location = [sede, indirizzo].filter(Boolean).join(' — ')
     const mapsUrl = buildMapsUrl(indirizzo, '')
-    const stato = iv.stato || 'pianificato'
-    const actionLabel = stato === 'pianificato' ? 'Inizia' : stato === 'in_corso' ? 'Termina' : 'Vedi dettaglio'
+    const actionDone = stato === 'completato' || stato === 'annullato'
+    const actionLabel = stato === 'pianificato' ? 'Avvia intervento' : stato === 'in_corso' ? 'Segna completato' : stato.replace('_', ' ')
+    const newState = stato === 'pianificato' ? 'in_corso' : 'completato'
+    const borderColor = { in_corso: '#10b981', completato: '#0d9488', annullato: '#ef4444', pianificato: '#f59e0b' }[stato] || '#f59e0b'
 
     card.innerHTML = `
-      <div class="meta">
-        <div>
-          <strong>${orario}</strong>
-          <p style="margin:6px 0 0;color:var(--gray-700);font-weight:600;">${cliente}</p>
+      <div style="height:4px;background:${borderColor};"></div>
+      <div class="iv-inner">
+        <div class="iv-header">
+          <span class="iv-cliente">${cliente}</span>
+          <span class="badge ${badgeForStato(stato)}" style="flex-shrink:0;">${stato.replace('_', ' ')}</span>
         </div>
-        <span class="badge ${badgeForStato(stato)}">${stato}</span>
-      </div>
-      <div class="location">${sede}${indirizzo ? ' — ' + indirizzo : ''}</div>
-      <div class="actions">
-        <a class="btn btn-secondary btn-sm" href="${mapsUrl}" target="_blank" rel="noreferrer">Vai a Maps</a>
-        <button class="btn btn-primary btn-sm" data-action="status" data-id="${iv.id}" data-newstate="${stato === 'pianificato' ? 'in_corso' : stato === 'in_corso' ? 'completato' : 'completato'}" type="button">${actionLabel}</button>
-        <button class="btn btn-secondary btn-sm" data-action="checklist" data-id="${iv.id}" type="button">Compila checklist</button>
+        <p class="iv-orario">⏱ ${orario}</p>
+        ${location ? `<p class="iv-location">📍 ${location}</p>` : '<div style="margin-bottom:14px;"></div>'}
+        <div class="iv-actions">
+          <a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
+          <button class="btn btn-secondary btn-sm" data-action="checklist" data-id="${iv.id}" type="button" style="text-align:center;">Checklist</button>
+          ${!actionDone ? `<button class="btn btn-primary btn-sm btn-avvia" data-action="status" data-id="${iv.id}" data-newstate="${newState}" type="button">${actionLabel}</button>` : ''}
+        </div>
       </div>
     `
     container.appendChild(card)
@@ -279,18 +304,33 @@ export async function cambiaStatoIntervento(id, stato) {
 }
 
 export async function initAgenda() {
-  const toggle = document.getElementById('toggle-week')
+  const btnOggi = document.getElementById('btn-vista-oggi')
+  const btnSett = document.getElementById('btn-vista-settimana')
+  const subtitle = document.getElementById('agenda-subtitle')
   const container = document.getElementById('agenda-cards')
+  let vistaSettimana = false
 
   async function refresh() {
     const oggi = new Date()
     const start = localDateStr(oggi)
-    const end = toggle?.checked ? endOfWeekStr() : start
+    const end = vistaSettimana ? endOfWeekStr() : start
+    if (subtitle) subtitle.textContent = vistaSettimana ? 'Questa settimana' : 'Interventi di oggi'
     const interventi = await loadInterventiOperatore(start, end)
     renderInterventi(interventi)
   }
 
-  toggle?.addEventListener('change', refresh)
+  btnOggi?.addEventListener('click', () => {
+    vistaSettimana = false
+    btnOggi.classList.add('active')
+    btnSett?.classList.remove('active')
+    refresh()
+  })
+  btnSett?.addEventListener('click', () => {
+    vistaSettimana = true
+    btnSett.classList.add('active')
+    btnOggi?.classList.remove('active')
+    refresh()
+  })
 
   container?.addEventListener('click', async (event) => {
     const button = event.target.closest('button[data-action]')
