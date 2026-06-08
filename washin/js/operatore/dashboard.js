@@ -88,10 +88,6 @@ function bindNavigation() {
 
   document.getElementById('sidebar-nav')?.addEventListener('click', handleNavClick)
   document.getElementById('bottom-nav')?.addEventListener('click', handleNavClick)
-
-  document.getElementById('toggle-week')?.addEventListener('change', (event) => {
-    document.getElementById('week-view')?.classList.toggle('hidden', !event.target.checked)
-  })
 }
 
 function initProfilo(profile) {
