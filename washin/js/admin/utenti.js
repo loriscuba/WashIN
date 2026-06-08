@@ -108,37 +108,38 @@ async function saveUtente(payload) {
   }
 }
 
-// Crea l'account auth senza alterare la sessione corrente usando fetch diretto
-async function signUpViaRest(email, password) {
-  const key = window.SUPABASE_ANON_KEY
-  const res = await fetch(`${window.SUPABASE_URL}/auth/v1/signup`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': key,
-      'Authorization': `Bearer ${key}`
-    },
-    body: JSON.stringify({ email, password })
-  })
-  const json = await res.json()
-  if (!res.ok) {
-    const msg = json.error_description || json.msg || json.message || JSON.stringify(json)
-    if (msg.toLowerCase().includes('signup') && msg.toLowerCase().includes('disabled')) {
-      throw new Error('Signup disabilitato. Abilitare "Allow new users to sign up" in Supabase → Authentication → Configuration.')
-    }
-    throw new Error(msg)
-  }
-  // con email confirmation attiva: json.user; senza: json.user o json direttamente
-  const userId = json.user?.id || json.id
-  if (!userId) throw new Error('ID utente non ricevuto — controlla che signup sia abilitato in Supabase Auth.')
-  return userId
-}
-
 async function createNuovoUtente(payload) {
   try {
-    const userId = await signUpViaRest(payload.email, payload.password)
+    // Salva la sessione admin corrente prima del signup
+    const { data: { session: adminSession } } = await supabase.auth.getSession()
 
-    // Il trigger crea il profilo con ruolo='operatore'; aggiorniamo subito con i dati corretti
+    const { data, error } = await supabase.auth.signUp({
+      email: payload.email,
+      password: payload.password
+    })
+
+    if (error) {
+      if (error.status === 500) {
+        throw new Error('Errore server (500). Probabile causa: la conferma email è attiva ma lo SMTP non è configurato. Vai su Supabase → Authentication → Configuration e disabilita "Enable email confirmations".')
+      }
+      if (error.message?.toLowerCase().includes('signup') || error.message?.toLowerCase().includes('disabled')) {
+        throw new Error('Signup disabilitato. Vai su Supabase → Authentication → Configuration → abilita "Allow new users to sign up".')
+      }
+      throw error
+    }
+
+    const userId = data.user?.id
+    if (!userId) throw new Error('ID utente non ricevuto.')
+
+    // Se la sessione è cambiata (email confirmation off), ripristina quella admin
+    const { data: { session: currentSession } } = await supabase.auth.getSession()
+    if (adminSession && currentSession?.user?.id !== adminSession.user.id) {
+      await supabase.auth.setSession({
+        access_token: adminSession.access_token,
+        refresh_token: adminSession.refresh_token
+      })
+    }
+
     const fields = {
       nome: payload.nome || null,
       cognome: payload.cognome || null,
@@ -148,14 +149,14 @@ async function createNuovoUtente(payload) {
       ruolo: payload.ruolo || 'operatore',
       attivo: true,
     }
-    // upsert perché il trigger potrebbe non aver ancora creato la riga
-    const { error } = await supabase.from('profili').upsert({ id: userId, ...fields })
-    if (error) throw error
+    // upsert: il trigger potrebbe aver già creato la riga
+    const { error: upsertErr } = await supabase.from('profili').upsert({ id: userId, ...fields })
+    if (upsertErr) throw upsertErr
 
-    showToast('Utente creato. Se richiesta, il nuovo utente riceverà un\'email di conferma.', 'success')
+    showToast('Utente creato con successo.', 'success')
     return true
   } catch (err) {
-    showToast('Errore creazione utente: ' + err.message, 'error')
+    showToast(err.message || 'Errore creazione utente', 'error')
     console.error(err)
     return null
   }
