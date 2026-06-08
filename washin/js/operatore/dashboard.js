@@ -1,6 +1,6 @@
 import supabase, { getUserProfile } from '../supabase.js'
 import { checkAuth, logout } from '../auth.js'
-import { initAgenda, loadInterventiPassati, renderInterventiPassati } from './agenda.js'
+import { initAgenda, loadInterventiPassati, renderInterventiPassati, refreshAgenda } from './agenda.js'
 import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
 
 let _currentUserId = null
@@ -139,6 +139,14 @@ async function initDashboard() {
   await initAgenda()
   initChecklist()
   initProfilo(profile)
+
+  document.getElementById('btn-back-agenda')?.addEventListener('click', () => showSection('agenda'))
+
+  window.addEventListener('checklist:completata', () => {
+    _storicoLoaded = false
+    showSection('agenda')
+    refreshAgenda()
+  })
 
   document.getElementById('storico-list')?.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action="checklist"]')

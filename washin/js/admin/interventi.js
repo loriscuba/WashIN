@@ -143,7 +143,7 @@ export function renderListaInterventi(interventi){
         ? `<button class="btn btn-sm btn-danger" data-action="stop-intervento" data-id="${iv.id}">■ Stop</button>`
         : ''
       tr.innerHTML = `
-        <td>${iv.data_pianificata}</td>
+        <td>${iv.data_pianificata}${iv.ora_inizio_pianificata ? '<br><span style="font-size:12px;color:var(--gray-500);">' + iv.ora_inizio_pianificata.slice(0,5) + (iv.ora_fine_pianificata ? ' — ' + iv.ora_fine_pianificata.slice(0,5) : '') + '</span>' : ''}</td>
         <td>${operatorName}</td>
         <td>${cliente} / ${iv.sedi_cliente?.nome_sede || '-'}</td>
         <td>${iv.tipo_pulizia || '-'}</td>

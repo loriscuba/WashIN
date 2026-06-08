@@ -134,8 +134,9 @@ export function renderInterventiPassati(interventi) {
     const dataFmt = iv.data_pianificata
       ? new Date(iv.data_pianificata + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
       : '-'
+    const fmtT = t => t ? t.slice(0, 5) : ''
     const orario = iv.ora_inizio_pianificata
-      ? `${iv.ora_inizio_pianificata}${iv.ora_fine_pianificata ? ' — ' + iv.ora_fine_pianificata : ''}`
+      ? `${fmtT(iv.ora_inizio_pianificata)}${iv.ora_fine_pianificata ? ' — ' + fmtT(iv.ora_fine_pianificata) : ''}`
       : ''
     const stato = iv.stato || 'pianificato'
     const incompleto = stato !== 'completato' || !iv.fine_effettivo
@@ -201,8 +202,9 @@ export function renderInterventi(interventi) {
     const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
     const sede = iv.sedi_cliente?.nome_sede || ''
     const indirizzo = iv.sedi_cliente?.indirizzo || ''
+    const fmt = t => t ? t.slice(0, 5) : ''
     const orario = iv.ora_inizio_pianificata
-      ? `${iv.ora_inizio_pianificata}${iv.ora_fine_pianificata ? ' — ' + iv.ora_fine_pianificata : ''}`
+      ? `${fmt(iv.ora_inizio_pianificata)}${iv.ora_fine_pianificata ? ' — ' + fmt(iv.ora_fine_pianificata) : ''}`
       : 'Orario non definito'
     const location = [sede, indirizzo].filter(Boolean).join(' — ')
     const mapsUrl = buildMapsUrl(indirizzo, '')
@@ -303,30 +305,38 @@ export async function cambiaStatoIntervento(id, stato) {
   }
 }
 
+let _vistaSettimana = false
+
+export function refreshAgenda() {
+  const oggi = new Date()
+  const start = localDateStr(oggi)
+  const end = _vistaSettimana ? endOfWeekStr() : start
+  loadInterventiOperatore(start, end).then(renderInterventi)
+}
+
 export async function initAgenda() {
   const btnOggi = document.getElementById('btn-vista-oggi')
   const btnSett = document.getElementById('btn-vista-settimana')
   const subtitle = document.getElementById('agenda-subtitle')
   const container = document.getElementById('agenda-cards')
-  let vistaSettimana = false
 
   async function refresh() {
     const oggi = new Date()
     const start = localDateStr(oggi)
-    const end = vistaSettimana ? endOfWeekStr() : start
-    if (subtitle) subtitle.textContent = vistaSettimana ? 'Questa settimana' : 'Interventi di oggi'
+    const end = _vistaSettimana ? endOfWeekStr() : start
+    if (subtitle) subtitle.textContent = _vistaSettimana ? 'Questa settimana' : 'Interventi di oggi'
     const interventi = await loadInterventiOperatore(start, end)
     renderInterventi(interventi)
   }
 
   btnOggi?.addEventListener('click', () => {
-    vistaSettimana = false
+    _vistaSettimana = false
     btnOggi.classList.add('active')
     btnSett?.classList.remove('active')
     refresh()
   })
   btnSett?.addEventListener('click', () => {
-    vistaSettimana = true
+    _vistaSettimana = true
     btnSett.classList.add('active')
     btnOggi?.classList.remove('active')
     refresh()
