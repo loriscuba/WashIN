@@ -64,22 +64,26 @@ function localDateStr(date) {
   return `${y}-${m}-${d}`
 }
 
-export async function loadInterventiOperatore(giorni = 1) {
+function endOfWeekStr() {
+  const today = new Date()
+  const day = today.getDay() // 0=dom, 1=lun, ..., 6=sab
+  const daysToSunday = day === 0 ? 0 : 7 - day
+  const sunday = new Date(today)
+  sunday.setDate(today.getDate() + daysToSunday)
+  return localDateStr(sunday)
+}
+
+export async function loadInterventiOperatore(start, end) {
   try {
     const operatoreId = await getOperatoreId()
     if (!operatoreId) return []
-    const oggi = new Date()
-    const fine = new Date(oggi)
-    fine.setDate(oggi.getDate() + giorni - 1)
-    const startDate = localDateStr(oggi)
-    const endDate = localDateStr(fine)
 
     const { data, error } = await supabase
       .from('interventi')
       .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale))')
       .eq('operatore_id', operatoreId)
-      .gte('data_pianificata', startDate)
-      .lte('data_pianificata', endDate)
+      .gte('data_pianificata', start)
+      .lte('data_pianificata', end)
       .order('data_pianificata', { ascending: true })
       .order('ora_inizio_pianificata', { ascending: true })
 
@@ -90,6 +94,67 @@ export async function loadInterventiOperatore(giorni = 1) {
     console.error(error)
     return []
   }
+}
+
+export async function loadInterventiPassati() {
+  try {
+    const operatoreId = await getOperatoreId()
+    if (!operatoreId) return []
+    const ieri = new Date()
+    ieri.setDate(ieri.getDate() - 1)
+    const { data, error } = await supabase
+      .from('interventi')
+      .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale))')
+      .eq('operatore_id', operatoreId)
+      .lte('data_pianificata', localDateStr(ieri))
+      .order('data_pianificata', { ascending: false })
+      .limit(50)
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    showToast('Errore caricamento storico', 'error')
+    console.error(error)
+    return []
+  }
+}
+
+export function renderInterventiPassati(interventi) {
+  const container = document.getElementById('storico-list')
+  if (!container) return
+  container.innerHTML = ''
+  if (!interventi.length) {
+    container.innerHTML = '<p style="color:var(--gray-500);text-align:center;padding:24px 0;">Nessun intervento passato.</p>'
+    return
+  }
+  interventi.forEach(iv => {
+    const card = document.createElement('div')
+    card.className = 'intervento-card'
+    const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
+    const sede = iv.sedi_cliente?.nome_sede || ''
+    const dataFmt = iv.data_pianificata
+      ? new Date(iv.data_pianificata + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '-'
+    const orario = iv.ora_inizio_pianificata
+      ? `${iv.ora_inizio_pianificata}${iv.ora_fine_pianificata ? ' — ' + iv.ora_fine_pianificata : ''}`
+      : ''
+    const stato = iv.stato || 'pianificato'
+    const incompleto = stato !== 'completato' || !iv.fine_effettivo
+    card.innerHTML = `
+      <div class="meta">
+        <div>
+          <strong>${dataFmt}${orario ? '  ·  ' + orario : ''}</strong>
+          <p style="margin:6px 0 0;color:var(--gray-700);font-weight:600;">${cliente}</p>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <span class="badge ${badgeForStato(stato)}">${stato}</span>
+          ${incompleto ? '<span class="badge badge-warning">⚠ Incompleto</span>' : ''}
+        </div>
+      </div>
+      ${sede ? `<div class="location">${sede}</div>` : ''}
+      ${incompleto ? `<div class="actions"><button class="btn btn-secondary btn-sm" data-action="checklist" data-id="${iv.id}" type="button">Compila checklist</button></div>` : ''}
+    `
+    container.appendChild(card)
+  })
 }
 
 function badgeForStato(stato) {
@@ -213,16 +278,15 @@ export async function cambiaStatoIntervento(id, stato) {
   }
 }
 
-let currentDays = 1
-
 export async function initAgenda() {
   const toggle = document.getElementById('toggle-week')
   const container = document.getElementById('agenda-cards')
 
   async function refresh() {
-    const days = toggle?.checked ? 7 : 1
-    currentDays = days
-    const interventi = await loadInterventiOperatore(days)
+    const oggi = new Date()
+    const start = localDateStr(oggi)
+    const end = toggle?.checked ? endOfWeekStr() : start
+    const interventi = await loadInterventiOperatore(start, end)
     renderInterventi(interventi)
   }
 
