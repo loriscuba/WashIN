@@ -259,10 +259,19 @@ export function initUtenti() {
         if (action === 'reset-pw-utente' && id) {
           const email = t.dataset.email
           if (!email) { showToast('Email non trovata', 'warning'); return }
-          if (!confirm(`Inviare email di reset password a ${email}?`)) return
-          const { error } = await supabase.auth.resetPasswordForEmail(email)
-          if (error) showToast('Errore invio email: ' + error.message, 'error')
-          else showToast(`Email di reset inviata a ${email}`, 'success')
+          if (!confirm(`Inviare email di reset password a ${email}?\n\nRichiede SMTP configurato in Supabase.`)) return
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + '/WashIN/washin/index.html'
+          })
+          if (error) {
+            if (error.status === 500) {
+              showToast('Reset password fallito (500): configura SMTP in Supabase → Authentication → SMTP Settings, oppure usa Supabase Dashboard → Authentication → Users per resettare la password.', 'error')
+            } else {
+              showToast('Errore: ' + error.message, 'error')
+            }
+          } else {
+            showToast(`Email di reset inviata a ${email}`, 'success')
+          }
         }
       })
 
