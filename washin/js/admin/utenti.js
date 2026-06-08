@@ -13,7 +13,10 @@ export async function loadUtenti() {
   try {
     const { data, error } = await supabase.from('profili').select('*').order('nome', { ascending: true })
     if (error) throw error
-    return data || []
+    // Carica gli ID presenti in auth.users per sapere chi ha un account di login
+    const { data: authIds } = await supabase.rpc('get_auth_user_ids')
+    const authSet = new Set((authIds || []).map(r => r.id))
+    return (data || []).map(u => ({ ...u, _hasAuthAccount: authSet.has(u.id) }))
   } catch (err) {
     showToast('Errore caricamento utenti', 'error')
     console.error(err)
@@ -32,11 +35,17 @@ function createUtenteRow(u) {
   const statoHtml = u.attivo
     ? '<span style="color:#059669;font-weight:600;">Attivo</span>'
     : '<span style="color:#dc2626;font-weight:600;">Inattivo</span>'
+  const loginBadge = u._hasAuthAccount
+    ? '<span class="badge badge-success" title="Ha un account di accesso">Login ✓</span>'
+    : '<span class="badge badge-warning" title="Solo profilo, nessun account di accesso">Solo profilo</span>'
+  const resetBtn = u._hasAuthAccount
+    ? `<button class="btn btn-sm btn-secondary" data-action="reset-pw-utente" data-id="${u.id}" data-nome="${[u.nome, u.cognome].filter(Boolean).join(' ') || u.email || ''}">Reset PW</button>`
+    : `<button class="btn btn-sm" style="background:#f1f5f9;color:#94a3b8;border:none;border-radius:6px;cursor:not-allowed;padding:4px 10px;font-size:12px;" title="Crea prima un account da Nuovo utente" disabled>Reset PW</button>`
   tr.innerHTML = `
     <td><strong>${[u.nome, u.cognome].filter(Boolean).join(' ') || '-'}</strong></td>
     <td>${u.email || '-'}</td>
     <td><span class="badge ${rb.cls}">${rb.label}</span></td>
-    <td>${u.qualifica || '-'}</td>
+    <td>${loginBadge}</td>
     <td>${statoHtml}</td>
     <td style="display:flex;gap:6px;flex-wrap:wrap;">
       <button class="btn btn-sm btn-secondary" data-action="edit-utente" data-id="${u.id}">Modifica</button>
@@ -44,7 +53,7 @@ function createUtenteRow(u) {
         data-action="toggle-utente" data-id="${u.id}" data-active="${u.attivo}">
         ${u.attivo ? 'Disattiva' : 'Attiva'}
       </button>
-      <button class="btn btn-sm btn-secondary" data-action="reset-pw-utente" data-id="${u.id}" data-nome="${[u.nome, u.cognome].filter(Boolean).join(' ') || u.email || ''}">Reset PW</button>
+      ${resetBtn}
     </td>
   `
   return tr
