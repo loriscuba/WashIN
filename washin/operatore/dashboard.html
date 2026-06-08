@@ -53,7 +53,7 @@
       }
       .main-content {
         padding: 20px 16px 90px; /* bottom padding for bottom nav */
-        margin-top: 110px;
+        margin-top: 90px;
       }
       /* ── Bottom navigation bar (mobile only) ── */
       .bottom-nav {
@@ -197,7 +197,6 @@
         </div>
         <div class="sidebar-profile">
           <strong id="operator-name">Operatore</strong>
-          <button class="btn btn-sm" id="btn-profilo" type="button" style="background:#fff;color:#0D9488;border:none;padding:4px 12px;font-size:12px;font-weight:600;flex-shrink:0;">Il mio profilo</button>
         </div>
         <nav class="sidebar-nav" id="sidebar-nav">
           <a class="active" href="#agenda" data-section="agenda"><span data-lucide="calendar"></span> La mia agenda</a>
@@ -333,41 +332,48 @@
           </div>
         </section>
 
-        <section id="profilo" class="section section-card hidden">
-          <div class="section-header">
+        <section id="profilo" class="section hidden">
+          <!-- Card utente -->
+          <div style="background:linear-gradient(135deg,#0d9488,#0f766e);border-radius:20px;padding:24px 20px;margin-bottom:20px;color:#fff;display:flex;align-items:center;gap:16px;">
+            <div style="width:56px;height:56px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">👤</div>
             <div>
-              <h2>Il mio profilo</h2>
-              <p style="color:var(--gray-500);margin-top:6px;">Modifica email e password del tuo account.</p>
+              <p style="font-weight:700;font-size:18px;margin:0 0 4px;" id="profilo-nome">Operatore</p>
+              <p style="font-size:13px;opacity:.8;margin:0;" id="profilo-email">—</p>
             </div>
           </div>
 
-          <div style="display:grid;gap:24px;max-width:480px;">
+          <!-- Form cambia email -->
+          <div class="section-card" style="margin-bottom:16px;">
+            <h3 style="font-size:15px;font-weight:700;margin:0 0 16px;color:var(--gray-800);">Cambia email</h3>
             <form id="form-cambia-email">
-              <h3 style="font-size:16px;margin-bottom:14px;">Cambia email</h3>
-              <div style="display:grid;gap:12px;">
+              <div style="display:grid;gap:14px;">
                 <div>
-                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Nuova email</label>
-                  <input name="new_email" type="email" required placeholder="nuova@email.it" style="width:100%;padding:12px;border:1px solid var(--gray-300);border-radius:12px;font-size:14px;" />
+                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:13px;color:var(--gray-700);">Nuova email</label>
+                  <input name="new_email" type="email" required placeholder="nuova@email.it"
+                    style="width:100%;padding:14px;border:1.5px solid var(--gray-300);border-radius:14px;font-size:15px;box-sizing:border-box;-webkit-appearance:none;" />
                 </div>
-                <button class="btn btn-primary btn-sm" type="submit">Aggiorna email</button>
-                <p style="font-size:12px;color:var(--gray-500);margin:0;">Riceverai un'email di conferma al nuovo indirizzo.</p>
+                <button class="btn btn-primary" type="submit" style="width:100%;padding:14px;font-size:15px;border-radius:14px;">Aggiorna email</button>
+                <p style="font-size:12px;color:var(--gray-500);margin:0;text-align:center;">Riceverai un'email di conferma al nuovo indirizzo.</p>
               </div>
             </form>
+          </div>
 
-            <hr style="border:none;border-top:1px solid var(--gray-200);" />
-
+          <!-- Form cambia password -->
+          <div class="section-card">
+            <h3 style="font-size:15px;font-weight:700;margin:0 0 16px;color:var(--gray-800);">Cambia password</h3>
             <form id="form-cambia-password">
-              <h3 style="font-size:16px;margin-bottom:14px;">Cambia password</h3>
-              <div style="display:grid;gap:12px;">
+              <div style="display:grid;gap:14px;">
                 <div>
-                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Nuova password</label>
-                  <input name="new_password" type="password" required minlength="6" placeholder="Minimo 6 caratteri" style="width:100%;padding:12px;border:1px solid var(--gray-300);border-radius:12px;font-size:14px;" />
+                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:13px;color:var(--gray-700);">Nuova password</label>
+                  <input name="new_password" type="password" required minlength="6" placeholder="Minimo 6 caratteri"
+                    style="width:100%;padding:14px;border:1.5px solid var(--gray-300);border-radius:14px;font-size:15px;box-sizing:border-box;-webkit-appearance:none;" />
                 </div>
                 <div>
-                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:14px;">Conferma password</label>
-                  <input name="confirm_password" type="password" required minlength="6" placeholder="Ripeti la password" style="width:100%;padding:12px;border:1px solid var(--gray-300);border-radius:12px;font-size:14px;" />
+                  <label style="display:block;font-weight:600;margin-bottom:6px;font-size:13px;color:var(--gray-700);">Conferma password</label>
+                  <input name="confirm_password" type="password" required minlength="6" placeholder="Ripeti la password"
+                    style="width:100%;padding:14px;border:1.5px solid var(--gray-300);border-radius:14px;font-size:15px;box-sizing:border-box;-webkit-appearance:none;" />
                 </div>
-                <button class="btn btn-primary btn-sm" type="submit">Aggiorna password</button>
+                <button class="btn btn-primary" type="submit" style="width:100%;padding:14px;font-size:15px;border-radius:14px;">Aggiorna password</button>
               </div>
             </form>
           </div>

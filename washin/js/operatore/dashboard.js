@@ -88,8 +88,16 @@ function bindNavigation() {
   })
 }
 
-function initProfilo() {
-  document.getElementById('btn-profilo')?.addEventListener('click', () => showSection('profilo'))
+function initProfilo(profile) {
+  // Popola la card utente con i dati del profilo
+  const nomeEl = document.getElementById('profilo-nome')
+  const emailEl = document.getElementById('profilo-email')
+  if (nomeEl && profile) {
+    nomeEl.textContent = `${profile.nome || ''} ${profile.cognome || ''}`.trim() || 'Operatore'
+  }
+  if (emailEl && profile) {
+    emailEl.textContent = profile.email || '—'
+  }
 
   document.getElementById('form-cambia-email')?.addEventListener('submit', async (e) => {
     e.preventDefault()
@@ -122,13 +130,13 @@ function initProfilo() {
 async function initDashboard() {
   await checkAuth()
   updateTodayDate()
-  await loadOperatorInfo()
+  const profile = await loadOperatorInfo()
   bindNavigation()
   document.getElementById('logout')?.addEventListener('click', logout)
   showSection('agenda')
   await initAgenda()
   initChecklist()
-  initProfilo()
+  initProfilo(profile)
 
   window.addEventListener('operatore:open-checklist', async (event) => {
     showSection('checklist')
