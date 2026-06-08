@@ -130,19 +130,19 @@ export async function loadChecklistPerIntervento(interventoId) {
     }
 
     const cliente = intervento.sedi_cliente?.clienti?.ragione_sociale || 'Cliente'
-    const data = intervento.data_pianificata ? new Date(intervento.data_pianificata).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
-    const title = `${cliente} — ${data}`
+    // Fix timezone: aggiungi T00:00:00 per evitare shift UTC
+    const dataFmt = intervento.data_pianificata
+      ? new Date(intervento.data_pianificata + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+      : ''
     const titleEl = document.getElementById('checklist-title')
-    if (titleEl) titleEl.textContent = title
+    if (titleEl) titleEl.textContent = `${cliente} — ${dataFmt}`
 
     const { data: compiled, error: compiledError } = await supabase
       .from('checklist_compilate')
       .select('*')
       .eq('intervento_id', interventoId)
-      .single()
-    if (compiledError && compiledError.code !== 'PGRST116') {
-      throw compiledError
-    }
+      .maybeSingle()
+    if (compiledError) throw compiledError
 
     let voci = []
     if (compiled && compiled.voci_compilate) {
@@ -187,26 +187,55 @@ export async function saveChecklist(interventoId, voci, note, definitivo = false
       return null
     }
     const completamento_pct = aggiornaPct(voci)
-    const payload = {
-      id: currentChecklistId || undefined,
-      intervento_id: interventoId,
-      template_id: currentTemplateId || null,
-      voci_compilate: voci.reduce((acc, item) => {
-        acc[item.label] = !!item.checked
-        return acc
-      }, {}),
-      completamento_pct,
-      note: note || ''
-    }
+    const voci_compilate = voci.reduce((acc, item) => {
+      acc[item.label] = !!item.checked
+      return acc
+    }, {})
 
-    const { data, error } = await supabase.from('checklist_compilate').upsert(payload, { returning: 'representation' })
-    if (error) throw error
-    if (data && data[0]) {
-      currentChecklistId = data[0].id
+    let savedData = null
+
+    if (currentChecklistId) {
+      // Aggiorna riga esistente per ID
+      const { data, error } = await supabase
+        .from('checklist_compilate')
+        .update({
+          voci_compilate,
+          completamento_pct,
+          note: note || '',
+          template_id: currentTemplateId || null
+        })
+        .eq('id', currentChecklistId)
+        .select()
+        .single()
+      if (error) throw error
+      savedData = data
+    } else {
+      // Prima scrittura: upsert per intervento_id (evita duplicati)
+      const { data, error } = await supabase
+        .from('checklist_compilate')
+        .upsert({
+          intervento_id: interventoId,
+          template_id: currentTemplateId || null,
+          voci_compilate,
+          completamento_pct,
+          note: note || ''
+        }, { onConflict: 'intervento_id' })
+        .select()
+        .single()
+      if (error) throw error
+      savedData = data
+      if (savedData?.id) currentChecklistId = savedData.id
     }
 
     if (definitivo) {
-      const { error: updateError } = await supabase.from('interventi').update({ stato: 'completato' }).eq('id', interventoId)
+      // Segna completato e salva orario di fine effettivo
+      const { error: updateError } = await supabase
+        .from('interventi')
+        .update({
+          stato: 'completato',
+          fine_effettivo: new Date().toISOString()
+        })
+        .eq('id', interventoId)
       if (updateError) throw updateError
       showToast('Intervento completato', 'success')
       window.dispatchEvent(new CustomEvent('checklist:completata'))
@@ -214,7 +243,7 @@ export async function saveChecklist(interventoId, voci, note, definitivo = false
       showToast('Bozza salvata', 'success')
     }
 
-    return data?.[0] || null
+    return savedData
   } catch (error) {
     showToast('Errore salvataggio checklist', 'error')
     console.error(error)
