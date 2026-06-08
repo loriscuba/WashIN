@@ -22,7 +22,9 @@ export async function loadInterventi(filtri = {}){
   try{
     let query = supabase.from('interventi').select("*, operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome), sedi_cliente(nome_sede,indirizzo, clienti(ragione_sociale))")
 
-    if (filtri.month){
+    if (filtri.date) {
+      query = query.eq('data_pianificata', filtri.date)
+    } else if (filtri.month){
       // filtri.month può essere string 'YYYY-MM' o Date
       let ref = (filtri.month instanceof Date) ? filtri.month : new Date(filtri.month + '-01')
       const start = formatDateISO(startOfMonth(ref))
@@ -143,7 +145,7 @@ export function renderListaInterventi(interventi){
         ? `<button class="btn btn-sm btn-danger" data-action="stop-intervento" data-id="${iv.id}">■ Stop</button>`
         : ''
       tr.innerHTML = `
-        <td>${iv.data_pianificata}${iv.ora_inizio_pianificata ? '<br><span style="font-size:12px;color:var(--gray-500);">' + iv.ora_inizio_pianificata.slice(0,5) + (iv.ora_fine_pianificata ? ' — ' + iv.ora_fine_pianificata.slice(0,5) : '') + '</span>' : ''}</td>
+        <td style="white-space:nowrap;">${iv.data_pianificata}${iv.ora_inizio_pianificata ? '<br><span style="font-size:11px;color:var(--gray-500);">P: ' + iv.ora_inizio_pianificata.slice(0,5) + (iv.ora_fine_pianificata ? '–' + iv.ora_fine_pianificata.slice(0,5) : '') + '</span>' : ''}${iv.inizio_effettivo ? '<br><span style="font-size:11px;color:#059669;">▶ ' + new Date(iv.inizio_effettivo).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) + (iv.fine_effettivo ? '–' + new Date(iv.fine_effettivo).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '') + '</span>' : ''}</td>
         <td>${operatorName}</td>
         <td>${cliente} / ${iv.sedi_cliente?.nome_sede || '-'}</td>
         <td>${iv.tipo_pulizia || '-'}</td>
@@ -558,7 +560,7 @@ export function initInterventi(){
     const modal = document.getElementById('intervento-modal')
     const form = modal?.querySelector('form')
     let refDate = new Date()
-    let currentView = 'week'
+    let currentView = 'today'
 
     // auto-set current month
     if (monthInput) {
@@ -567,10 +569,16 @@ export function initInterventi(){
 
     function setView(v) {
       currentView = v
+      const isToday = v === 'today'
       const wk = document.getElementById('calendar-week')
       const mo = document.getElementById('calendar-month')
       if (wk) wk.style.display = v === 'week' ? '' : 'none'
       if (mo) mo.style.display = v === 'month' ? '' : 'none'
+      if (prevBtn) prevBtn.style.display = isToday ? 'none' : ''
+      if (nextBtn) nextBtn.style.display = isToday ? 'none' : ''
+      if (monthInput) monthInput.style.display = isToday ? 'none' : ''
+      document.getElementById('view-today')?.classList.toggle('btn-primary', isToday)
+      document.getElementById('view-today')?.classList.toggle('btn-secondary', !isToday)
       document.getElementById('view-week')?.classList.toggle('btn-primary', v === 'week')
       document.getElementById('view-week')?.classList.toggle('btn-secondary', v !== 'week')
       document.getElementById('view-month')?.classList.toggle('btn-primary', v === 'month')
@@ -578,11 +586,17 @@ export function initInterventi(){
     }
 
     async function refreshView(){
-      const month = monthInput?.value || `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
-      const interventi = await loadInterventi({ month })
-      if (currentView === 'week') renderCalendarioSettimana(interventi, refDate)
-      else renderCalendarioMese(interventi, month)
-      renderListaInterventi(interventi)
+      if (currentView === 'today') {
+        const todayStr = new Date().toISOString().slice(0, 10)
+        const interventi = await loadInterventi({ date: todayStr })
+        renderListaInterventi(interventi)
+      } else {
+        const month = monthInput?.value || `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
+        const interventi = await loadInterventi({ month })
+        if (currentView === 'week') renderCalendarioSettimana(interventi, refDate)
+        else renderCalendarioMese(interventi, month)
+        renderListaInterventi(interventi)
+      }
     }
 
     prevBtn?.addEventListener('click', () => {
@@ -604,6 +618,7 @@ export function initInterventi(){
       refreshView()
     })
 
+    document.getElementById('view-today')?.addEventListener('click', () => { setView('today'); refreshView() })
     document.getElementById('view-week')?.addEventListener('click', () => { setView('week'); refreshView() })
     document.getElementById('view-month')?.addEventListener('click', () => { setView('month'); refreshView() })
     monthInput?.addEventListener('change', refreshView)
@@ -655,6 +670,7 @@ export function initInterventi(){
     })
 
     // initial load
+    setView('today')
     refreshView()
   }catch(err){
     showToast('Errore inizializzazione interventi','error')
