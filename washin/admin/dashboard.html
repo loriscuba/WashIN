@@ -1057,6 +1057,22 @@
       </div>
     </div>
 
+    <!-- ── Modal Reset Password Utente ── -->
+    <div class="modal-overlay" id="reset-pw-modal">
+      <div class="modal-box" style="max-width:400px;">
+        <h2>Reset password</h2>
+        <p style="color:var(--gray-500);font-size:13px;margin-bottom:16px;">Imposta una nuova password direttamente, senza email.</p>
+        <form>
+          <div class="form-group"><label>Nuova password *</label><input name="new_password" type="password" required placeholder="min. 6 caratteri"></div>
+          <div class="form-group"><label>Conferma password *</label><input name="confirm_password" type="password" required></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm modal-close-btn">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Imposta password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- ── Modal Nuovo Utente ── -->
     <div class="modal-overlay" id="nuovo-utente-modal">
       <div class="modal-box">

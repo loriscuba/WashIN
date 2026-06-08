@@ -44,7 +44,7 @@ function createUtenteRow(u) {
         data-action="toggle-utente" data-id="${u.id}" data-active="${u.attivo}">
         ${u.attivo ? 'Disattiva' : 'Attiva'}
       </button>
-      <button class="btn btn-sm btn-secondary" data-action="reset-pw-utente" data-id="${u.id}" data-email="${u.email || ''}">Reset PW</button>
+      <button class="btn btn-sm btn-secondary" data-action="reset-pw-utente" data-id="${u.id}" data-nome="${[u.nome, u.cognome].filter(Boolean).join(' ') || u.email || ''}">Reset PW</button>
     </td>
   `
   return tr
@@ -186,10 +186,35 @@ export function initUtenti() {
       const nuovoModal = document.getElementById('nuovo-utente-modal')
       const form = modal?.querySelector('form')
       const nuovoForm = nuovoModal?.querySelector('form')
+      const resetPwModal = document.getElementById('reset-pw-modal')
+      const resetPwForm = resetPwModal?.querySelector('form')
 
       // Chiudi modal edit
       modal?.querySelector('.modal-close-btn')?.addEventListener('click', () => modal.classList.remove('active'))
       nuovoModal?.querySelector('.modal-close-btn')?.addEventListener('click', () => nuovoModal.classList.remove('active'))
+      resetPwModal?.querySelector('.modal-close-btn')?.addEventListener('click', () => resetPwModal.classList.remove('active'))
+
+      // Submit reset password
+      resetPwForm?.addEventListener('submit', async e => {
+        e.preventDefault()
+        const fd = new FormData(resetPwForm)
+        const pw = fd.get('new_password')
+        const pw2 = fd.get('confirm_password')
+        if (pw !== pw2) { showToast('Le password non coincidono', 'warning'); return }
+        if (pw.length < 6) { showToast('Password minimo 6 caratteri', 'warning'); return }
+        const targetId = resetPwModal.dataset.targetId
+        const { error } = await supabase.rpc('admin_set_user_password', {
+          target_user_id: targetId,
+          new_password: pw
+        })
+        if (error) {
+          showToast('Errore reset password: ' + error.message, 'error')
+        } else {
+          showToast('Password aggiornata con successo', 'success')
+          resetPwModal.classList.remove('active')
+          resetPwForm.reset()
+        }
+      })
 
       // Apri modal nuovo utente
       addBtn?.addEventListener('click', () => {
@@ -257,20 +282,14 @@ export function initUtenti() {
           loadUtenti().then(renderTabellaUtenti)
         }
         if (action === 'reset-pw-utente' && id) {
-          const email = t.dataset.email
-          if (!email) { showToast('Email non trovata', 'warning'); return }
-          if (!confirm(`Inviare email di reset password a ${email}?\n\nRichiede SMTP configurato in Supabase.`)) return
-          const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/WashIN/washin/index.html'
-          })
-          if (error) {
-            if (error.status === 500) {
-              showToast('Reset password fallito (500): configura SMTP in Supabase → Authentication → SMTP Settings, oppure usa Supabase Dashboard → Authentication → Users per resettare la password.', 'error')
-            } else {
-              showToast('Errore: ' + error.message, 'error')
-            }
-          } else {
-            showToast(`Email di reset inviata a ${email}`, 'success')
+          const nome = t.dataset.nome || 'utente'
+          const resetModal = document.getElementById('reset-pw-modal')
+          if (resetModal) {
+            resetModal.dataset.targetId = id
+            resetModal.dataset.targetNome = nome
+            resetModal.querySelector('h2').textContent = `Reset password — ${nome}`
+            resetModal.querySelector('form')?.reset()
+            resetModal.classList.add('active')
           }
         }
       })
