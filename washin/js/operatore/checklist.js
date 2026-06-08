@@ -42,6 +42,12 @@ function showToast(message, type = 'success') {
   }, 3000)
 }
 
+const VOCI_DEFAULT = [
+  { label: 'Pulizia Scale', checked: false },
+  { label: 'Pulizia Portone', checked: false },
+  { label: 'Pulizia Box', checked: false }
+]
+
 let currentInterventoId = null
 let currentTemplateId = null
 let currentChecklistId = null
@@ -153,7 +159,8 @@ export async function loadChecklistPerIntervento(interventoId) {
       const template = await loadTemplate(intervento.tipo_pulizia)
       currentTemplateId = template.id
       currentChecklistId = null
-      voci = normalizeVoci(template.voci)
+      const templateVoci = normalizeVoci(template.voci)
+      voci = templateVoci.length > 0 ? templateVoci : VOCI_DEFAULT.map(v => ({ ...v }))
       const notesEl = document.getElementById('checklist-notes')
       if (notesEl) notesEl.value = ''
     }

@@ -1,6 +1,6 @@
 import supabase, { getUserProfile } from '../supabase.js'
 import { checkAuth, logout } from '../auth.js'
-import { initAgenda } from './agenda.js'
+import { initAgenda, loadInterventiPassati, renderInterventiPassati } from './agenda.js'
 import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
 
 let _currentUserId = null
@@ -31,8 +31,10 @@ async function markNotificheRead(userId) {
   } catch { }
 }
 
+let _storicoLoaded = false
+
 function showSection(sectionId) {
-  const sections = ['agenda', 'checklist', 'documenti', 'cedolini', 'profilo']
+  const sections = ['agenda', 'checklist', 'documenti', 'cedolini', 'storico', 'profilo']
   sections.forEach((id) => {
     const el = document.getElementById(id)
     if (!el) return
@@ -42,6 +44,10 @@ function showSection(sectionId) {
     })
   })
   if (sectionId === 'agenda' && _currentUserId) markNotificheRead(_currentUserId)
+  if (sectionId === 'storico' && !_storicoLoaded) {
+    _storicoLoaded = true
+    loadInterventiPassati().then(renderInterventiPassati)
+  }
 }
 
 async function loadOperatorInfo() {
@@ -137,6 +143,13 @@ async function initDashboard() {
   await initAgenda()
   initChecklist()
   initProfilo(profile)
+
+  document.getElementById('storico-list')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action="checklist"]')
+    if (!btn) return
+    showSection('checklist')
+    await loadChecklistPerIntervento(btn.dataset.id)
+  })
 
   window.addEventListener('operatore:open-checklist', async (event) => {
     showSection('checklist')
