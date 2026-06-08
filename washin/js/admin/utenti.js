@@ -149,6 +149,9 @@ async function createNuovoUtente(payload) {
       })
     }
 
+    // Conferma l'email dell'utente tramite RPC (evita blocco login se email confirmation è attiva)
+    await supabase.rpc('admin_confirm_user', { target_user_id: userId })
+
     const fields = {
       nome: payload.nome || null,
       cognome: payload.cognome || null,
