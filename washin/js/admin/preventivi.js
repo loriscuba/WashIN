@@ -3,7 +3,7 @@ import { showToast } from './clienti.js'
 
 export async function loadPreventivi(filtri = {}) {
   try {
-    let query = supabase.from('preventivi').select('*, clienti(ragione_sociale)')
+    let query = supabase.from('preventivi').select('*, clienti(id,ragione_sociale,indirizzo,citta,cap,email,telefono,piva,cf)')
     if (filtri.stato) query = query.eq('stato', filtri.stato)
     if (filtri.cliente_id) query = query.eq('cliente_id', filtri.cliente_id)
     const { data, error } = await query.order('created_at', { ascending: false })
@@ -49,6 +49,7 @@ export function renderTabellaPreventivi(preventivi) {
       <td><span class="badge ${badge}">${p.stato}</span></td>
       <td style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn btn-sm btn-secondary" data-action="edit-preventivo" data-id="${p.id}">Modifica</button>
+        <button class="btn btn-sm btn-secondary" data-action="print-preventivo" data-id="${p.id}">🖨 Stampa</button>
         ${convertBtn}
       </td>
     `
@@ -131,6 +132,163 @@ export async function savePreventivo(formData) {
   }
 }
 
+export async function printPreventivo(id) {
+  try {
+    const { data: p, error } = await supabase
+      .from('preventivi')
+      .select('*, clienti(ragione_sociale,indirizzo,citta,cap,email,telefono,piva,cf)')
+      .eq('id', id).single()
+    if (error) throw error
+
+    const fmt = v => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(v || 0)
+    const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '-'
+    const c = p.clienti || {}
+    const iva = (p.importo || 0) * 0.22
+    const totale = (p.importo || 0) + iva
+
+    const clienteLines = [
+      c.ragione_sociale,
+      c.indirizzo,
+      [c.cap, c.citta].filter(Boolean).join(' '),
+      c.piva ? `P.IVA: ${c.piva}` : '',
+      c.cf ? `C.F.: ${c.cf}` : '',
+      c.email,
+      c.telefono
+    ].filter(Boolean).join('<br>')
+
+    const html = `<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Preventivo ${p.numero_preventivo || ''} — WashIN</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 32px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; border-bottom: 3px solid #0D9488; padding-bottom: 20px; }
+    .logo { font-size: 28px; font-weight: 800; color: #0D9488; letter-spacing: -1px; }
+    .logo span { color: #111; }
+    .company-info { font-size: 11px; color: #555; text-align: right; line-height: 1.6; }
+    .doc-title { font-size: 22px; font-weight: 700; color: #0D9488; margin-bottom: 6px; }
+    .doc-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+    .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; }
+    .meta-box h3 { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; margin-bottom: 8px; letter-spacing: .5px; }
+    .meta-box p { line-height: 1.7; color: #374151; }
+    table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    thead tr { background: #0D9488; color: #fff; }
+    th { padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600; }
+    td { padding: 10px 14px; border-bottom: 1px solid #e2e8f0; }
+    .total-row td { font-weight: 700; background: #f0fdf4; border-top: 2px solid #0D9488; font-size: 14px; }
+    .notes { margin-top: 20px; padding: 14px 18px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px; }
+    .notes h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #92400e; margin-bottom: 6px; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-end; }
+    .sign-box { text-align: center; }
+    .sign-line { width: 180px; border-bottom: 1px solid #111; margin: 40px auto 6px; }
+    .sign-label { font-size: 11px; color: #6b7280; }
+    .validity { font-size: 11px; color: #6b7280; margin-top: 8px; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+    .badge-bozza { background:#fef3c7;color:#92400e; }
+    .badge-inviato { background:#dbeafe;color:#1e40af; }
+    .badge-accettato { background:#d1fae5;color:#065f46; }
+    @media print {
+      body { padding: 0; }
+      button { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="logo">Wash<span>IN</span></div>
+      <div style="font-size:11px;color:#555;margin-top:4px;line-height:1.6;">
+        Servizi di pulizia professionale<br>
+        info@washin.it
+      </div>
+    </div>
+    <div class="company-info">
+      <strong style="font-size:16px;color:#111;">${p.numero_preventivo || 'PREVENTIVO'}</strong><br>
+      Data: ${fmtDate(p.data_emissione)}<br>
+      Validità fino al: ${fmtDate(p.data_validita)}<br>
+      <span class="badge badge-${p.stato || 'bozza'}">${p.stato || 'bozza'}</span>
+    </div>
+  </div>
+
+  <div class="doc-title">Preventivo</div>
+
+  <div class="doc-meta">
+    <div class="meta-box">
+      <h3>Destinatario</h3>
+      <p>${clienteLines || '-'}</p>
+    </div>
+    <div class="meta-box">
+      <h3>Dettagli offerta</h3>
+      <p>
+        <strong>Tipo servizio:</strong> ${p.tipo_servizio || '-'}<br>
+        <strong>Frequenza:</strong> ${p.frequenza || '-'}<br>
+        <strong>Ore stimate/mese:</strong> ${p.ore_stimate ? p.ore_stimate + ' h' : '-'}
+      </p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:50%">Descrizione servizio</th>
+        <th>Frequenza</th>
+        <th>Ore/mese</th>
+        <th style="text-align:right">Importo</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>${p.tipo_servizio || 'Servizio di pulizia professionale'}</td>
+        <td>${p.frequenza || '-'}</td>
+        <td>${p.ore_stimate ? p.ore_stimate + ' h' : '-'}</td>
+        <td style="text-align:right">${fmt(p.importo)}</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="text-align:right;color:#6b7280;">IVA 22%</td>
+        <td style="text-align:right;color:#6b7280;">${fmt(iva)}</td>
+      </tr>
+      <tr class="total-row">
+        <td colspan="3" style="text-align:right;">TOTALE</td>
+        <td style="text-align:right;color:#0D9488;">${fmt(totale)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  ${p.note ? `<div class="notes"><h3>Note</h3><p>${p.note.replace(/\n/g,'<br>')}</p></div>` : ''}
+
+  <div class="footer">
+    <div>
+      <p class="validity">Il presente preventivo è valido fino al <strong>${fmtDate(p.data_validita)}</strong>.</p>
+      <p class="validity" style="margin-top:4px;">Per accettazione rispondere via email o firmare e restituire il documento.</p>
+    </div>
+    <div style="display:flex;gap:40px;">
+      <div class="sign-box">
+        <div class="sign-line"></div>
+        <div class="sign-label">WashIN — Timbro e firma</div>
+      </div>
+      <div class="sign-box">
+        <div class="sign-line"></div>
+        <div class="sign-label">Cliente — Per accettazione</div>
+      </div>
+    </div>
+  </div>
+
+  <script>window.onload = () => window.print()<\/script>
+</body>
+</html>`
+
+    const win = window.open('', '_blank', 'width=900,height=700')
+    if (!win) { showToast('Popup bloccato — consenti popup per stampare', 'warning'); return }
+    win.document.write(html)
+    win.document.close()
+  } catch (err) {
+    showToast('Errore stampa preventivo', 'error')
+    console.error(err)
+  }
+}
+
 export async function convertiInContratto(preventivoId) {
   try {
     const { data: prev, error: errPrev } = await supabase.from('preventivi').select('*').eq('id', preventivoId).single()
@@ -198,6 +356,9 @@ export function initPreventivi() {
       if (!(t instanceof HTMLElement)) return
       if (t.dataset.action === 'edit-preventivo' && t.dataset.id) {
         await openModalPreventivo(t.dataset.id)
+      }
+      if (t.dataset.action === 'print-preventivo' && t.dataset.id) {
+        await printPreventivo(t.dataset.id)
       }
       if (t.dataset.action === 'converti-preventivo' && t.dataset.id) {
         if (confirm('Creare un contratto da questo preventivo?')) {
