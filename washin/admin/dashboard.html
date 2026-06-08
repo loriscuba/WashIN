@@ -317,18 +317,22 @@
             </div>
             <button id="add-contratto-button" class="btn btn-primary">+ Nuovo contratto</button>
           </div>
+          <div style="margin-bottom:12px;">
+            <input type="search" id="contratti-search" placeholder="🔍 Cerca cliente o numero contratto…"
+              style="padding:9px 14px;border:1.5px solid var(--gray-300);border-radius:10px;font-size:14px;width:100%;max-width:360px;box-sizing:border-box;outline:none;" />
+          </div>
           <div class="table-container card">
             <table class="washin-table">
-              <thead>
+              <thead id="contratti-thead">
                 <tr>
-                  <th>Cliente</th>
-                  <th>Numero</th>
-                  <th>Tipo</th>
-                  <th>Importo mensile</th>
-                  <th>Ore/mese</th>
-                  <th>Data inizio</th>
-                  <th>Data fine</th>
-                  <th>Stato</th>
+                  <th data-sort-col="cliente" style="cursor:pointer;user-select:none;white-space:nowrap;">Cliente<span class="sort-icon"> ⇅</span></th>
+                  <th data-sort-col="numero_contratto" style="cursor:pointer;user-select:none;white-space:nowrap;">Numero<span class="sort-icon"> ⇅</span></th>
+                  <th data-sort-col="tipo" style="cursor:pointer;user-select:none;white-space:nowrap;">Tipo<span class="sort-icon"> ⇅</span></th>
+                  <th data-sort-col="importo_mensile" style="cursor:pointer;user-select:none;white-space:nowrap;">Importo mensile<span class="sort-icon"> ⇅</span></th>
+                  <th data-sort-col="ore_contratto_mensili" style="cursor:pointer;user-select:none;white-space:nowrap;">Ore/mese<span class="sort-icon"> ⇅</span></th>
+                  <th data-sort-col="data_inizio" style="cursor:pointer;user-select:none;white-space:nowrap;">Data inizio<span class="sort-icon"> ⇅</span></th>
+                  <th data-sort-col="data_fine" style="cursor:pointer;user-select:none;white-space:nowrap;">Data fine<span class="sort-icon"> ⇅</span></th>
+                  <th data-sort-col="stato" style="cursor:pointer;user-select:none;white-space:nowrap;">Stato<span class="sort-icon"> ⇅</span></th>
                   <th>Azioni</th>
                 </tr>
               </thead>
