@@ -68,6 +68,8 @@ export function aggiornaPct(voci) {
   const pct = totale ? Math.round((complete / totale) * 100) : 0
   const badge = document.getElementById('checklist-progress')
   if (badge) badge.textContent = `${pct}%`
+  const bar = document.getElementById('checklist-progress-bar')
+  if (bar) bar.style.width = `${pct}%`
   return pct
 }
 
@@ -77,13 +79,7 @@ function renderChecklistItems(voci) {
   container.innerHTML = ''
   voci.forEach((item, index) => {
     const label = document.createElement('label')
-    label.className = 'card'
-    label.style.display = 'flex'
-    label.style.alignItems = 'center'
-    label.style.gap = '12px'
-    label.style.padding = '12px 16px'
-    label.style.borderRadius = '12px'
-    label.style.border = '1px solid var(--gray-200)'
+    label.className = `cl-item${item.checked ? ' done' : ''}`
 
     const checkbox = document.createElement('input')
     checkbox.type = 'checkbox'
@@ -91,8 +87,8 @@ function renderChecklistItems(voci) {
     checkbox.dataset.index = String(index)
 
     const span = document.createElement('span')
+    span.className = 'cl-label'
     span.textContent = item.label
-    span.style.color = 'var(--gray-700)'
 
     label.appendChild(checkbox)
     label.appendChild(span)
@@ -212,9 +208,10 @@ export async function saveChecklist(interventoId, voci, note, definitivo = false
     if (definitivo) {
       const { error: updateError } = await supabase.from('interventi').update({ stato: 'completato' }).eq('id', interventoId)
       if (updateError) throw updateError
-      showToast('Checklist salvata e intervento completato', 'success')
+      showToast('Intervento completato', 'success')
+      window.dispatchEvent(new CustomEvent('checklist:completata'))
     } else {
-      showToast('Checklist salvata come bozza', 'success')
+      showToast('Bozza salvata', 'success')
     }
 
     return data?.[0] || null
@@ -231,7 +228,9 @@ export function initChecklist() {
   const submitBtn = document.getElementById('checklist-submit')
   const notesEl = document.getElementById('checklist-notes')
 
-  container?.addEventListener('change', () => {
+  container?.addEventListener('change', (e) => {
+    const cb = e.target
+    if (cb.type === 'checkbox') cb.closest('.cl-item')?.classList.toggle('done', cb.checked)
     const voci = gatherChecklistItems()
     aggiornaPct(voci)
   })

@@ -196,7 +196,41 @@
         margin: 18px 0 8px;
       }
       .date-label:first-child { margin-top: 0; }
-      .hidden {
+      /* ── Checklist ── */
+      .cl-item {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: var(--white);
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        cursor: pointer;
+        transition: background 0.15s;
+        -webkit-tap-highlight-color: transparent;
+        border: 2px solid transparent;
+      }
+      .cl-item.done {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+      }
+      .cl-item input[type="checkbox"] {
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+        accent-color: #059669;
+        cursor: pointer;
+      }
+      .cl-item .cl-label {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--gray-800);
+        line-height: 1.3;
+      }
+      .cl-item.done .cl-label {
+        text-decoration: line-through;
+        color: var(--gray-400);
+      }
         display: none !important;
       }
       .document-upload {
@@ -279,38 +313,29 @@
           <div id="agenda-cards" class="agenda-summary"></div>
         </section>
 
-        <section id="checklist" class="section section-card hidden">
-          <div class="section-header">
-            <div>
-              <h2>Checklist intervento</h2>
-              <p style="color:var(--gray-500);margin-top:6px;">Compila le voci e completa l'intervento.</p>
+        <section id="checklist" class="section hidden">
+          <button id="btn-back-agenda" class="btn btn-secondary btn-sm" style="margin-bottom:14px;" type="button">← Torna all'agenda</button>
+
+          <!-- Header card -->
+          <div style="background:linear-gradient(135deg,#0d9488,#0f766e);border-radius:20px;padding:18px 16px 16px;margin-bottom:16px;color:#fff;">
+            <p style="margin:0 0 3px;font-size:13px;opacity:.75;">Stai compilando</p>
+            <p id="checklist-title" style="font-weight:700;font-size:15px;margin:0 0 14px;line-height:1.4;">...</p>
+            <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:8px;margin-bottom:6px;">
+              <div id="checklist-progress-bar" style="background:#fff;border-radius:8px;height:8px;width:0%;transition:width .3s;"></div>
             </div>
-            <div style="font-size:14px;color:var(--gray-600);">Completamento: <strong id="checklist-progress">0%</strong></div>
+            <p style="margin:0;font-size:13px;opacity:.85;"><strong id="checklist-progress">0%</strong> completato</p>
           </div>
 
-          <div style="margin-bottom:18px;">
-            <p id="checklist-title" style="font-weight:700;color:var(--gray-900);">Cliente Rossi S.r.l. — 26 maggio 2026</p>
-          </div>
-
-          <div id="checklist-items" style="display:grid;gap:12px;margin-bottom:16px;">
-            <label class="card" style="display:flex;align-items:center;gap:12px;">
-              <input type="checkbox" />
-              <span>Pulire superfici comuni</span>
-            </label>
-            <label class="card" style="display:flex;align-items:center;gap:12px;">
-              <input type="checkbox" />
-              <span>Controllare livelli detergenti</span>
-            </label>
-          </div>
+          <div id="checklist-items" style="display:grid;gap:10px;margin-bottom:16px;"></div>
 
           <div class="section-card" style="margin-bottom:16px;">
-            <label style="display:block;font-weight:600;margin-bottom:8px;">Note operatore</label>
-            <textarea id="checklist-notes" rows="4" style="width:100%;border:1px solid var(--gray-300);border-radius:12px;padding:14px;font-size:14px;"></textarea>
+            <label style="display:block;font-weight:700;margin-bottom:8px;font-size:14px;">Note</label>
+            <textarea id="checklist-notes" rows="3" style="width:100%;border:1.5px solid var(--gray-200);border-radius:12px;padding:12px;font-size:15px;box-sizing:border-box;resize:none;-webkit-appearance:none;"></textarea>
           </div>
 
-          <div style="display:flex;flex-wrap:wrap;gap:12px;">
-            <button id="checklist-save-draft" class="btn btn-secondary btn-sm" type="button">Salva bozza</button>
-            <button id="checklist-submit" class="btn btn-primary btn-sm" type="button">Invia e completa</button>
+          <div style="display:grid;gap:10px;">
+            <button id="checklist-submit" class="btn btn-primary" style="padding:16px;font-size:16px;border-radius:14px;" type="button">Salva e completa intervento</button>
+            <button id="checklist-save-draft" class="btn btn-secondary" style="padding:14px;font-size:14px;border-radius:14px;" type="button">Salva bozza</button>
           </div>
         </section>
 
