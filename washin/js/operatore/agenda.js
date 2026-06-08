@@ -57,16 +57,22 @@ export function buildMapsUrlPublic(indirizzo = '', citta = '') {
   return buildMapsUrl(indirizzo, citta)
 }
 
+function localDateStr(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export async function loadInterventiOperatore(giorni = 1) {
   try {
     const operatoreId = await getOperatoreId()
     if (!operatoreId) return []
     const oggi = new Date()
-    oggi.setHours(0, 0, 0, 0)
     const fine = new Date(oggi)
     fine.setDate(oggi.getDate() + giorni - 1)
-    const startDate = oggi.toISOString().slice(0, 10)
-    const endDate = fine.toISOString().slice(0, 10)
+    const startDate = localDateStr(oggi)
+    const endDate = localDateStr(fine)
 
     const { data, error } = await supabase
       .from('interventi')
