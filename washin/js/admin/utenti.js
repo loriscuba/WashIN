@@ -1,0 +1,265 @@
+import supabase from '../supabase.js'
+import { showToast } from './clienti.js'
+
+async function getCurrentRole() {
+  const { data } = await supabase.auth.getSession()
+  const uid = data?.session?.user?.id
+  if (!uid) return null
+  const { data: p } = await supabase.from('profili').select('ruolo').eq('id', uid).single()
+  return p?.ruolo || null
+}
+
+export async function loadUtenti() {
+  try {
+    const { data, error } = await supabase.from('profili').select('*').order('nome', { ascending: true })
+    if (error) throw error
+    return data || []
+  } catch (err) {
+    showToast('Errore caricamento utenti', 'error')
+    console.error(err)
+    return []
+  }
+}
+
+const ROLE_BADGE = {
+  admin: { cls: 'badge-danger', label: 'Admin' },
+  operatore: { cls: 'badge-info', label: 'Operatore' }
+}
+
+function createUtenteRow(u) {
+  const tr = document.createElement('tr')
+  const rb = ROLE_BADGE[u.ruolo] || { cls: 'badge-warning', label: u.ruolo || '-' }
+  const statoHtml = u.attivo
+    ? '<span style="color:#059669;font-weight:600;">Attivo</span>'
+    : '<span style="color:#dc2626;font-weight:600;">Inattivo</span>'
+  tr.innerHTML = `
+    <td><strong>${[u.nome, u.cognome].filter(Boolean).join(' ') || '-'}</strong></td>
+    <td>${u.email || '-'}</td>
+    <td><span class="badge ${rb.cls}">${rb.label}</span></td>
+    <td>${u.qualifica || '-'}</td>
+    <td>${statoHtml}</td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn btn-sm btn-secondary" data-action="edit-utente" data-id="${u.id}">Modifica</button>
+      <button class="btn btn-sm" style="background:${u.attivo ? '#fee2e2' : '#d1fae5'};color:${u.attivo ? '#dc2626' : '#059669'};border:none;border-radius:6px;cursor:pointer;padding:4px 10px;font-size:12px;"
+        data-action="toggle-utente" data-id="${u.id}" data-active="${u.attivo}">
+        ${u.attivo ? 'Disattiva' : 'Attiva'}
+      </button>
+      <button class="btn btn-sm btn-secondary" data-action="reset-pw-utente" data-id="${u.id}" data-email="${u.email || ''}">Reset PW</button>
+    </td>
+  `
+  return tr
+}
+
+export function renderTabellaUtenti(utenti) {
+  const tbody = document.getElementById('utenti-table-body')
+  if (!tbody) return
+  tbody.innerHTML = ''
+  if (!utenti.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun utente</td></tr>'
+    return
+  }
+  utenti.forEach(u => tbody.appendChild(createUtenteRow(u)))
+}
+
+export async function openModalUtente(id) {
+  try {
+    const modal = document.getElementById('utente-modal')
+    const form = modal?.querySelector('form')
+    if (!modal || !form) return
+
+    const { data, error } = await supabase.from('profili').select('*').eq('id', id).single()
+    if (error) throw error
+
+    Object.entries(data).forEach(([k, v]) => {
+      const el = form.querySelector(`[name="${k}"]`)
+      if (el) el.value = v ?? ''
+    })
+    const activeCheck = form.querySelector('[name="attivo"]')
+    if (activeCheck) activeCheck.checked = !!data.attivo
+
+    form.dataset.utenteId = id
+    modal.querySelector('h2').textContent = 'Modifica Utente'
+    modal.classList.add('active')
+  } catch (err) {
+    showToast('Errore apertura modal utente', 'error')
+    console.error(err)
+  }
+}
+
+async function saveUtente(payload) {
+  try {
+    const fields = {
+      nome: payload.nome || null,
+      cognome: payload.cognome || null,
+      email: payload.email || null,
+      telefono: payload.telefono || null,
+      qualifica: payload.qualifica || null,
+      ruolo: payload.ruolo || 'operatore',
+      attivo: payload.attivo !== undefined ? payload.attivo : true,
+    }
+    const { error } = await supabase.from('profili').update(fields).eq('id', payload.id)
+    if (error) throw error
+    showToast('Utente aggiornato', 'success')
+    return true
+  } catch (err) {
+    showToast('Errore salvataggio utente', 'error')
+    console.error(err)
+    return null
+  }
+}
+
+// Crea l'account auth senza alterare la sessione corrente usando fetch diretto
+async function signUpViaRest(email, password) {
+  const res = await fetch(`${window.SUPABASE_URL}/auth/v1/signup`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': window.SUPABASE_ANON_KEY
+    },
+    body: JSON.stringify({ email, password })
+  })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error_description || json.msg || json.message || 'Errore creazione account')
+  const userId = json.user?.id || json.id
+  if (!userId) throw new Error('ID utente non ricevuto')
+  return userId
+}
+
+async function createNuovoUtente(payload) {
+  try {
+    const userId = await signUpViaRest(payload.email, payload.password)
+
+    // Il trigger crea il profilo con ruolo='operatore'; aggiorniamo subito con i dati corretti
+    const fields = {
+      nome: payload.nome || null,
+      cognome: payload.cognome || null,
+      email: payload.email,
+      telefono: payload.telefono || null,
+      qualifica: payload.qualifica || null,
+      ruolo: payload.ruolo || 'operatore',
+      attivo: true,
+    }
+    // upsert perché il trigger potrebbe non aver ancora creato la riga
+    const { error } = await supabase.from('profili').upsert({ id: userId, ...fields })
+    if (error) throw error
+
+    showToast('Utente creato. Se richiesta, il nuovo utente riceverà un\'email di conferma.', 'success')
+    return true
+  } catch (err) {
+    showToast('Errore creazione utente: ' + err.message, 'error')
+    console.error(err)
+    return null
+  }
+}
+
+export function initUtenti() {
+  (async () => {
+    try {
+      // Controllo ruolo: solo admin
+      const role = await getCurrentRole()
+      const section = document.getElementById('utenti')
+      if (role !== 'admin') {
+        if (section) section.innerHTML = `
+          <div class="page-header"><h1>Gestione Utenti</h1></div>
+          <div class="card" style="text-align:center;padding:40px;color:var(--gray-500);">
+            Accesso riservato agli amministratori.
+          </div>`
+        return
+      }
+
+      // Mostra il link di navigazione (nascosto di default)
+      document.getElementById('nav-utenti')?.style.removeProperty('display')
+      document.getElementById('sheet-utenti-btn')?.style.removeProperty('display')
+
+      const addBtn = document.getElementById('add-utente-button')
+      const modal = document.getElementById('utente-modal')
+      const nuovoModal = document.getElementById('nuovo-utente-modal')
+      const form = modal?.querySelector('form')
+      const nuovoForm = nuovoModal?.querySelector('form')
+
+      // Chiudi modal edit
+      modal?.querySelector('.modal-close-btn')?.addEventListener('click', () => modal.classList.remove('active'))
+      nuovoModal?.querySelector('.modal-close-btn')?.addEventListener('click', () => nuovoModal.classList.remove('active'))
+
+      // Apri modal nuovo utente
+      addBtn?.addEventListener('click', () => {
+        nuovoForm?.reset()
+        nuovoModal?.classList.add('active')
+      })
+
+      // Salva modifica utente
+      form?.addEventListener('submit', async e => {
+        e.preventDefault()
+        const fd = new FormData(form)
+        await saveUtente({
+          id: form.dataset.utenteId,
+          nome: fd.get('nome'),
+          cognome: fd.get('cognome'),
+          email: fd.get('email'),
+          telefono: fd.get('telefono'),
+          qualifica: fd.get('qualifica'),
+          ruolo: fd.get('ruolo'),
+          attivo: form.querySelector('[name="attivo"]').checked,
+        })
+        modal.classList.remove('active')
+        loadUtenti().then(renderTabellaUtenti)
+      })
+
+      // Crea nuovo utente
+      nuovoForm?.addEventListener('submit', async e => {
+        e.preventDefault()
+        const fd = new FormData(nuovoForm)
+        const pw = fd.get('password')
+        const pw2 = fd.get('confirm_password')
+        if (pw !== pw2) { showToast('Le password non coincidono', 'warning'); return }
+        if (pw.length < 6) { showToast('Password minimo 6 caratteri', 'warning'); return }
+        const ok = await createNuovoUtente({
+          email: fd.get('email'),
+          password: pw,
+          nome: fd.get('nome'),
+          cognome: fd.get('cognome'),
+          ruolo: fd.get('ruolo'),
+          qualifica: fd.get('qualifica'),
+          telefono: fd.get('telefono'),
+        })
+        if (ok) {
+          nuovoModal.classList.remove('active')
+          nuovoForm.reset()
+          loadUtenti().then(renderTabellaUtenti)
+        }
+      })
+
+      // Delegazione click tabella
+      document.addEventListener('click', async e => {
+        const t = e.target
+        if (!(t instanceof HTMLElement)) return
+        const action = t.dataset.action
+        const id = t.dataset.id
+
+        if (action === 'edit-utente' && id) {
+          await openModalUtente(id)
+        }
+        if (action === 'toggle-utente' && id) {
+          const isActive = t.dataset.active === 'true'
+          const { error } = await supabase.from('profili').update({ attivo: !isActive }).eq('id', id)
+          if (error) { showToast('Errore aggiornamento stato', 'error'); return }
+          showToast(`Utente ${!isActive ? 'attivato' : 'disattivato'}`, 'success')
+          loadUtenti().then(renderTabellaUtenti)
+        }
+        if (action === 'reset-pw-utente' && id) {
+          const email = t.dataset.email
+          if (!email) { showToast('Email non trovata', 'warning'); return }
+          if (!confirm(`Inviare email di reset password a ${email}?`)) return
+          const { error } = await supabase.auth.resetPasswordForEmail(email)
+          if (error) showToast('Errore invio email: ' + error.message, 'error')
+          else showToast(`Email di reset inviata a ${email}`, 'success')
+        }
+      })
+
+      loadUtenti().then(renderTabellaUtenti)
+    } catch (err) {
+      showToast('Errore inizializzazione utenti', 'error')
+      console.error(err)
+    }
+  })()
+}

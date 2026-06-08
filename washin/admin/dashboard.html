@@ -117,6 +117,7 @@
           <a href="#preventivi" data-target="preventivi"><span data-lucide="file-plus"></span> Preventivi</a>
           <a href="#magazzino" data-target="magazzino"><span data-lucide="package"></span> Magazzino</a>
           <a href="#veicoli" data-target="veicoli"><span data-lucide="truck"></span> Veicoli</a>
+          <a href="#utenti" data-target="utenti" id="nav-utenti" style="display:none;"><span data-lucide="shield"></span> Utenti</a>
           <a href="#impostazioni" data-target="impostazioni"><span data-lucide="settings"></span> Impostazioni</a>
         </nav>
         <div style="margin-top:auto; padding: 0 20px;">
@@ -441,6 +442,32 @@
             </table>
           </div>
 
+        </section>
+
+        <!-- ── Utenti ────────────────────────────────── -->
+        <section id="utenti" class="section hidden">
+          <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+              <h1>Gestione Utenti</h1>
+              <p style="color: var(--gray-500); margin-top:8px;">Crea e gestisci gli account dell'applicazione. Solo Admin.</p>
+            </div>
+            <button id="add-utente-button" class="btn btn-primary">+ Nuovo utente</button>
+          </div>
+          <div class="table-container card">
+            <table class="washin-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Email</th>
+                  <th>Ruolo</th>
+                  <th>Qualifica</th>
+                  <th>Stato</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="utenti-table-body"></tbody>
+            </table>
+          </div>
         </section>
 
         <!-- ── Impostazioni ──────────────────────────── -->
@@ -997,6 +1024,73 @@
       </div>
     </div>
 
+    <!-- ── Modal Modifica Utente ── -->
+    <div class="modal-overlay" id="utente-modal">
+      <div class="modal-box">
+        <h2>Modifica Utente</h2>
+        <form>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Nome</label><input name="nome" type="text"></div>
+            <div class="form-group"><label>Cognome</label><input name="cognome" type="text"></div>
+          </div>
+          <div class="form-group"><label>Email</label><input name="email" type="email"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Telefono</label><input name="telefono" type="tel"></div>
+            <div class="form-group"><label>Qualifica</label><input name="qualifica" type="text" placeholder="es. Operatore senior"></div>
+          </div>
+          <div class="form-group"><label>Ruolo</label>
+            <select name="ruolo">
+              <option value="operatore">Operatore</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" name="attivo" id="utente-attivo-check" style="width:18px;height:18px;">
+            <label for="utente-attivo-check" style="margin:0;cursor:pointer;">Account attivo</label>
+          </div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm modal-close-btn">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva modifiche</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Modal Nuovo Utente ── -->
+    <div class="modal-overlay" id="nuovo-utente-modal">
+      <div class="modal-box">
+        <h2>Nuovo Utente</h2>
+        <p style="color:var(--gray-500);font-size:13px;margin-bottom:16px;">
+          Crea un nuovo account. Se su Supabase è attiva la conferma email, l'utente riceverà un link di attivazione prima di poter accedere.
+        </p>
+        <form>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Nome</label><input name="nome" type="text" required></div>
+            <div class="form-group"><label>Cognome</label><input name="cognome" type="text"></div>
+          </div>
+          <div class="form-group"><label>Email *</label><input name="email" type="email" required placeholder="utente@esempio.it"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Password *</label><input name="password" type="password" required placeholder="min. 6 caratteri"></div>
+            <div class="form-group"><label>Conferma password *</label><input name="confirm_password" type="password" required></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Telefono</label><input name="telefono" type="tel"></div>
+            <div class="form-group"><label>Qualifica</label><input name="qualifica" type="text" placeholder="es. Operatore senior"></div>
+          </div>
+          <div class="form-group"><label>Ruolo</label>
+            <select name="ruolo">
+              <option value="operatore">Operatore</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm modal-close-btn">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Crea utente</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
     <!-- ── Mobile bottom sheet (tutte le sezioni extra) ── -->
@@ -1015,6 +1109,7 @@
           <button class="menu-sheet-btn" data-sheet-target="preventivi"><span class="sheet-icon">📄</span><span>Preventivi</span></button>
           <button class="menu-sheet-btn" data-sheet-target="magazzino"><span class="sheet-icon">📦</span><span>Magazzino</span></button>
           <button class="menu-sheet-btn" data-sheet-target="veicoli"><span class="sheet-icon">🚐</span><span>Veicoli</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="utenti" id="sheet-utenti-btn" style="display:none;"><span class="sheet-icon">🔐</span><span>Utenti</span></button>
           <button class="menu-sheet-btn" data-sheet-target="impostazioni"><span class="sheet-icon">⚙️</span><span>Impost.</span></button>
           <button class="menu-sheet-btn" data-sheet-target="profilo"><span class="sheet-icon">👤</span><span>Profilo</span></button>
         </div>
@@ -1057,6 +1152,7 @@
       import { initPreventivi } from '../js/admin/preventivi.js'
       import { initMagazzino } from '../js/admin/magazzino.js'
       import { initVeicoli } from '../js/admin/veicoli.js'
+      import { initUtenti } from '../js/admin/utenti.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -1138,6 +1234,10 @@
         userName.textContent = name
         userRole.textContent = profile?.ruolo === 'admin' ? 'Admin' : 'Operatore'
         greetingName.textContent = name
+        if (profile?.ruolo === 'admin') {
+          document.getElementById('nav-utenti')?.style.removeProperty('display')
+          document.getElementById('sheet-utenti-btn')?.style.removeProperty('display')
+        }
       }
 
       logoutButton.addEventListener('click', logout)
@@ -1158,6 +1258,7 @@
         initPreventivi()
         initMagazzino()
         initVeicoli()
+        initUtenti()
       })
     </script>
   </body>
