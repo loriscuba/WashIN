@@ -110,18 +110,27 @@ async function saveUtente(payload) {
 
 // Crea l'account auth senza alterare la sessione corrente usando fetch diretto
 async function signUpViaRest(email, password) {
+  const key = window.SUPABASE_ANON_KEY
   const res = await fetch(`${window.SUPABASE_URL}/auth/v1/signup`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': window.SUPABASE_ANON_KEY
+      'apikey': key,
+      'Authorization': `Bearer ${key}`
     },
     body: JSON.stringify({ email, password })
   })
   const json = await res.json()
-  if (!res.ok) throw new Error(json.error_description || json.msg || json.message || 'Errore creazione account')
+  if (!res.ok) {
+    const msg = json.error_description || json.msg || json.message || JSON.stringify(json)
+    if (msg.toLowerCase().includes('signup') && msg.toLowerCase().includes('disabled')) {
+      throw new Error('Signup disabilitato. Abilitare "Allow new users to sign up" in Supabase → Authentication → Configuration.')
+    }
+    throw new Error(msg)
+  }
+  // con email confirmation attiva: json.user; senza: json.user o json direttamente
   const userId = json.user?.id || json.id
-  if (!userId) throw new Error('ID utente non ricevuto')
+  if (!userId) throw new Error('ID utente non ricevuto — controlla che signup sia abilitato in Supabase Auth.')
   return userId
 }
 

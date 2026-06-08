@@ -3,7 +3,7 @@ import { showToast } from './clienti.js'
 
 export async function loadPreventivi(filtri = {}) {
   try {
-    let query = supabase.from('preventivi').select('*, clienti(id,ragione_sociale,indirizzo,citta,cap,email,telefono,piva,cf)')
+    let query = supabase.from('preventivi').select('*, clienti(id,ragione_sociale,indirizzo,citta,cap,email,telefono)')
     if (filtri.stato) query = query.eq('stato', filtri.stato)
     if (filtri.cliente_id) query = query.eq('cliente_id', filtri.cliente_id)
     const { data, error } = await query.order('created_at', { ascending: false })
@@ -136,7 +136,7 @@ export async function printPreventivo(id) {
   try {
     const { data: p, error } = await supabase
       .from('preventivi')
-      .select('*, clienti(ragione_sociale,indirizzo,citta,cap,email,telefono,piva,cf)')
+      .select('*, clienti(ragione_sociale,indirizzo,citta,cap,email,telefono)')
       .eq('id', id).single()
     if (error) throw error
 
@@ -150,8 +150,6 @@ export async function printPreventivo(id) {
       c.ragione_sociale,
       c.indirizzo,
       [c.cap, c.citta].filter(Boolean).join(' '),
-      c.piva ? `P.IVA: ${c.piva}` : '',
-      c.cf ? `C.F.: ${c.cf}` : '',
       c.email,
       c.telefono
     ].filter(Boolean).join('<br>')
