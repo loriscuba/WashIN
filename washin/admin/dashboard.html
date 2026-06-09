@@ -884,6 +884,7 @@
       <div class="modal-box">
         <h2>Nuovo/Modifica Intervento</h2>
         <form id="intervento-form">
+          <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Assegnazione</p>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div class="form-group">
               <label>Operatore 1</label>
@@ -894,6 +895,7 @@
               <select name="operatore2_id"><option value="">-- Nessuno --</option></select>
             </div>
           </div>
+          <p style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Contratto e sede</p>
           <div class="form-group">
             <label>Contratto</label>
             <select name="contratto_id"><option value="">-- Seleziona contratto --</option></select>
@@ -911,6 +913,7 @@
             <div class="form-group"><label>Ora inizio</label><input name="ora_inizio" type="time"></div>
             <div class="form-group"><label>Ora fine</label><input name="ora_fine" type="time"></div>
           </div>
+          <p style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Dettagli</p>
           <div class="form-group">
             <label>Tipo pulizia</label>
             <select name="tipo_pulizia">
@@ -938,9 +941,8 @@
             <label>Note</label>
             <textarea name="note" rows="3"></textarea>
           </div>
-          <hr style="border:none;border-top:1px solid var(--gray-200);margin:16px 0;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <strong style="font-size:14px;color:var(--gray-700);">Materiali utilizzati</strong>
+          <p style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Materiali utilizzati</p>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
             <button type="button" class="btn btn-sm btn-secondary" id="add-materiale-btn">+ Aggiungi</button>
           </div>
           <div id="materiali-list" style="margin-bottom:8px;"></div>
