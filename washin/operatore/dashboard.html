@@ -389,6 +389,17 @@
             <textarea id="checklist-notes" rows="3" style="width:100%;border:1.5px solid var(--gray-200);border-radius:12px;padding:12px;font-size:15px;box-sizing:border-box;resize:none;-webkit-appearance:none;"></textarea>
           </div>
 
+          <div class="section-card" style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div>
+                <p style="margin:0 0 2px;font-size:11px;font-weight:700;color:#0d9488;text-transform:uppercase;letter-spacing:.5px;">Materiali utilizzati</p>
+                <p style="margin:0;font-size:11px;color:var(--gray-400);">Opzionale</p>
+              </div>
+              <button type="button" id="checklist-add-materiale" class="btn btn-secondary btn-sm">+ Aggiungi</button>
+            </div>
+            <div id="checklist-materiali-list" style="display:grid;gap:8px;"></div>
+          </div>
+
           <div style="display:grid;gap:10px;">
             <button id="checklist-submit" class="btn btn-primary" style="padding:16px;font-size:16px;border-radius:14px;" type="button">Salva e completa intervento</button>
             <button id="checklist-save-draft" class="btn btn-secondary" style="padding:14px;font-size:14px;border-radius:14px;" type="button">Salva bozza</button>
