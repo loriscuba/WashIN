@@ -321,11 +321,29 @@ export async function openModalIntervento(id = null){
       const mat = await loadMaterialiPerIntervento(id)
       const matList = document.getElementById('materiali-list')
       if (matList) { matList.innerHTML = ''; mat.forEach(m => addMaterialeRow(m)) }
+      // mostra tempi effettivi se registrati
+      const tempiDiv = document.getElementById('intervento-tempi-effettivi')
+      const tempiText = document.getElementById('tempi-effettivi-text')
+      if (tempiDiv && tempiText) {
+        if (data.inizio_effettivo) {
+          const fmtT = ts => new Date(ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+          const dateStr = new Date(data.inizio_effettivo).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
+          let txt = `▶ ${fmtT(data.inizio_effettivo)}`
+          if (data.fine_effettivo) txt += ` — ■ ${fmtT(data.fine_effettivo)}`
+          txt += `  (${dateStr})`
+          tempiText.textContent = txt
+          tempiDiv.style.display = ''
+        } else {
+          tempiDiv.style.display = 'none'
+        }
+      }
     } else {
       form.reset()
       delete form.dataset.interventoId
       const matList = document.getElementById('materiali-list')
       if (matList) matList.innerHTML = ''
+      const tempiDiv = document.getElementById('intervento-tempi-effettivi')
+      if (tempiDiv) tempiDiv.style.display = 'none'
     }
 
     modal.classList.add('active')
@@ -647,6 +665,7 @@ export function initInterventi(){
           ora_fine: fd.get('ora_fine') || null,
           tipo_pulizia: fd.get('tipo_pulizia') || null,
           note: fd.get('note') || null,
+          stato: fd.get('stato') || null,
         }
         const savedId = await saveIntervento(payload)
         if (savedId) await saveMateriali(savedId)
