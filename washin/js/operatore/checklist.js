@@ -1,4 +1,5 @@
 import supabase from '../supabase.js'
+import { loadMagazzino } from '../admin/magazzino.js'
 
 function createToastContainer() {
   let container = document.getElementById('toast-container')
@@ -51,6 +52,100 @@ const VOCI_DEFAULT = [
 let currentInterventoId = null
 let currentTemplateId = null
 let currentChecklistId = null
+let _prodottiMagazzino = []
+
+function addMaterialeRowOperatore(m = {}) {
+  const list = document.getElementById('checklist-materiali-list')
+  if (!list) return
+  const row = document.createElement('div')
+  row.className = 'materiale-row'
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 80px 32px;gap:6px;align-items:center;'
+
+  const selectProdotto = document.createElement('select')
+  selectProdotto.className = 'form-control'
+  selectProdotto.style.cssText = 'font-size:13px;padding:6px 8px;'
+  selectProdotto.innerHTML = '<option value="">— Prodotto —</option>'
+  _prodottiMagazzino.forEach(p => {
+    const opt = document.createElement('option')
+    opt.value = p.nome
+    opt.textContent = p.nome
+    opt.dataset.unita = p.unita_misura || ''
+    if (m.prodotto && p.nome === m.prodotto) opt.selected = true
+    selectProdotto.appendChild(opt)
+  })
+
+  const inputQta = document.createElement('input')
+  inputQta.type = 'number'
+  inputQta.min = '0'
+  inputQta.step = 'any'
+  inputQta.placeholder = 'Qtà'
+  inputQta.className = 'form-control'
+  inputQta.style.cssText = 'font-size:13px;padding:6px 8px;'
+  if (m.quantita != null) inputQta.value = m.quantita
+
+  const inputUnita = document.createElement('input')
+  inputUnita.type = 'text'
+  inputUnita.placeholder = 'Um'
+  inputUnita.className = 'form-control'
+  inputUnita.style.cssText = 'font-size:13px;padding:6px 8px;'
+  if (m.unita) inputUnita.value = m.unita
+
+  selectProdotto.addEventListener('change', () => {
+    const opt = selectProdotto.selectedOptions[0]
+    if (opt?.dataset.unita) inputUnita.value = opt.dataset.unita
+  })
+
+  const btnRimuovi = document.createElement('button')
+  btnRimuovi.type = 'button'
+  btnRimuovi.textContent = '×'
+  btnRimuovi.style.cssText = 'background:none;border:none;color:#ef4444;font-size:18px;cursor:pointer;line-height:1;padding:0;'
+  btnRimuovi.dataset.action = 'remove-materiale'
+
+  row.appendChild(selectProdotto)
+  row.appendChild(inputQta)
+  row.appendChild(inputUnita)
+  row.appendChild(btnRimuovi)
+  list.appendChild(row)
+}
+
+async function loadMaterialiIntervento(interventoId) {
+  try {
+    const { data, error } = await supabase
+      .from('materiali_intervento')
+      .select('*')
+      .eq('intervento_id', interventoId)
+    if (error) throw error
+    return data || []
+  } catch (err) {
+    console.error(err)
+    return []
+  }
+}
+
+async function saveMaterialiOperatore(interventoId) {
+  try {
+    const list = document.getElementById('checklist-materiali-list')
+    if (!list) return
+    const rows = Array.from(list.querySelectorAll('.materiale-row'))
+    const materiali = rows.map(row => {
+      const selects = row.querySelectorAll('select, input')
+      return {
+        intervento_id: interventoId,
+        prodotto: selects[0]?.value || '',
+        quantita: parseFloat(selects[1]?.value) || null,
+        unita: selects[2]?.value || ''
+      }
+    }).filter(r => r.prodotto)
+
+    await supabase.from('materiali_intervento').delete().eq('intervento_id', interventoId)
+    if (materiali.length > 0) {
+      const { error } = await supabase.from('materiali_intervento').insert(materiali)
+      if (error) throw error
+    }
+  } catch (err) {
+    console.error('Errore salvataggio materiali:', err)
+  }
+}
 
 function normalizeVoci(voci) {
   if (Array.isArray(voci)) {
@@ -163,6 +258,15 @@ export async function loadChecklistPerIntervento(interventoId) {
 
     renderChecklistItems(voci)
     aggiornaPct(voci)
+
+    _prodottiMagazzino = await loadMagazzino({ attivo: true }).catch(() => [])
+    const materialiList = document.getElementById('checklist-materiali-list')
+    if (materialiList) {
+      materialiList.innerHTML = ''
+      const materialiEsistenti = await loadMaterialiIntervento(interventoId)
+      materialiEsistenti.forEach(m => addMaterialeRowOperatore(m))
+    }
+
     return voci
   } catch (error) {
     showToast('Errore caricamento checklist', 'error')
@@ -227,6 +331,8 @@ export async function saveChecklist(interventoId, voci, note, definitivo = false
       if (savedData?.id) currentChecklistId = savedData.id
     }
 
+    await saveMaterialiOperatore(interventoId)
+
     if (definitivo) {
       // Segna completato e salva orario di fine effettivo
       const { error: updateError } = await supabase
@@ -256,12 +362,22 @@ export function initChecklist() {
   const saveBtn = document.getElementById('checklist-save-draft')
   const submitBtn = document.getElementById('checklist-submit')
   const notesEl = document.getElementById('checklist-notes')
+  const addMaterialeBtn = document.getElementById('checklist-add-materiale')
+  const materialiList = document.getElementById('checklist-materiali-list')
 
   container?.addEventListener('change', (e) => {
     const cb = e.target
     if (cb.type === 'checkbox') cb.closest('.cl-item')?.classList.toggle('done', cb.checked)
     const voci = gatherChecklistItems()
     aggiornaPct(voci)
+  })
+
+  addMaterialeBtn?.addEventListener('click', () => addMaterialeRowOperatore())
+
+  materialiList?.addEventListener('click', (e) => {
+    if (e.target.dataset.action === 'remove-materiale') {
+      e.target.closest('.materiale-row')?.remove()
+    }
   })
 
   saveBtn?.addEventListener('click', async () => {
