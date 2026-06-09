@@ -206,6 +206,10 @@ export function renderInterventi(interventi) {
     const orario = iv.ora_inizio_pianificata
       ? `${fmt(iv.ora_inizio_pianificata)}${iv.ora_fine_pianificata ? ' — ' + fmt(iv.ora_fine_pianificata) : ''}`
       : 'Orario non definito'
+    const fmtTs = ts => new Date(ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+    const tempiEffettivi = iv.inizio_effettivo
+      ? `<p class="iv-orario" style="color:#059669;font-size:12px;margin-top:2px;">▶ ${fmtTs(iv.inizio_effettivo)}${iv.fine_effettivo ? ' — ■ ' + fmtTs(iv.fine_effettivo) : ' in corso...'}</p>`
+      : ''
     const location = [sede, indirizzo].filter(Boolean).join(' — ')
     const mapsUrl = buildMapsUrl(indirizzo, '')
     const actionDone = stato === 'completato' || stato === 'annullato'
@@ -221,6 +225,7 @@ export function renderInterventi(interventi) {
           <span class="badge ${badgeForStato(stato)}" style="flex-shrink:0;">${stato.replace('_', ' ')}</span>
         </div>
         <p class="iv-orario">⏱ ${orario}</p>
+        ${tempiEffettivi}
         ${location ? `<p class="iv-location">📍 ${location}</p>` : '<div style="margin-bottom:14px;"></div>'}
         <div class="iv-actions">
           <a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>

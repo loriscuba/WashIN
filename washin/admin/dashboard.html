@@ -920,6 +920,20 @@
             </select>
           </div>
           <div class="form-group">
+            <label>Stato</label>
+            <select name="stato">
+              <option value="pianificato">Pianificato</option>
+              <option value="in_corso">In corso</option>
+              <option value="completato">Completato</option>
+              <option value="approvato">Approvato</option>
+              <option value="annullato">Annullato</option>
+            </select>
+          </div>
+          <div id="intervento-tempi-effettivi" style="display:none;padding:10px 14px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;margin-bottom:10px;">
+            <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:.4px;">Tempi effettivi registrati</p>
+            <p style="margin:0;font-size:13px;color:#065f46;" id="tempi-effettivi-text">—</p>
+          </div>
+          <div class="form-group">
             <label>Note</label>
             <textarea name="note" rows="3"></textarea>
           </div>
