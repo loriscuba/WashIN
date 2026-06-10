@@ -132,6 +132,24 @@
       }
       .admin-profile-avatar:hover { border-color:#0f766e; }
       .admin-profile-avatar .avatar-initials { font-size:24px; color:#0d9488; }
+      /* ── Configurazioni cards ── */
+      .config-card {
+        display:flex;flex-direction:column;align-items:center;text-align:center;
+        padding:28px 16px 22px;background:#fff;border-radius:16px;
+        box-shadow:0 2px 10px rgba(0,0,0,0.07);text-decoration:none;color:inherit;
+        transition:transform 0.15s,box-shadow 0.15s;cursor:pointer;border:1.5px solid transparent;
+      }
+      .config-card:hover { transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,0.11);border-color:#0d9488; }
+      .config-card strong { font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:5px;display:block; }
+      .config-card p { font-size:12px;color:var(--gray-500);margin:0;line-height:1.4; }
+      .config-card-icon { font-size:38px;margin-bottom:14px;line-height:1; }
+      .back-link {
+        display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
+        color:var(--gray-500);text-decoration:none;margin-bottom:10px;
+        padding:4px 10px;border-radius:6px;border:1px solid var(--gray-300);background:#fff;
+        transition:color 0.12s,border-color 0.12s;cursor:pointer;
+      }
+      .back-link:hover { color:#0d9488;border-color:#0d9488; }
     </style>
   <body>
     <div class="app-layout">
@@ -152,17 +170,13 @@
         </div>
         <nav class="sidebar-nav" id="sidebar-nav">
           <a class="active" href="#cruscotto" data-target="cruscotto"><span data-lucide="layout"></span> Cruscotto</a>
-          <a href="#clienti" data-target="clienti"><span data-lucide="users"></span> Clienti</a>
-          <a href="#contratti" data-target="contratti"><span data-lucide="file-text"></span> Contratti</a>
-          <a href="#sedi" data-target="sedi"><span data-lucide="map-pin"></span> Sedi</a>
           <a href="#interventi" data-target="interventi"><span data-lucide="calendar"></span> Interventi</a>
-          <a href="#utenti" data-target="utenti" id="nav-utenti"><span data-lucide="users"></span> Utenti</a>
           <a href="#fatture" data-target="fatture"><span data-lucide="file-invoice"></span> Fatture</a>
           <a href="#presenze" data-target="presenze"><span data-lucide="clock"></span> Presenze</a>
           <a href="#preventivi" data-target="preventivi"><span data-lucide="file-plus"></span> Preventivi</a>
           <a href="#magazzino" data-target="magazzino"><span data-lucide="package"></span> Magazzino</a>
           <a href="#veicoli" data-target="veicoli"><span data-lucide="truck"></span> Veicoli</a>
-          <a href="#impostazioni" data-target="impostazioni"><span data-lucide="settings"></span> Impostazioni</a>
+          <a href="#configurazioni" data-target="configurazioni"><span data-lucide="settings-2"></span> Configurazioni</a>
         </nav>
         <div style="margin-top:auto; padding: 0 20px;">
           <button id="logout-button" class="btn btn-secondary btn-sm" style="width:100%;">Logout</button>
@@ -251,10 +265,46 @@
           </div>
         </section>
 
+        <!-- ── Configurazioni ───────────────────────── -->
+        <section id="configurazioni" class="section hidden">
+          <div class="page-header">
+            <h1>Configurazioni</h1>
+            <p style="color:var(--gray-500);margin-top:8px;">Anagrafica, account e impostazioni dell'azienda.</p>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:16px;margin-top:8px;">
+            <a href="#clienti" data-target="clienti" class="config-card">
+              <div class="config-card-icon">👥</div>
+              <strong>Clienti</strong>
+              <p>Anagrafica clienti</p>
+            </a>
+            <a href="#contratti" data-target="contratti" class="config-card">
+              <div class="config-card-icon">📋</div>
+              <strong>Contratti</strong>
+              <p>Contratti e frequenze</p>
+            </a>
+            <a href="#sedi" data-target="sedi" class="config-card">
+              <div class="config-card-icon">📍</div>
+              <strong>Sedi</strong>
+              <p>Sedi dei clienti</p>
+            </a>
+            <a href="#utenti" data-target="utenti" class="config-card">
+              <div class="config-card-icon">🔑</div>
+              <strong>Utenti</strong>
+              <p>Operatori e accessi</p>
+            </a>
+            <a href="#impostazioni" data-target="impostazioni" class="config-card">
+              <div class="config-card-icon">🏢</div>
+              <strong>Dati Azienda</strong>
+              <p>Recapiti e dati fiscali</p>
+            </a>
+          </div>
+        </section>
+
         <!-- ── Clienti ──────────────────────────────── -->
         <section id="clienti" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
             <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
               <h1>Clienti</h1>
               <p style="color: var(--gray-500); margin-top:8px;">Gestisci i clienti e le sedi.</p>
             </div>
@@ -311,6 +361,7 @@
         <section id="contratti" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
             <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
               <h1>Contratti</h1>
               <p style="color: var(--gray-500); margin-top:8px;">Gestisci i contratti attivi e ricorrenti.</p>
             </div>
@@ -345,6 +396,7 @@
         <section id="sedi" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
             <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
               <h1>Sedi</h1>
               <p style="color: var(--gray-500); margin-top:8px;">Gestisci le sedi associate ai contratti.</p>
             </div>
@@ -470,6 +522,7 @@
         <section id="utenti" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
             <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
               <h1>Utenti</h1>
               <p style="color: var(--gray-500); margin-top:8px;">Gestisci operatori e account di accesso.</p>
             </div>
@@ -493,10 +546,11 @@
           </div>
         </section>
 
-        <!-- ── Impostazioni ──────────────────────────── -->
+        <!-- ── Impostazioni / Dati Azienda ──────────── -->
         <section id="impostazioni" class="section hidden">
           <div class="page-header">
-            <h1>Impostazioni</h1>
+            <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+            <h1>Dati Azienda</h1>
             <p style="color: var(--gray-500); margin-top:8px;">Dati azienda e informazioni di contatto.</p>
           </div>
           <div class="card">
@@ -1149,14 +1203,11 @@
       <div style="padding:10px 16px 0;">
         <p style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.08em;margin:0 0 10px 2px;">SEZIONI</p>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-          <button class="menu-sheet-btn" data-sheet-target="contratti"><span class="sheet-icon">📋</span><span>Contratti</span></button>
-          <button class="menu-sheet-btn" data-sheet-target="sedi"><span class="sheet-icon">📍</span><span>Sedi</span></button>
-          <button class="menu-sheet-btn" data-sheet-target="utenti" id="sheet-utenti-btn"><span class="sheet-icon">👥</span><span>Utenti</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="configurazioni"><span class="sheet-icon">⚙️</span><span>Config.</span></button>
           <button class="menu-sheet-btn" data-sheet-target="presenze"><span class="sheet-icon">🕐</span><span>Presenze</span></button>
           <button class="menu-sheet-btn" data-sheet-target="preventivi"><span class="sheet-icon">📄</span><span>Preventivi</span></button>
           <button class="menu-sheet-btn" data-sheet-target="magazzino"><span class="sheet-icon">📦</span><span>Magazzino</span></button>
           <button class="menu-sheet-btn" data-sheet-target="veicoli"><span class="sheet-icon">🚐</span><span>Veicoli</span></button>
-          <button class="menu-sheet-btn" data-sheet-target="impostazioni"><span class="sheet-icon">⚙️</span><span>Impost.</span></button>
           <button class="menu-sheet-btn" data-sheet-target="profilo"><span class="sheet-icon">👤</span><span>Profilo</span></button>
         </div>
         <div style="margin-top:12px;padding-bottom:max(16px,env(safe-area-inset-bottom,16px));">
@@ -1172,8 +1223,8 @@
       <a href="#interventi" data-target="interventi">
         <span class="bnav-icon">📅</span><span>Interventi</span>
       </a>
-      <a href="#clienti" data-target="clienti">
-        <span class="bnav-icon">👥</span><span>Clienti</span>
+      <a href="#configurazioni" data-target="configurazioni">
+        <span class="bnav-icon">⚙️</span><span>Config.</span>
       </a>
       <a href="#fatture" data-target="fatture">
         <span class="bnav-icon">💰</span><span>Fatture</span>
@@ -1227,6 +1278,12 @@
           const target = link.dataset.target
           if (target) { setActiveSection(target); closeSidebar() }
         })
+      })
+
+      // Navigazione da config-card e back-link dentro il main content
+      document.getElementById('main-content')?.addEventListener('click', e => {
+        const link = e.target.closest('a[data-target]')
+        if (link) { e.preventDefault(); setActiveSection(link.dataset.target) }
       })
 
       document.getElementById('admin-bottom-nav')?.addEventListener('click', e => {
@@ -1286,10 +1343,6 @@
         greetingName.textContent = _adminName
         const adminProfileNameEl = document.getElementById('admin-profile-name')
         if (adminProfileNameEl) adminProfileNameEl.textContent = _adminName
-        if (profile?.ruolo === 'admin') {
-          document.getElementById('nav-utenti')?.style.removeProperty('display')
-          document.getElementById('sheet-utenti-btn')?.style.removeProperty('display')
-        }
         const avatarUrl = profile?.avatar_url || null
         applyAvatar(document.getElementById('admin-sidebar-avatar'), avatarUrl, _adminName)
         applyAvatar(document.getElementById('admin-profile-avatar'), avatarUrl, _adminName)
