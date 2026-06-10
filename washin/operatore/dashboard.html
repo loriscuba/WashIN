@@ -303,6 +303,59 @@
         box-shadow: var(--shadow-sm);
         padding: 20px;
       }
+      /* ── Storico card layout ── */
+      .intervento-card .meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 16px;
+      }
+      .intervento-card .location {
+        padding: 0 16px 10px;
+        font-size: 13px;
+        color: var(--gray-500);
+      }
+      .intervento-card .actions {
+        padding: 0 16px 16px;
+      }
+      /* ── Header avatar ── */
+      .header-profile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+        color: inherit;
+        text-decoration: none;
+        background: none;
+        border: none;
+        padding: 0;
+      }
+      .header-avatar {
+        width: 50px; height: 50px;
+        border-radius: 50%;
+        background: #0d9488;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
+        border: 2px solid rgba(13,148,136,0.25);
+      }
+      .header-avatar img {
+        width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: none;
+      }
+      .header-avatar .avatar-initials {
+        font-size: 16px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .header-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--gray-700);
+      }
       @media(min-width: 900px){
         .main-content { padding: 24px 40px 90px; max-width: 720px; }
       }
@@ -335,11 +388,14 @@
 
       <main class="main-content">
         <header class="page-header">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-            <div>
-              <p style="color:var(--gray-500);font-size:14px;margin-bottom:8px;">Oggi è <span id="today-date"></span></p>
-              <h1 style="font-size:28px;">Ciao, <span id="greeting-name">Operatore</span> 👋</h1>
-            </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+            <button class="header-profile" id="header-profile-link" type="button">
+              <div id="header-avatar" class="header-avatar">
+                <img src="" alt="" />
+                <span class="avatar-initials"></span>
+              </div>
+              <span id="header-name" class="header-name">Operatore</span>
+            </button>
             <button id="logout" class="btn btn-secondary btn-sm">Esci</button>
           </div>
         </header>

@@ -60,10 +60,11 @@ async function loadOperatorInfo() {
     if (profile) {
       const name = `${profile.nome || ''} ${profile.cognome || ''}`.trim() || 'Operatore'
       const nameEl = document.getElementById('operator-name')
-      const greetingEl = document.getElementById('greeting-name')
       if (nameEl) nameEl.textContent = name
-      if (greetingEl) greetingEl.textContent = name
       applyAvatar(document.getElementById('sidebar-avatar'), profile.avatar_url || null, name)
+      applyAvatar(document.getElementById('header-avatar'), profile.avatar_url || null, name)
+      const headerNameEl = document.getElementById('header-name')
+      if (headerNameEl) headerNameEl.textContent = name
     }
     await loadNotificheBadge(_currentUserId)
     return profile
@@ -107,6 +108,7 @@ function initProfilo(profile) {
     try {
       const url = await uploadAvatar(_currentUserId, file)
       applyAvatar(document.getElementById('sidebar-avatar'), url, name)
+      applyAvatar(document.getElementById('header-avatar'), url, name)
       applyAvatar(document.getElementById('profilo-avatar'), url, name)
     } catch (err) {
       console.error('uploadAvatar', err)
@@ -157,6 +159,7 @@ async function initDashboard() {
   initProfilo(profile)
 
   document.getElementById('btn-back-agenda')?.addEventListener('click', () => showSection('agenda'))
+  document.getElementById('header-profile-link')?.addEventListener('click', () => showSection('profilo'))
 
   window.addEventListener('checklist:completata', () => {
     _storicoLoaded = false
