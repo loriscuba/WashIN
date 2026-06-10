@@ -281,8 +281,9 @@ export function initCruscotto(){
       await loadMagazzinoAlert()
       await loadVeicoliAlert()
     }
-    const refresh = document.getElementById('refresh-cruscotto')
-    refresh?.addEventListener('click', refreshAll)
+
+    window.addEventListener('cruscotto:refresh', refreshAll)
+    setInterval(refreshAll, 15 * 60 * 1000)
 
     document.getElementById('interventi-oggi-body')?.addEventListener('click', async e => {
       const btn = e.target.closest('[data-action="open"]')

@@ -187,12 +187,9 @@
 
         <!-- ── Cruscotto ────────────────────────────── -->
         <section id="cruscotto" class="section active">
-          <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-            <div>
-              <h1>Buongiorno, <span id="greeting-name">Amministratore</span>!</h1>
-              <p id="current-date" style="color: var(--gray-500); margin-top: 8px;"></p>
-            </div>
-            <button id="refresh-cruscotto" class="btn btn-secondary btn-sm">Aggiorna</button>
+          <div class="page-header">
+            <h1>Buongiorno, <span id="greeting-name">Amministratore</span>!</h1>
+            <p id="current-date" style="color: var(--gray-500); margin-top: 8px;"></p>
           </div>
 
           <div class="kpi-grid">
@@ -1272,23 +1269,27 @@
         document.getElementById('sidebar-backdrop')?.classList.remove('open')
       }
 
+      function maybeRefreshCruscotto(target) {
+        if (target === 'cruscotto') window.dispatchEvent(new Event('cruscotto:refresh'))
+      }
+
       navLinks.forEach(link => {
         link.addEventListener('click', e => {
           e.preventDefault()
           const target = link.dataset.target
-          if (target) { setActiveSection(target); closeSidebar() }
+          if (target) { setActiveSection(target); closeSidebar(); maybeRefreshCruscotto(target) }
         })
       })
 
       // Navigazione da config-card e back-link dentro il main content
       document.getElementById('main-content')?.addEventListener('click', e => {
         const link = e.target.closest('a[data-target]')
-        if (link) { e.preventDefault(); setActiveSection(link.dataset.target) }
+        if (link) { e.preventDefault(); setActiveSection(link.dataset.target); maybeRefreshCruscotto(link.dataset.target) }
       })
 
       document.getElementById('admin-bottom-nav')?.addEventListener('click', e => {
         const link = e.target.closest('a[data-target]')
-        if (link) { e.preventDefault(); setActiveSection(link.dataset.target) }
+        if (link) { e.preventDefault(); setActiveSection(link.dataset.target); maybeRefreshCruscotto(link.dataset.target) }
       })
 
       function openMenuSheet() {
