@@ -106,6 +106,8 @@ async function saveUtente(payload) {
       qualifica: payload.qualifica || null,
       ruolo: payload.ruolo || 'operatore',
       attivo: payload.attivo !== undefined ? payload.attivo : true,
+      costo_mensile: payload.costo_mensile ? parseFloat(payload.costo_mensile) : 0,
+      ore_mensili_contratto: payload.ore_mensili_contratto ? parseFloat(payload.ore_mensili_contratto) : 160,
     }
     const { error } = await supabase.from('profili').update(fields).eq('id', payload.id)
     if (error) throw error
@@ -161,6 +163,8 @@ async function createNuovoUtente(payload) {
       qualifica: payload.qualifica || null,
       ruolo: payload.ruolo || 'operatore',
       attivo: true,
+      costo_mensile: payload.costo_mensile ? parseFloat(payload.costo_mensile) : 0,
+      ore_mensili_contratto: payload.ore_mensili_contratto ? parseFloat(payload.ore_mensili_contratto) : 160,
     }
     // upsert: il trigger potrebbe aver già creato la riga
     const { error: upsertErr } = await supabase.from('profili').upsert({ id: userId, ...fields })
@@ -232,6 +236,8 @@ export function initUtenti() {
           qualifica: fd.get('qualifica'),
           ruolo: fd.get('ruolo'),
           attivo: form.querySelector('[name="attivo"]').checked,
+          costo_mensile: fd.get('costo_mensile'),
+          ore_mensili_contratto: fd.get('ore_mensili_contratto'),
         })
         modal.classList.remove('active')
         loadUtenti().then(renderTabellaUtenti)
@@ -253,6 +259,8 @@ export function initUtenti() {
           ruolo: fd.get('ruolo'),
           qualifica: fd.get('qualifica'),
           telefono: fd.get('telefono'),
+          costo_mensile: fd.get('costo_mensile'),
+          ore_mensili_contratto: fd.get('ore_mensili_contratto'),
         })
         if (ok) {
           nuovoModal.classList.remove('active')
