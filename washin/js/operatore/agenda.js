@@ -81,7 +81,7 @@ export async function loadInterventiOperatore(start, end) {
     const { data, error } = await supabase
       .from('interventi')
       .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
-      .eq('operatore_id', operatoreId)
+      .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
       .gte('data_pianificata', start)
       .lte('data_pianificata', end)
       .order('data_pianificata', { ascending: true })
@@ -105,7 +105,7 @@ export async function loadInterventiPassati() {
     const { data, error } = await supabase
       .from('interventi')
       .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
-      .eq('operatore_id', operatoreId)
+      .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
       .lte('data_pianificata', localDateStr(ieri))
       .order('data_pianificata', { ascending: false })
       .limit(50)
