@@ -80,7 +80,7 @@ export async function loadInterventiOperatore(start, end) {
 
     const { data, error } = await supabase
       .from('interventi')
-      .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale))')
+      .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
       .eq('operatore_id', operatoreId)
       .gte('data_pianificata', start)
       .lte('data_pianificata', end)
@@ -104,7 +104,7 @@ export async function loadInterventiPassati() {
     ieri.setDate(ieri.getDate() - 1)
     const { data, error } = await supabase
       .from('interventi')
-      .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale))')
+      .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
       .eq('operatore_id', operatoreId)
       .lte('data_pianificata', localDateStr(ieri))
       .order('data_pianificata', { ascending: false })
@@ -140,11 +140,15 @@ export function renderInterventiPassati(interventi) {
       : ''
     const stato = iv.stato || 'pianificato'
     const incompleto = stato !== 'completato' || !iv.fine_effettivo
+    const op1s = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
+    const op2s = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
+    const operatoriStorico = [op1s, op2s].filter(Boolean).join(' + ')
     card.innerHTML = `
       <div class="meta">
         <div>
           <strong>${dataFmt}${orario ? '  ·  ' + orario : ''}</strong>
           <p style="margin:6px 0 0;color:var(--gray-700);font-weight:600;">${cliente}</p>
+          ${operatoriStorico ? `<p style="margin:2px 0 0;font-size:12px;color:var(--gray-500);">👤 ${operatoriStorico}</p>` : ''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <span class="badge ${badgeForStato(stato)}">${stato}</span>
@@ -216,6 +220,9 @@ export function renderInterventi(interventi) {
     const actionLabel = stato === 'pianificato' ? 'Avvia intervento' : stato === 'in_corso' ? 'Segna completato' : stato.replace('_', ' ')
     const newState = stato === 'pianificato' ? 'in_corso' : 'completato'
     const borderColor = { in_corso: '#10b981', completato: '#0d9488', annullato: '#ef4444', pianificato: '#f59e0b' }[stato] || '#f59e0b'
+    const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
+    const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
+    const operatori = [op1, op2].filter(Boolean).join(' + ')
 
     card.innerHTML = `
       <div style="height:4px;background:${borderColor};"></div>
@@ -224,6 +231,7 @@ export function renderInterventi(interventi) {
           <span class="iv-cliente">${cliente}</span>
           <span class="badge ${badgeForStato(stato)}" style="flex-shrink:0;">${stato.replace('_', ' ')}</span>
         </div>
+        ${operatori ? `<p style="margin:0 0 4px;font-size:12px;color:var(--gray-500);">👤 ${operatori}</p>` : ''}
         <p class="iv-orario">⏱ ${orario}</p>
         ${tempiEffettivi}
         ${location ? `<p class="iv-location">📍 ${location}</p>` : '<div style="margin-bottom:14px;"></div>'}
