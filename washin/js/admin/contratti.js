@@ -83,8 +83,10 @@ function createContrattoRow(c) {
     <td>${c.data_inizio || '-'}</td>
     <td>${c.data_fine || '-'}</td>
     <td><span class="badge ${badgeClass}">${c.stato}</span></td>
-    <td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap;">
       <button class="btn btn-sm btn-secondary" data-action="edit-contratto" data-id="${c.id}">Modifica</button>
+      <button class="btn btn-sm" style="background:#f0fdf4;color:#059669;border:1px solid #d1fae5;border-radius:6px;cursor:pointer;padding:4px 10px;font-size:12px;"
+        data-action="economico-contratto" data-id="${c.id}" data-nome="${(c.clienti?.ragione_sociale || '').replace(/"/g, '&quot;')}">Economico</button>
     </td>
   `
   return tr
