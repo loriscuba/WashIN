@@ -365,7 +365,8 @@ export async function saveIntervento(formData){
       ora_fine_pianificata: formData.ora_fine || null,
       tipo_pulizia: formData.tipo_pulizia || null,
       note_operatore: formData.note || null,
-      stato: formData.stato || 'pianificato'
+      stato: formData.stato || 'pianificato',
+      km_percorsi: parseFloat(formData.km_percorsi) || 0,
     }
     let savedId = formData.id
     let error
@@ -410,7 +411,7 @@ function addMaterialeRow(m = {}) {
 
   const isCustom = m.prodotto && !_prodottiMagazzino.find(p => p.nome === m.prodotto)
   const optsHtml = _prodottiMagazzino
-    .map(p => `<option value="${p.nome}" data-unita="${p.unita_misura || 'lt'}" ${(!isCustom && m.prodotto === p.nome) ? 'selected' : ''}>${p.nome}</option>`)
+    .map(p => `<option value="${p.nome}" data-id="${p.id}" data-costo="${p.costo_unitario || 0}" data-unita="${p.unita_misura || 'lt'}" ${(!isCustom && m.prodotto === p.nome) ? 'selected' : ''}>${p.nome}</option>`)
     .join('')
   const unitOptions = ['lt','kg','pz','m²'].map(u =>
     `<option value="${u}" ${(m.unita || 'lt') === u ? 'selected' : ''}>${u}</option>`
@@ -499,6 +500,27 @@ async function saveMateriali(interventoId) {
     for (const m of toInsert) await adjustMagazzinoQty(m.prodotto, -(m.quantita || 0))
     showToast('Scorte magazzino aggiornate', 'success')
     window.dispatchEvent(new CustomEvent('magazzino-updated'))
+  }
+
+  // Sync economic cost table (interventi_materiali) — uses prodotto_id + costo_unitario_snapshot
+  await supabase.from('interventi_materiali').delete().eq('intervento_id', interventoId)
+  const ecoInsert = []
+  rows.forEach(row => {
+    const prodSel = row.querySelector('.mat-prodotto')
+    const customInp = row.querySelector('.mat-custom-name')
+    if (customInp?.style.display !== 'none') return // prodotti liberi non hanno ID magazzino
+    const opt = prodSel?.options[prodSel?.selectedIndex]
+    const prodId = opt?.dataset?.id
+    if (!prodId) return
+    ecoInsert.push({
+      intervento_id: interventoId,
+      prodotto_id: prodId,
+      quantita: parseFloat(row.querySelector('.mat-quantita')?.value) || 1,
+      costo_unitario_snapshot: parseFloat(opt?.dataset?.costo) || 0,
+    })
+  })
+  if (ecoInsert.length) {
+    await supabase.from('interventi_materiali').insert(ecoInsert)
   }
 }
 
@@ -666,6 +688,7 @@ export function initInterventi(){
           tipo_pulizia: fd.get('tipo_pulizia') || null,
           note: fd.get('note') || null,
           stato: fd.get('stato') || null,
+          km_percorsi: fd.get('km_percorsi') || 0,
         }
         const savedId = await saveIntervento(payload)
         if (savedId) await saveMateriali(savedId)
