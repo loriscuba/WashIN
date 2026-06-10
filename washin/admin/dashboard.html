@@ -156,13 +156,12 @@
           <a href="#contratti" data-target="contratti"><span data-lucide="file-text"></span> Contratti</a>
           <a href="#sedi" data-target="sedi"><span data-lucide="map-pin"></span> Sedi</a>
           <a href="#interventi" data-target="interventi"><span data-lucide="calendar"></span> Interventi</a>
-          <a href="#operatori" data-target="operatori"><span data-lucide="user-check"></span> Operatori</a>
+          <a href="#utenti" data-target="utenti" id="nav-utenti"><span data-lucide="users"></span> Utenti</a>
           <a href="#fatture" data-target="fatture"><span data-lucide="file-invoice"></span> Fatture</a>
           <a href="#presenze" data-target="presenze"><span data-lucide="clock"></span> Presenze</a>
           <a href="#preventivi" data-target="preventivi"><span data-lucide="file-plus"></span> Preventivi</a>
           <a href="#magazzino" data-target="magazzino"><span data-lucide="package"></span> Magazzino</a>
           <a href="#veicoli" data-target="veicoli"><span data-lucide="truck"></span> Veicoli</a>
-          <a href="#utenti" data-target="utenti" id="nav-utenti" style="display:none;"><span data-lucide="shield"></span> Utenti</a>
           <a href="#impostazioni" data-target="impostazioni"><span data-lucide="settings"></span> Impostazioni</a>
         </nav>
         <div style="margin-top:auto; padding: 0 20px;">
@@ -410,33 +409,6 @@
 
         </section>
 
-        <!-- ── Operatori ─────────────────────────────── -->
-        <section id="operatori" class="section hidden">
-          <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-            <div>
-              <h1>Operatori</h1>
-              <p style="color: var(--gray-500); margin-top:8px;">Amministra il personale operativo.</p>
-            </div>
-            <button id="add-operatore-button" class="btn btn-primary">+ Nuovo operatore</button>
-          </div>
-          <div class="table-container card">
-            <table class="washin-table">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>Email</th>
-                  <th>Telefono</th>
-                  <th>Qualifica</th>
-                  <th>Attivo</th>
-                  <th>Azioni</th>
-                </tr>
-              </thead>
-              <tbody id="operatori-table-body"></tbody>
-            </table>
-          </div>
-
-        </section>
-
         <!-- ── Fatture ───────────────────────────────── -->
         <section id="fatture" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -498,8 +470,8 @@
         <section id="utenti" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
             <div>
-              <h1>Gestione Utenti</h1>
-              <p style="color: var(--gray-500); margin-top:8px;">Crea e gestisci gli account dell'applicazione. Solo Admin.</p>
+              <h1>Utenti</h1>
+              <p style="color: var(--gray-500); margin-top:8px;">Gestisci operatori e account di accesso.</p>
             </div>
             <button id="add-utente-button" class="btn btn-primary">+ Nuovo utente</button>
           </div>
@@ -510,6 +482,7 @@
                   <th>Nome</th>
                   <th>Email</th>
                   <th>Ruolo</th>
+                  <th>Telefono</th>
                   <th>Login</th>
                   <th>Stato</th>
                   <th>Azioni</th>
@@ -813,27 +786,6 @@
           <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
             <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
             <button type="submit" class="btn btn-primary btn-sm">Salva sede</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <div class="modal-overlay" id="operatore-modal">
-      <div class="modal-box">
-        <h2>Nuovo/Modifica Operatore</h2>
-        <form>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div class="form-group"><label>Nome</label><input name="nome" type="text" required></div>
-            <div class="form-group"><label>Cognome</label><input name="cognome" type="text" required></div>
-          </div>
-          <div class="form-group"><label>Email</label><input name="email" type="email"></div>
-          <div class="form-group"><label>Telefono</label><input name="telefono" type="text"></div>
-          <div class="form-group"><label>Qualifica</label><input name="qualifica" type="text"></div>
-          <input name="ruolo" type="hidden" value="operatore">
-          <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-weight:400;"><input name="attivo" type="checkbox" checked style="width:auto;"> Attivo</label></div>
-          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
-            <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
-            <button type="submit" class="btn btn-primary btn-sm">Salva operatore</button>
           </div>
         </form>
       </div>
@@ -1199,12 +1151,11 @@
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
           <button class="menu-sheet-btn" data-sheet-target="contratti"><span class="sheet-icon">📋</span><span>Contratti</span></button>
           <button class="menu-sheet-btn" data-sheet-target="sedi"><span class="sheet-icon">📍</span><span>Sedi</span></button>
-          <button class="menu-sheet-btn" data-sheet-target="operatori"><span class="sheet-icon">👷</span><span>Operatori</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="utenti" id="sheet-utenti-btn"><span class="sheet-icon">👥</span><span>Utenti</span></button>
           <button class="menu-sheet-btn" data-sheet-target="presenze"><span class="sheet-icon">🕐</span><span>Presenze</span></button>
           <button class="menu-sheet-btn" data-sheet-target="preventivi"><span class="sheet-icon">📄</span><span>Preventivi</span></button>
           <button class="menu-sheet-btn" data-sheet-target="magazzino"><span class="sheet-icon">📦</span><span>Magazzino</span></button>
           <button class="menu-sheet-btn" data-sheet-target="veicoli"><span class="sheet-icon">🚐</span><span>Veicoli</span></button>
-          <button class="menu-sheet-btn" data-sheet-target="utenti" id="sheet-utenti-btn" style="display:none;"><span class="sheet-icon">🔐</span><span>Utenti</span></button>
           <button class="menu-sheet-btn" data-sheet-target="impostazioni"><span class="sheet-icon">⚙️</span><span>Impost.</span></button>
           <button class="menu-sheet-btn" data-sheet-target="profilo"><span class="sheet-icon">👤</span><span>Profilo</span></button>
         </div>
@@ -1239,7 +1190,6 @@
       import { uploadAvatar, applyAvatar } from '../js/avatar.js'
       import { initClienti } from '../js/admin/clienti.js'
       import { initInterventi } from '../js/admin/interventi.js'
-      import { initOperatori } from '../js/admin/operatori.js'
       import { initFatture } from '../js/admin/fatture.js'
       import { initCruscotto } from '../js/admin/cruscotto.js'
       import { initContratti } from '../js/admin/contratti.js'
@@ -1372,7 +1322,6 @@
         initContratti()
         initSedi()
         initInterventi()
-        initOperatori()
         initFatture()
         initPresenze()
         initPreventivi()

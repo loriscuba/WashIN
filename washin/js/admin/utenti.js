@@ -45,6 +45,7 @@ function createUtenteRow(u) {
     <td><strong>${[u.nome, u.cognome].filter(Boolean).join(' ') || '-'}</strong></td>
     <td>${u.email || '-'}</td>
     <td><span class="badge ${rb.cls}">${rb.label}</span></td>
+    <td>${u.telefono || '-'}</td>
     <td>${loginBadge}</td>
     <td>${statoHtml}</td>
     <td style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -64,7 +65,7 @@ export function renderTabellaUtenti(utenti) {
   if (!tbody) return
   tbody.innerHTML = ''
   if (!utenti.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun utente</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun utente</td></tr>'
     return
   }
   utenti.forEach(u => tbody.appendChild(createUtenteRow(u)))
@@ -177,22 +178,6 @@ async function createNuovoUtente(payload) {
 export function initUtenti() {
   (async () => {
     try {
-      // Controllo ruolo: solo admin
-      const role = await getCurrentRole()
-      const section = document.getElementById('utenti')
-      if (role !== 'admin') {
-        if (section) section.innerHTML = `
-          <div class="page-header"><h1>Gestione Utenti</h1></div>
-          <div class="card" style="text-align:center;padding:40px;color:var(--gray-500);">
-            Accesso riservato agli amministratori.
-          </div>`
-        return
-      }
-
-      // Mostra il link di navigazione (nascosto di default)
-      document.getElementById('nav-utenti')?.style.removeProperty('display')
-      document.getElementById('sheet-utenti-btn')?.style.removeProperty('display')
-
       const addBtn = document.getElementById('add-utente-button')
       const modal = document.getElementById('utente-modal')
       const nuovoModal = document.getElementById('nuovo-utente-modal')
