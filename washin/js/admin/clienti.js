@@ -137,6 +137,8 @@ export async function saveCliente(formData) {
 			indirizzo: formData.indirizzo,
 			citta: formData.citta,
 			cap: formData.cap,
+			piva: formData.piva || null,
+			provincia: formData.provincia || null,
 			referente: formData.referente,
 			telefono: formData.telefono,
 			email: formData.email,
@@ -242,6 +244,8 @@ export function initClienti() {
 					indirizzo: form.querySelector('[name="indirizzo"]').value,
 					citta: form.querySelector('[name="citta"]').value,
 					cap: form.querySelector('[name="cap"]').value,
+					piva: form.querySelector('[name="piva"]')?.value || null,
+					provincia: form.querySelector('[name="provincia"]')?.value || null,
 					referente: form.querySelector('[name="referente"]').value,
 					telefono: form.querySelector('[name="telefono"]').value,
 					email: form.querySelector('[name="email"]').value,
@@ -252,6 +256,7 @@ export function initClienti() {
 				form.reset()
 				delete form.dataset.clientId
 				document.getElementById('cliente-modal')?.classList.remove('active')
+				window.dispatchEvent(new Event('anagrafica:reload'))
 				const clienti = await loadClienti()
 				renderTabellaClienti(clienti)
 			})
