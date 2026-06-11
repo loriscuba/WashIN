@@ -178,6 +178,32 @@
         line-height: 1.2;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
+      /* ── Anagrafica cascata ── */
+      .ana-cliente { margin-bottom: 8px; }
+      .ana-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 14px; background: #fff; border-radius: 12px;
+        border: 1.5px solid var(--gray-200,#e5e7eb);
+        cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+      }
+      .ana-row:hover { border-color: #0d9488; box-shadow: 0 2px 8px rgba(13,148,136,0.10); }
+      .ana-cliente-row { background: #f8fafc; }
+      .ana-contratto-row { margin-left: 28px; background: #fff; }
+      .ana-sede-row { margin-left: 56px; cursor: default; }
+      .ana-sede-row:hover { border-color: var(--gray-200,#e5e7eb); box-shadow: none; }
+      .ana-arrow { font-size: 10px; color: var(--gray-400,#9ca3af); flex-shrink: 0; width: 14px; text-align: center; }
+      .ana-main { flex: 1; min-width: 0; }
+      .ana-name { font-size: 15px; font-weight: 700; color: var(--gray-900,#111827); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ana-submeta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+      .ana-chip { font-size: 11px; font-weight: 500; color: var(--gray-600,#4b5563); background: var(--gray-100,#f3f4f6); padding: 2px 7px; border-radius: 6px; }
+      .ana-right { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+      .ana-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+      .ana-children { padding-left: 0; }
+      .ana-leaf-empty { margin-left: 28px; padding: 8px 14px; font-size: 12px; color: var(--gray-400,#9ca3af); font-style: italic; }
+      .ana-empty-state { text-align: center; padding: 40px 16px; color: var(--gray-500,#6b7280); }
+      .ana-btn-blue { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
+      .ana-btn-green { background: #f0fdf4; color: #059669; border: 1px solid #d1fae5; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
+      .ana-btn-eco { background: #fefce8; color: #b45309; border: 1px solid #fde68a; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
     </style>
   <body>
     <div class="app-layout">
@@ -356,55 +382,17 @@
             <div>
               <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
               <h1>Clienti</h1>
-              <p style="color: var(--gray-500); margin-top:8px;">Gestisci i clienti e le sedi.</p>
+              <p style="color: var(--gray-500); margin-top:8px;">Clienti, contratti e sedi a cascata.</p>
             </div>
-            <button id="add-cliente-button" class="btn btn-primary">+ Nuovo cliente</button>
+            <button id="add-cliente-ana-button" class="btn btn-primary">+ Nuovo cliente</button>
           </div>
 
-          <form id="clienti-filters-form" class="card" style="margin-bottom:20px; display:grid; gap:12px;">
-            <div class="form-group">
-              <label>Ricerca</label>
-              <input name="search" type="text" placeholder="Cerca cliente...">
-            </div>
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
-              <div class="form-group">
-                <label>Tipo</label>
-                <select name="tipo">
-                  <option value="">Tutti</option>
-                  <option value="privato">Privato</option>
-                  <option value="azienda">Azienda</option>
-                  <option value="condominio">Condominio</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Stato</label>
-                <select name="stato">
-                  <option value="">Tutti</option>
-                  <option value="attivi">Attivi</option>
-                  <option value="false">Inattivi</option>
-                </select>
-              </div>
-            </div>
-            <div><button type="submit" class="btn btn-secondary btn-sm">Filtra</button></div>
-          </form>
-
-          <div class="table-container card">
-            <table class="washin-table">
-              <thead>
-                <tr>
-                  <th>Ragione sociale</th>
-                  <th>Tipo</th>
-                  <th>Città</th>
-                  <th>Referente</th>
-                  <th>Telefono</th>
-                  <th>Stato</th>
-                  <th>Azioni</th>
-                </tr>
-              </thead>
-              <tbody id="clienti-table-body"></tbody>
-            </table>
+          <div style="margin-bottom:14px;">
+            <input type="search" id="anagrafica-search" placeholder="🔍 Cerca cliente, P.IVA, contratto, città, provincia…"
+              style="padding:9px 14px;border:1.5px solid var(--gray-300);border-radius:10px;font-size:14px;width:100%;max-width:480px;box-sizing:border-box;outline:none;" />
           </div>
 
+          <div id="anagrafica-list"></div>
         </section>
 
         <!-- ── Contratti ─────────────────────────────── -->
@@ -817,6 +805,10 @@
           <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;">
             <div class="form-group"><label>Città</label><input name="citta" type="text"></div>
             <div class="form-group"><label>CAP</label><input name="cap" type="text"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>P.IVA</label><input name="piva" type="text"></div>
+            <div class="form-group"><label>Provincia</label><input name="provincia" type="text" maxlength="5" placeholder="es. MI"></div>
           </div>
           <div class="form-group"><label>Referente</label><input name="referente" type="text"></div>
           <div class="form-group"><label>Telefono</label><input name="telefono" type="text"></div>
@@ -1373,6 +1365,7 @@
       import { initVeicoli } from '../js/admin/veicoli.js'
       import { initUtenti } from '../js/admin/utenti.js'
       import { initContoEconomico } from '../js/admin/contoeconomico.js'
+      import { initAnagrafica } from '../js/admin/anagrafica.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -1509,6 +1502,7 @@
         initVeicoli()
         initUtenti()
         initContoEconomico()
+        initAnagrafica()
       })
     </script>
   </body>

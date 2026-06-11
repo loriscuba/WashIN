@@ -121,7 +121,7 @@ async function populateClientiSelect(selectEl, selectedId = null) {
   })
 }
 
-export async function openModalContratto(id = null) {
+export async function openModalContratto(id = null, prefilledClienteId = null) {
   try {
     const modal = document.getElementById('contratto-modal')
     const form = modal?.querySelector('form')
@@ -144,6 +144,7 @@ export async function openModalContratto(id = null) {
       form.reset()
       delete form.dataset.contrattoId
       modal.querySelector('h2').textContent = 'Nuovo Contratto'
+      if (prefilledClienteId && clienteSelect) clienteSelect.value = prefilledClienteId
     }
     modal.classList.add('active')
   } catch (err) {
@@ -237,6 +238,7 @@ export function initContratti() {
         form.reset()
         delete form.dataset.contrattoId
         modal.classList.remove('active')
+        window.dispatchEvent(new Event('anagrafica:reload'))
         reload()
       })
     }

@@ -111,7 +111,7 @@ async function populateContrattiSelect(selectEl, selectedId = null) {
   })
 }
 
-export async function openModalSede(id = null) {
+export async function openModalSede(id = null, prefilledContrattoId = null) {
   try {
     const modal = document.getElementById('sede-modal')
     const form = modal?.querySelector('form')
@@ -134,6 +134,7 @@ export async function openModalSede(id = null) {
       form.reset()
       delete form.dataset.sedeId
       modal.querySelector('h2').textContent = 'Nuova Sede'
+      if (prefilledContrattoId && contrattoSelect) contrattoSelect.value = prefilledContrattoId
     }
     modal.classList.add('active')
   } catch (err) {
@@ -194,6 +195,7 @@ export function initSedi() {
         form.reset()
         delete form.dataset.sedeId
         modal.classList.remove('active')
+        window.dispatchEvent(new Event('anagrafica:reload'))
         loadSedi().then(renderTabellaSedi)
       })
     }
