@@ -212,14 +212,11 @@
       .sidebar-nav a .nav-label { margin-left: 2px; }
     </style>
   <body>
-    <div class="app-layout">
+    <div class="app-layout sidebar-collapsed">
       <aside class="sidebar">
         <div class="sidebar-logo">
           <span class="sidebar-logo-text">Wash<span class="in">IN</span></span>
           <span class="sidebar-logo-icon">W<span class="in">I</span></span>
-          <button class="sidebar-toggle" id="sidebar-toggle" title="Comprimi/Espandi menu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
         </div>
         <div class="sidebar-avatar-wrap">
           <label class="sidebar-avatar" id="admin-sidebar-avatar" title="Cambia foto profilo">
@@ -1560,44 +1557,20 @@
         document.getElementById('sidebar-backdrop')?.classList.remove('open')
       }
 
-      // ── Sidebar collapse ─────────────────────────────
-      ;(function initSidebarCollapse() {
+      // ── Sidebar hover expand/collapse ────────────────
+      ;(function initSidebarHover() {
         const layout = document.querySelector('.app-layout')
-        const toggle = document.getElementById('sidebar-toggle')
-        const KEY = 'washin-sb-collapsed'
+        const sidebar = document.querySelector('.sidebar')
+        let leaveTimer = null
 
-        function setCollapsed(collapsed, save) {
-          layout?.classList.toggle('sidebar-collapsed', collapsed)
-          if (save) localStorage.setItem(KEY, collapsed ? '1' : '0')
-        }
-
-        const saved = localStorage.getItem(KEY)
-        setCollapsed(saved !== null ? saved === '1' : window.innerWidth < 1100)
-
-        toggle?.addEventListener('click', () => {
-          const next = !layout?.classList.contains('sidebar-collapsed')
-          setCollapsed(next, true)
+        sidebar?.addEventListener('mouseenter', () => {
+          clearTimeout(leaveTimer)
+          layout?.classList.remove('sidebar-collapsed')
         })
 
-        window.addEventListener('resize', () => {
-          if (localStorage.getItem(KEY) === null) setCollapsed(window.innerWidth < 1100)
+        sidebar?.addEventListener('mouseleave', () => {
+          leaveTimer = setTimeout(() => layout?.classList.add('sidebar-collapsed'), 120)
         })
-
-        // Floating tooltip for collapsed nav items
-        const tip = document.createElement('div')
-        tip.style.cssText = 'position:fixed;z-index:500;background:#0f172a;color:#e2e8f0;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:600;pointer-events:none;opacity:0;transition:opacity 0.12s ease;box-shadow:0 4px 14px rgba(0,0,0,0.35);white-space:nowrap;font-family:Outfit,sans-serif;'
-        document.body.appendChild(tip)
-
-        document.getElementById('sidebar-nav')?.addEventListener('mouseover', e => {
-          const link = e.target.closest('a[data-tooltip]')
-          if (!link || !layout?.classList.contains('sidebar-collapsed')) { tip.style.opacity = '0'; return }
-          const r = link.getBoundingClientRect()
-          tip.textContent = link.dataset.tooltip
-          tip.style.left = (r.right + 10) + 'px'
-          tip.style.top = Math.round(r.top + r.height / 2 - 14) + 'px'
-          tip.style.opacity = '1'
-        })
-        document.getElementById('sidebar-nav')?.addEventListener('mouseout', () => { tip.style.opacity = '0' })
       })()
 
       function maybeRefreshCruscotto(target) {
