@@ -209,8 +209,7 @@
       .scheda-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
       .scheda-section-title { font-size: 11px; font-weight: 700; color: var(--teal,#0d9488); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; }
       /* ── Sidebar nav icon sizing ── */
-      .sidebar-nav a svg { width: 17px; height: 17px; flex-shrink: 0; }
-      .sidebar-nav a .nav-label { margin-left: 4px; }
+      .sidebar-nav a .nav-label { margin-left: 2px; }
     </style>
   <body>
     <div class="app-layout">
@@ -238,7 +237,7 @@
         <nav class="sidebar-nav" id="sidebar-nav">
           <a class="active" href="#cruscotto" data-target="cruscotto" data-tooltip="Cruscotto"><span data-lucide="layout-dashboard"></span><span class="nav-label">Cruscotto</span></a>
           <a href="#clienti" data-target="clienti" data-tooltip="Clienti"><span data-lucide="users"></span><span class="nav-label">Clienti</span></a>
-          <a href="#interventi" data-target="interventi" data-tooltip="Interventi"><span data-lucide="calendar-check"></span><span class="nav-label">Interventi</span></a>
+          <a href="#interventi" data-target="interventi" data-tooltip="Interventi"><span data-lucide="calendar"></span><span class="nav-label">Interventi</span></a>
           <a href="#fatture" data-target="fatture" data-tooltip="Fatture"><span data-lucide="receipt"></span><span class="nav-label">Fatture</span></a>
           <a href="#presenze" data-target="presenze" data-tooltip="Presenze"><span data-lucide="clock"></span><span class="nav-label">Presenze</span></a>
           <a href="#preventivi" data-target="preventivi" data-tooltip="Preventivi"><span data-lucide="file-plus"></span><span class="nav-label">Preventivi</span></a>
@@ -1700,7 +1699,7 @@
         await loadUserProfile()
         document.getElementById('admin-sidebar-avatar-input')?.addEventListener('change', handleAdminAvatarChange)
         document.getElementById('admin-profile-avatar-input')?.addEventListener('change', handleAdminAvatarChange)
-        if (window.lucide) window.lucide.replace()
+        if (window.lucide) window.lucide.createIcons()
         const now = new Date()
         currentDate.textContent = now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
         initCruscotto()
