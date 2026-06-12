@@ -271,11 +271,17 @@
           </div>
 
           <div class="card" style="margin-top:24px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
               <h2 style="margin:0; font-size:18px; color: var(--gray-900);">Interventi di oggi</h2>
-              <span class="badge badge-info">Live</span>
+              <div style="display:flex;gap:10px;align-items:center;">
+                <div style="display:flex;border:1.5px solid var(--gray-300);border-radius:8px;overflow:hidden;">
+                  <button id="btn-view-lista" style="padding:5px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#0d9488;color:#fff;">Lista</button>
+                  <button id="btn-view-mappa" style="padding:5px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#fff;color:#6b7280;">Mappa</button>
+                </div>
+                <span class="badge badge-info">Live</span>
+              </div>
             </div>
-            <div class="table-container">
+            <div id="oggi-lista" class="table-container">
               <table class="washin-table">
                 <thead>
                   <tr>
@@ -289,6 +295,16 @@
                 </thead>
                 <tbody id="interventi-oggi-body"></tbody>
               </table>
+            </div>
+            <div id="mappa-oggi" style="height:440px;border-radius:12px;overflow:hidden;display:none;position:relative;"></div>
+            <div id="mappa-no-data" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;background:rgba(255,255,255,0.85);border-radius:12px;font-size:14px;color:var(--gray-500);">Nessun indirizzo geocodificabile</div>
+            <div id="mappa-legenda" style="display:none;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:center;">
+              <span style="font-size:11px;font-weight:700;color:var(--gray-400);letter-spacing:.04em;">STATO</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;"><span style="width:11px;height:11px;background:#3b82f6;border-radius:50%;display:inline-block;"></span>Pianificato</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;"><span style="width:11px;height:11px;background:#f59e0b;border-radius:50%;display:inline-block;"></span>In corso</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;"><span style="width:11px;height:11px;background:#10b981;border-radius:50%;display:inline-block;"></span>Completato</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;"><span style="width:11px;height:11px;background:#0d9488;border-radius:50%;display:inline-block;"></span>Approvato</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;"><span style="width:11px;height:11px;background:#ef4444;border-radius:50%;display:inline-block;"></span>Annullato</span>
             </div>
           </div>
 

@@ -18,6 +18,186 @@ function parseTimeToSeconds(t){
   return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0)
 }
 
+// ── Mappa ────────────────────────────────────────────────────────────────────
+
+let _mapInstance = null
+let _markersLayer = null
+let _interventiOggi = []
+let _mapView = 'lista'
+
+const STATUS_COLORS = {
+  pianificato: '#3b82f6',
+  in_corso:    '#f59e0b',
+  completato:  '#10b981',
+  approvato:   '#0d9488',
+  annullato:   '#ef4444',
+}
+const STATUS_LABEL = {
+  pianificato: 'Pianificato',
+  in_corso:    'In corso',
+  completato:  'Completato',
+  approvato:   'Approvato',
+  annullato:   'Annullato',
+}
+
+async function ensureLeaflet() {
+  if (window.L) return window.L
+  if (!document.querySelector('link[href*="leaflet"]')) {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+    document.head.appendChild(link)
+  }
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+    s.onload = () => resolve(window.L)
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+}
+
+async function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms))
+}
+
+async function geocodeSede(sedeId, address) {
+  if (!address) return null
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Italia')}&format=json&limit=1&accept-language=it`
+    const res = await fetch(url, { headers: { 'User-Agent': 'WashIN/1.0' } })
+    const data = await res.json()
+    if (!data.length) return null
+    const lat = parseFloat(data[0].lat)
+    const lng = parseFloat(data[0].lon)
+    await supabase.from('sedi_cliente').update({ lat, lng }).eq('id', sedeId)
+    return { lat, lng }
+  } catch (err) {
+    console.warn('Geocoding failed:', address, err)
+    return null
+  }
+}
+
+function buildPopup(iv) {
+  const sede = iv.sedi_cliente || {}
+  const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
+  const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
+  const op = [op1, op2].filter(Boolean).join(' + ') || '-'
+  const cliente = sede.clienti?.ragione_sociale || '-'
+  const color = STATUS_COLORS[iv.stato] || '#6b7280'
+  const label = STATUS_LABEL[iv.stato] || iv.stato
+  return `
+    <div style="font-size:13px;line-height:1.5;min-width:190px;">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#111;">${iv.ora_inizio_pianificata || '--:--'} — ${iv.tipo_pulizia || '-'}</p>
+      <p style="margin:0 0 3px;color:#374151;"><strong>${cliente}</strong></p>
+      <p style="margin:0 0 3px;color:#6b7280;">📍 ${sede.nome_sede || '-'}</p>
+      <p style="margin:0 0 6px;color:#6b7280;">👷 ${op}</p>
+      <span style="display:inline-block;padding:2px 10px;border-radius:4px;background:${color};color:#fff;font-size:11px;font-weight:600;">${label}</span>
+    </div>
+  `
+}
+
+function addMarker(L, iv, lat, lng) {
+  const color = STATUS_COLORS[iv.stato] || '#6b7280'
+  return L.circleMarker([lat, lng], {
+    radius: 13,
+    fillColor: color,
+    color: '#fff',
+    weight: 2.5,
+    opacity: 1,
+    fillOpacity: 0.92,
+  }).bindPopup(buildPopup(iv), { maxWidth: 260 }).addTo(_markersLayer)
+}
+
+async function renderMappaOggi(interventi) {
+  const mapDiv = document.getElementById('mappa-oggi')
+  if (!mapDiv || mapDiv.style.display === 'none') return
+
+  const L = await ensureLeaflet()
+
+  if (!_mapInstance) {
+    _mapInstance = L.map('mappa-oggi', { zoomControl: true }).setView([44.5, 11.3], 6)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(_mapInstance)
+    _markersLayer = L.layerGroup().addTo(_mapInstance)
+  } else {
+    _mapInstance.invalidateSize()
+    _markersLayer.clearLayers()
+  }
+
+  const withCoords = []
+  const toGeocode = []
+
+  for (const iv of interventi) {
+    const sede = iv.sedi_cliente
+    if (!sede) continue
+    if (sede.lat && sede.lng) {
+      withCoords.push({ iv, lat: sede.lat, lng: sede.lng })
+    } else {
+      toGeocode.push(iv)
+    }
+  }
+
+  // Place markers with known coords immediately
+  const allMarkers = []
+  for (const { iv, lat, lng } of withCoords) {
+    allMarkers.push(addMarker(L, iv, lat, lng))
+  }
+  if (allMarkers.length) {
+    _mapInstance.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.3))
+  }
+
+  // Geocode missing sedi and add incrementally
+  let first = true
+  for (const iv of toGeocode) {
+    const sede = iv.sedi_cliente
+    const address = [sede.indirizzo, sede.clienti?.citta].filter(Boolean).join(', ')
+    if (!address) continue
+    if (!first) await sleep(1100)
+    first = false
+    const coords = await geocodeSede(iv.sede_id, address)
+    if (!coords) continue
+    const m = addMarker(L, iv, coords.lat, coords.lng)
+    allMarkers.push(m)
+    _mapInstance.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.3))
+  }
+
+  if (!allMarkers.length) {
+    const noData = document.getElementById('mappa-no-data')
+    if (noData) noData.style.display = 'flex'
+  } else {
+    const noData = document.getElementById('mappa-no-data')
+    if (noData) noData.style.display = 'none'
+  }
+}
+
+function setMapView(view) {
+  _mapView = view
+  const lista   = document.getElementById('oggi-lista')
+  const mappa   = document.getElementById('mappa-oggi')
+  const noData  = document.getElementById('mappa-no-data')
+  const legenda = document.getElementById('mappa-legenda')
+  const btnL    = document.getElementById('btn-view-lista')
+  const btnM    = document.getElementById('btn-view-mappa')
+
+  const isMappa = view === 'mappa'
+  if (lista)   lista.style.display   = isMappa ? 'none' : 'block'
+  if (mappa)   mappa.style.display   = isMappa ? 'block' : 'none'
+  if (legenda) legenda.style.display = isMappa ? 'flex' : 'none'
+  if (noData && !isMappa) noData.style.display = 'none'
+
+  const activeStyle   = 'background:#0d9488;color:#fff;'
+  const inactiveStyle = 'background:#fff;color:#6b7280;'
+  if (btnL) btnL.style.cssText = (isMappa ? inactiveStyle : activeStyle) + 'padding:5px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;'
+  if (btnM) btnM.style.cssText = (isMappa ? activeStyle : inactiveStyle) + 'padding:5px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;'
+
+  if (isMappa) renderMappaOggi(_interventiOggi)
+}
+
+// ── KPI ──────────────────────────────────────────────────────────────────────
+
 export async function loadKPI(){
   try{
     const today = todayISO()
@@ -44,10 +224,8 @@ export async function loadKPI(){
     let totalSeconds = 0
     rows2.forEach(row => {
       if (row.inizio_effettivo && row.fine_effettivo) {
-        // usa i timestamp reali se l'operatore ha usato avvia/stop
         totalSeconds += Math.max(0, (new Date(row.fine_effettivo) - new Date(row.inizio_effettivo)) / 1000)
       } else {
-        // fallback: ore pianificate
         totalSeconds += Math.max(0, parseTimeToSeconds(row.ora_fine_pianificata) - parseTimeToSeconds(row.ora_inizio_pianificata))
       }
     })
@@ -76,34 +254,48 @@ export async function loadKPI(){
 export async function loadInterventiOggi(){
   try{
     const today = todayISO()
-    const { data, error } = await supabase.from('interventi').select('*, operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome), sedi_cliente(nome_sede,indirizzo, clienti(ragione_sociale))').eq('data_pianificata', today).order('ora_inizio_pianificata', { ascending: true })
+    const { data, error } = await supabase.from('interventi').select(`
+      *,
+      operatore:profili!operatore_id(nome,cognome),
+      operatore2:profili!operatore2_id(nome,cognome),
+      sedi_cliente(nome_sede, indirizzo, lat, lng, clienti(ragione_sociale, citta))
+    `).eq('data_pianificata', today).order('ora_inizio_pianificata', { ascending: true })
     if (error) throw error
+
+    _interventiOggi = data || []
+
     const tbody = document.getElementById('interventi-oggi-body')
-    if (!tbody) return data || []
-    tbody.innerHTML = ''
-    ;(data||[]).forEach(iv => {
-      const tr = document.createElement('tr')
-      const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
-      const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
-      const op = [op1, op2].filter(Boolean).join(' + ') || '-'
-      const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || '-'
-      tr.innerHTML = `
-        <td>${iv.ora_inizio_pianificata || '-'}</td>
-        <td>${op}</td>
-        <td>${cliente} / ${iv.sedi_cliente?.nome_sede || '-'}</td>
-        <td>${iv.tipo_pulizia || '-'}</td>
-        <td><span class="badge">${iv.stato}</span></td>
-        <td><button class="btn btn-sm btn-secondary" data-action="open" data-id="${iv.id}">Dettaglio</button></td>
-      `
-      tbody.appendChild(tr)
-    })
-    return data || []
+    if (tbody) {
+      tbody.innerHTML = ''
+      _interventiOggi.forEach(iv => {
+        const tr = document.createElement('tr')
+        const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
+        const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
+        const op = [op1, op2].filter(Boolean).join(' + ') || '-'
+        const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || '-'
+        const color = STATUS_COLORS[iv.stato] || '#6b7280'
+        tr.innerHTML = `
+          <td>${iv.ora_inizio_pianificata || '-'}</td>
+          <td>${op}</td>
+          <td>${cliente} / ${iv.sedi_cliente?.nome_sede || '-'}</td>
+          <td>${iv.tipo_pulizia || '-'}</td>
+          <td><span class="badge" style="background:${color};color:#fff;">${STATUS_LABEL[iv.stato] || iv.stato}</span></td>
+          <td><button class="btn btn-sm btn-secondary" data-action="open" data-id="${iv.id}">Dettaglio</button></td>
+        `
+        tbody.appendChild(tr)
+      })
+    }
+
+    if (_mapView === 'mappa') await renderMappaOggi(_interventiOggi)
+    return _interventiOggi
   }catch(err){
     showToast('Errore caricamento interventi oggi','error')
     console.error(err)
     return []
   }
 }
+
+// ── Grafici ──────────────────────────────────────────────────────────────────
 
 async function ensureChartJs(){
   if (window.Chart) return window.Chart
@@ -175,6 +367,8 @@ export async function loadGrafici(){
   }
 }
 
+// ── Alert magazzino / veicoli ────────────────────────────────────────────────
+
 export async function loadMagazzinoAlert() {
   try {
     const today = todayISO()
@@ -229,7 +423,6 @@ export async function loadVeicoliAlert() {
     const { data, error } = await supabase.from('veicoli').select('*').eq('attivo', true)
     if (error) throw error
 
-    // Mostra tutti i veicoli che hanno almeno una scadenza impostata, ordinati per scadenza più vicina
     const items = (data || [])
       .filter(v => v.revisione_scadenza || v.assicurazione_scadenza)
       .sort((a, b) => {
@@ -249,10 +442,8 @@ export async function loadVeicoliAlert() {
       function scadCell(dateStr, label) {
         if (!dateStr) return ''
         const d = new Date(dateStr + 'T00:00:00').toLocaleDateString('it-IT')
-        if (dateStr < today)
-          return `<span class="badge badge-danger">${label}: ${d} ⚠</span>`
-        if (dateStr <= in90)
-          return `<span class="badge badge-warning">${label}: ${d}</span>`
+        if (dateStr < today) return `<span class="badge badge-danger">${label}: ${d} ⚠</span>`
+        if (dateStr <= in90) return `<span class="badge badge-warning">${label}: ${d}</span>`
         return `<span class="badge" style="background:var(--gray-200);color:var(--gray-700);">${label}: ${d}</span>`
       }
       const tr = document.createElement('tr')
@@ -272,6 +463,8 @@ export async function loadVeicoliAlert() {
   }
 }
 
+// ── Init ──────────────────────────────────────────────────────────────────────
+
 export function initCruscotto(){
   try{
     async function refreshAll(){
@@ -289,6 +482,9 @@ export function initCruscotto(){
       const btn = e.target.closest('[data-action="open"]')
       if (btn?.dataset.id) await openModalIntervento(btn.dataset.id)
     })
+
+    document.getElementById('btn-view-lista')?.addEventListener('click', () => setMapView('lista'))
+    document.getElementById('btn-view-mappa')?.addEventListener('click', () => setMapView('mappa'))
 
     refreshAll()
   }catch(err){
