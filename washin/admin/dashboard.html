@@ -204,6 +204,10 @@
       .ana-btn-blue { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
       .ana-btn-green { background: #f0fdf4; color: #059669; border: 1px solid #d1fae5; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
       .ana-btn-eco { background: #fefce8; color: #b45309; border: 1px solid #fde68a; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
+      .ana-btn-scheda { background: #faf5ff; color: #7c3aed; border: 1px solid #e9d5ff; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
+      /* ── Scheda contratto ── */
+      .scheda-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
+      .scheda-section-title { font-size: 11px; font-weight: 700; color: var(--teal,#0d9488); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; }
     </style>
   <body>
     <div class="app-layout">
@@ -364,12 +368,29 @@
               <strong>Utenti</strong>
               <p>Operatori e accessi</p>
             </a>
+            <a href="#modelli-contratti" data-target="modelli-contratti" class="config-card">
+              <div class="config-card-icon">📄</div>
+              <strong>Modelli Contratti</strong>
+              <p>Template per tipo cliente</p>
+            </a>
             <a href="#impostazioni" data-target="impostazioni" class="config-card">
               <div class="config-card-icon">🏢</div>
               <strong>Dati Azienda</strong>
               <p>Recapiti e dati fiscali</p>
             </a>
           </div>
+        </section>
+
+        <!-- ── Modelli Contratti ─────────────────────── -->
+        <section id="modelli-contratti" class="section hidden">
+          <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+              <h1>Modelli Contratti</h1>
+              <p style="color:var(--gray-500);margin-top:8px;">Configura i template per tipo di cliente. I dati dell'appaltatore vengono usati nella generazione del contratto.</p>
+            </div>
+          </div>
+          <div id="modelli-list"></div>
         </section>
 
         <!-- ── Clienti ──────────────────────────────── -->
@@ -1301,6 +1322,127 @@
       </div>
     </div>
 
+    <!-- ── Modal Configurazione Modello Contratto ── -->
+    <div class="modal-overlay" id="modello-config-modal">
+      <div class="modal-box" style="max-width:600px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;">
+          <div>
+            <h2 style="margin:0 0 4px;font-size:17px;">Configura modello</h2>
+            <p style="margin:0;font-size:13px;color:var(--gray-500);"><strong id="mc-nome"></strong> — tipo: <span id="mc-tipo" style="text-transform:capitalize;"></span></p>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm mc-close">✕</button>
+        </div>
+        <form>
+          <p style="margin:0 0 10px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Dati Appaltatore (stampati nel contratto)</p>
+          <div class="form-group"><label>Ragione sociale impresa</label><input name="ragione_sociale_appaltatore" type="text" placeholder="WashIN Srl"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>P.IVA impresa</label><input name="piva_appaltatore" type="text"></div>
+            <div class="form-group"><label>Legale rappresentante</label><input name="legale_rappresentante" type="text"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;">
+            <div class="form-group"><label>Comune sede</label><input name="comune_appaltatore" type="text"></div>
+            <div class="form-group"><label>Indirizzo sede</label><input name="indirizzo_appaltatore" type="text"></div>
+          </div>
+          <div class="form-group"><label>Registro Imprese (es. Milano n. 12345)</label><input name="registro_imprese" type="text"></div>
+          <div class="form-group"><label>IBAN (default)</label><input name="iban" type="text" placeholder="IT60X..."></div>
+
+          <p style="margin:18px 0 10px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Parametri Contrattuali (valori default)</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Foro competente</label><input name="foro_competente" type="text" placeholder="Milano"></div>
+            <div class="form-group"><label>Massimale polizza RCT/RCO</label><input name="massimale_polizza" type="text" placeholder="2.000.000,00"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Giorni scadenza pagamento</label><input name="giorni_pagamento" type="number" min="0" max="120" value="30"></div>
+            <div class="form-group"><label>Giorni preavviso disdetta</label><input name="giorni_preavviso_disdetta" type="number" min="0" value="60"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Giorni preavviso recesso</label><input name="giorni_preavviso_recesso" type="number" min="0" value="30"></div>
+            <div class="form-group"><label>Giorni termine diffida</label><input name="giorni_termine_diffida" type="number" min="0" value="15"></div>
+          </div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px;">
+            <button type="button" class="btn btn-secondary btn-sm mc-close">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva configurazione</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Modal Scheda Contratto Condominio ── -->
+    <div class="modal-overlay" id="scheda-contratto-modal">
+      <div class="modal-box" style="max-width:760px;width:100%;max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px;">
+          <h2 id="scheda-title" style="margin:0;font-size:17px;">Scheda Contratto</h2>
+          <button type="button" class="btn btn-secondary btn-sm scheda-close">✕</button>
+        </div>
+        <div style="display:flex;gap:8px;padding:12px 0 16px;border-bottom:1px solid var(--gray-200);margin-bottom:4px;">
+          <button type="button" id="scheda-genera-btn" class="btn btn-sm" style="background:#4f46e5;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;">🖨 Genera Contratto</button>
+          <button type="button" id="scheda-salva-btn" class="btn btn-secondary btn-sm">💾 Salva scheda</button>
+        </div>
+        <form>
+          <!-- Committente -->
+          <p class="scheda-section-title" style="margin-top:16px;">Committente (Condominio)</p>
+          <div class="form-group"><label>Nome condominio</label><input name="nome_condominio" type="text" required></div>
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;">
+            <div class="form-group"><label>Comune</label><input name="comune_condominio" type="text"></div>
+            <div class="form-group"><label>Via e numero</label><input name="indirizzo_condominio" type="text"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Codice Fiscale condominio</label><input name="cf_condominio" type="text" placeholder="CF o P.IVA"></div>
+            <div class="form-group"><label>Nome Amministratore</label><input name="nome_amministratore" type="text"></div>
+          </div>
+
+          <!-- Immobile e servizio -->
+          <p class="scheda-section-title scheda-section">Immobile e Servizio</p>
+          <div class="form-group"><label>Indirizzo completo stabile (se diverso da sopra)</label><input name="indirizzo_stabile" type="text"></div>
+          <div style="display:grid;grid-template-columns:1fr 2fr 2fr;gap:10px;">
+            <div class="form-group"><label>Interventi/settimana</label><input name="interventi_settimanali" type="number" min="1" max="7" placeholder="2"></div>
+            <div class="form-group"><label>Giorni (es. lun, mer, ven)</label><input name="giorni_intervento" type="text" placeholder="lunedì, mercoledì"></div>
+            <div class="form-group"><label>Orario</label><input name="orario_intervento" type="text" placeholder="08:00–10:00"></div>
+          </div>
+
+          <!-- Corrispettivo -->
+          <p class="scheda-section-title scheda-section">Corrispettivo</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Importo mensile (€)</label><input name="corrispettivo_mensile" type="number" step="0.01" min="0"></div>
+            <div class="form-group"><label>Giorni scadenza pag.</label><input name="giorni_pagamento" type="number" min="0" max="120"></div>
+            <div class="form-group"><label>IBAN</label><input name="iban" type="text" placeholder="IT60X..."></div>
+          </div>
+
+          <!-- Durata -->
+          <p class="scheda-section-title scheda-section">Durata</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Durata (anni)</label><input name="durata_anni" type="number" min="1" max="10" placeholder="1"></div>
+            <div class="form-group"><label>Data inizio</label><input name="data_inizio_contratto" type="date"></div>
+            <div class="form-group"><label>Data fine</label><input name="data_fine_contratto" type="date"></div>
+            <div class="form-group"><label>Giorni preavviso disdetta</label><input name="giorni_preavviso_disdetta" type="number" min="0"></div>
+          </div>
+
+          <!-- Condizioni -->
+          <p class="scheda-section-title scheda-section">Condizioni</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Massimale polizza RCT/RCO (€)</label><input name="massimale_polizza" type="text" placeholder="2.000.000,00"></div>
+            <div class="form-group"><label>Giorni preavviso recesso</label><input name="giorni_preavviso_recesso" type="number" min="0"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Giorni termine diffida</label><input name="giorni_termine_diffida" type="number" min="0"></div>
+            <div class="form-group"><label>Foro competente</label><input name="foro_competente" type="text" placeholder="Milano"></div>
+          </div>
+
+          <!-- Firma -->
+          <p class="scheda-section-title scheda-section">Firma</p>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;">
+            <div class="form-group"><label>Luogo firma</label><input name="luogo_firma" type="text"></div>
+            <div class="form-group"><label>Data firma</label><input name="data_firma" type="date"></div>
+          </div>
+
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px;">
+            <button type="button" class="btn btn-secondary btn-sm scheda-close">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva e chiudi</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
     <!-- ── Mobile bottom sheet (tutte le sezioni extra) ── -->
@@ -1361,6 +1503,7 @@
       import { initUtenti } from '../js/admin/utenti.js'
       import { initContoEconomico } from '../js/admin/contoeconomico.js'
       import { initAnagrafica } from '../js/admin/anagrafica.js'
+      import { initModelliContratti } from '../js/admin/modelli_contratti.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -1498,6 +1641,7 @@
         initUtenti()
         initContoEconomico()
         initAnagrafica()
+        initModelliContratti()
       })
     </script>
   </body>

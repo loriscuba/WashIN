@@ -3,6 +3,7 @@ import { showToast } from './clienti.js'
 import { openModalCliente } from './clienti.js'
 import { openModalContratto } from './contratti.js'
 import { openModalSede, openStoricSede } from './sedi.js'
+import { openSchedaContratto } from './modelli_contratti.js'
 
 let _tree = []
 let _search = ''
@@ -120,7 +121,7 @@ function buildClienteEl(cliente) {
     </div>
     <div class="ana-children" id="ana-c-${cliente.id}" style="display:none">
       ${contratti.length
-        ? contratti.map(c => buildContrattoHtml(c, cliente.ragione_sociale || '')).join('')
+        ? contratti.map(c => buildContrattoHtml(c, cliente.ragione_sociale || '', cliente.tipo || '')).join('')
         : '<div class="ana-leaf-empty">Nessun contratto — usa "+ Contratto" per aggiungerne uno.</div>'
       }
     </div>
@@ -142,10 +143,13 @@ function buildClienteEl(cliente) {
   return el
 }
 
-function buildContrattoHtml(c, nomeCliente) {
+function buildContrattoHtml(c, nomeCliente, tipoCliente = '') {
   const sedi = (c.sedi_cliente || []).sort((a, b) => (a.nome_sede || '').localeCompare(b.nome_sede || ''))
   const badgeCls = c.stato === 'attivo' ? 'badge-success' : c.stato === 'scaduto' ? 'badge-danger' : 'badge-warning'
   const arrowHtml = sedi.length ? ICO.chevronRight : ICO.dot
+  const schedaBtn = tipoCliente === 'condominio'
+    ? `<button class="btn btn-sm ana-btn-scheda" data-action="scheda-contratto" data-id="${c.id}">Scheda</button>`
+    : ''
 
   return `
     <div class="ana-contratto" data-id="${c.id}">
@@ -166,6 +170,7 @@ function buildContrattoHtml(c, nomeCliente) {
           <button class="btn btn-sm btn-secondary" data-action="edit-contratto" data-id="${c.id}">Modifica</button>
           <button class="btn btn-sm ana-btn-green" data-action="new-sede" data-contratto-id="${c.id}">+ Sede</button>
           <button class="btn btn-sm ana-btn-eco" data-action="economico-contratto" data-id="${c.id}" data-nome="${nomeCliente.replace(/"/g, '&quot;')}">Economico</button>
+          ${schedaBtn}
         </div>
       </div>
       <div class="ana-children" id="ana-s-${c.id}" style="display:none">
@@ -235,6 +240,7 @@ export function initAnagrafica() {
 
     if (action === 'new-contratto') await openModalContratto(null, btn.dataset.clienteId)
     if (action === 'new-sede') await openModalSede(null, btn.dataset.contrattoId)
+    if (action === 'scheda-contratto') await openSchedaContratto(btn.dataset.id)
     // edit-cliente, edit-contratto, edit-sede, storico-sede, economico-contratto
     // handled by their own init listeners via global document delegation
   })
