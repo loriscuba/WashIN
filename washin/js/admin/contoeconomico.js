@@ -75,37 +75,45 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
   let totaleVeicoli = 0
 
   const interventiCalcolati = rows.map(iv => {
-    const ore = (new Date(iv.fine_effettivo) - new Date(iv.inizio_effettivo)) / 3_600_000
+    const ore = Math.max(0, (new Date(iv.fine_effettivo) - new Date(iv.inizio_effettivo)) / 3_600_000)
+    // durate >24h indicano timestamp sbagliato (es. timbratura dimenticata del giorno prima)
+    const anomalo = ore > 24
 
     let costoForzaLavoro = 0
-    ;[iv.operatore, iv.operatore2].filter(Boolean).forEach(op => {
-      const costoMensile = op.costo_mensile || 0
-      const oreMensili = op.ore_mensili_contratto || 160
-      if (!costoMensile) hasDatiParziali = true
-      const costoOrario = oreMensili > 0 ? costoMensile / oreMensili : 0
-      costoForzaLavoro += costoOrario * ore
-    })
+    if (!anomalo) {
+      ;[iv.operatore, iv.operatore2].filter(Boolean).forEach(op => {
+        const costoMensile = op.costo_mensile || 0
+        const oreMensili = op.ore_mensili_contratto || 160
+        if (!costoMensile) hasDatiParziali = true
+        const costoOrario = oreMensili > 0 ? costoMensile / oreMensili : 0
+        costoForzaLavoro += costoOrario * ore
+      })
+    }
 
     const mats = matsByIntervento[iv.id] || []
-    const costoMateriali = mats.reduce((s, m) => s + (m.quantita || 0) * (m.costo_unitario_snapshot || 0), 0)
+    const costoMateriali = anomalo ? 0 : mats.reduce((s, m) => s + (m.quantita || 0) * (m.costo_unitario_snapshot || 0), 0)
 
     const km = iv.km_percorsi || 0
-    const costoVeicolo = km > 0 ? km * (avgConsumo / 100) * avgCarbL : 0
+    const costoVeicolo = (!anomalo && km > 0) ? km * (avgConsumo / 100) * avgCarbL : 0
 
-    totaleForzaLavoro += costoForzaLavoro
-    totaleMateriali += costoMateriali
-    totaleVeicoli += costoVeicolo
+    if (!anomalo) {
+      totaleForzaLavoro += costoForzaLavoro
+      totaleMateriali += costoMateriali
+      totaleVeicoli += costoVeicolo
+    }
 
     return {
       id: iv.id,
       data: iv.data_pianificata,
-      ore: Math.max(0, ore),
+      ore,
+      anomalo,
       costoForzaLavoro,
       costoMateriali,
       costoVeicolo,
     }
   })
 
+  const hasAnomalies = interventiCalcolati.some(iv => iv.anomalo)
   const ricavo = contratto.importo_mensile || 0
   const costoTotale = totaleForzaLavoro + totaleMateriali + totaleVeicoli
   const margineLordo = ricavo - costoTotale
@@ -121,6 +129,7 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     margineLordo,
     marginePct,
     hasDatiParziali,
+    hasAnomalies,
     interventi: interventiCalcolati,
   }
 }
@@ -171,11 +180,13 @@ async function calcolaEMostra() {
   const loadingEl = document.getElementById('ce-loading')
   const kpiEl = document.getElementById('ce-kpi')
   const bannerEl = document.getElementById('ce-banner-parziale')
+  const anomalieEl = document.getElementById('ce-banner-anomalie')
   const sectionEl = document.getElementById('ce-interventi-section')
 
   if (loadingEl) loadingEl.style.display = 'flex'
   if (kpiEl) kpiEl.innerHTML = ''
   if (bannerEl) bannerEl.style.display = 'none'
+  if (anomalieEl) anomalieEl.style.display = 'none'
   if (sectionEl) sectionEl.style.display = 'none'
 
   try {
@@ -188,6 +199,7 @@ async function calcolaEMostra() {
     }
 
     if (bannerEl) bannerEl.style.display = result.hasDatiParziali ? 'flex' : 'none'
+    if (anomalieEl) anomalieEl.style.display = result.hasAnomalies ? 'flex' : 'none'
 
     renderKPICards(result)
 
@@ -198,13 +210,17 @@ async function calcolaEMostra() {
         tbody.innerHTML = ''
         result.interventi.forEach(iv => {
           const tr = document.createElement('tr')
+          if (iv.anomalo) tr.style.background = '#fef2f2'
+          const oreCell = iv.anomalo
+            ? `<span style="color:#dc2626;font-weight:700;" title="Durata anomala: verifica inizio/fine effettivo nel pannello Interventi">${iv.ore.toFixed(1)}h ⚠</span>`
+            : `${iv.ore.toFixed(1)}h`
           tr.innerHTML = `
             <td>${iv.data ? new Date(iv.data + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : '-'}</td>
-            <td>${iv.ore.toFixed(1)}h</td>
-            <td>${eur(iv.costoForzaLavoro)}</td>
-            <td>${eur(iv.costoMateriali)}</td>
-            <td>${eur(iv.costoVeicolo)}</td>
-            <td><strong>${eur(iv.costoForzaLavoro + iv.costoMateriali + iv.costoVeicolo)}</strong></td>
+            <td>${oreCell}</td>
+            <td>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro)}</td>
+            <td>${iv.anomalo ? '—' : eur(iv.costoMateriali)}</td>
+            <td>${iv.anomalo ? '—' : eur(iv.costoVeicolo)}</td>
+            <td><strong>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro + iv.costoMateriali + iv.costoVeicolo)}</strong></td>
           `
           tbody.appendChild(tr)
         })
