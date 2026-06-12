@@ -43,6 +43,7 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     .gte('data_pianificata', startDate)
     .lte('data_pianificata', endDate)
     .not('fine_effettivo', 'is', null)
+    .not('inizio_effettivo', 'is', null)
   if (ie) throw ie
 
   const rows = interventiRaw || []
