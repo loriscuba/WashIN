@@ -340,7 +340,9 @@ export function initModelliContratti() {
 
   // Config modal
   const cfgModal = document.getElementById('modello-config-modal')
-  cfgModal?.querySelector('.mc-close')?.addEventListener('click', () => cfgModal.classList.remove('active'))
+  cfgModal?.querySelectorAll('.mc-close').forEach(btn =>
+    btn.addEventListener('click', () => cfgModal.classList.remove('active'))
+  )
   cfgModal?.querySelector('form')?.addEventListener('submit', async e => {
     e.preventDefault()
     const form = e.target
@@ -350,7 +352,9 @@ export function initModelliContratti() {
 
   // Scheda modal
   const schedaModal = document.getElementById('scheda-contratto-modal')
-  schedaModal?.querySelector('.scheda-close')?.addEventListener('click', () => schedaModal.classList.remove('active'))
+  schedaModal?.querySelectorAll('.scheda-close').forEach(btn =>
+    btn.addEventListener('click', () => schedaModal.classList.remove('active'))
+  )
   schedaModal?.querySelector('#scheda-salva-btn')?.addEventListener('click', async () => {
     const form = schedaModal.querySelector('form')
     const id = schedaModal.dataset.contrattoId
