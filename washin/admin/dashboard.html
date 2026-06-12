@@ -7,7 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230D9488'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Arial,sans-serif' font-weight='800' font-size='18'>W</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/WashIN/washin/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/lucide/dist/lucide.min.js" defer></script>
     <style>
@@ -208,11 +208,20 @@
       /* ── Scheda contratto ── */
       .scheda-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
       .scheda-section-title { font-size: 11px; font-weight: 700; color: var(--teal,#0d9488); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; }
+      /* ── Sidebar nav icon sizing ── */
+      .sidebar-nav a svg { width: 17px; height: 17px; flex-shrink: 0; }
+      .sidebar-nav a .nav-label { margin-left: 4px; }
     </style>
   <body>
     <div class="app-layout">
       <aside class="sidebar">
-        <div class="sidebar-logo">Wash<span class="in">IN</span></div>
+        <div class="sidebar-logo">
+          <span class="sidebar-logo-text">Wash<span class="in">IN</span></span>
+          <span class="sidebar-logo-icon">W<span class="in">I</span></span>
+          <button class="sidebar-toggle" id="sidebar-toggle" title="Comprimi/Espandi menu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+        </div>
         <div class="sidebar-avatar-wrap">
           <label class="sidebar-avatar" id="admin-sidebar-avatar" title="Cambia foto profilo">
             <img src="" alt="" />
@@ -227,18 +236,21 @@
           <button id="btn-profilo-admin" type="button" style="width:100%;background:#fff;color:#0D9488;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Il mio profilo</button>
         </div>
         <nav class="sidebar-nav" id="sidebar-nav">
-          <a class="active" href="#cruscotto" data-target="cruscotto"><span data-lucide="layout"></span> Cruscotto</a>
-          <a href="#clienti" data-target="clienti"><span data-lucide="users"></span> Clienti</a>
-          <a href="#interventi" data-target="interventi"><span data-lucide="calendar"></span> Interventi</a>
-          <a href="#fatture" data-target="fatture"><span data-lucide="file-invoice"></span> Fatture</a>
-          <a href="#presenze" data-target="presenze"><span data-lucide="clock"></span> Presenze</a>
-          <a href="#preventivi" data-target="preventivi"><span data-lucide="file-plus"></span> Preventivi</a>
-          <a href="#magazzino" data-target="magazzino"><span data-lucide="package"></span> Magazzino</a>
-          <a href="#veicoli" data-target="veicoli"><span data-lucide="truck"></span> Veicoli</a>
-          <a href="#configurazioni" data-target="configurazioni"><span data-lucide="settings-2"></span> Configurazioni</a>
+          <a class="active" href="#cruscotto" data-target="cruscotto" data-tooltip="Cruscotto"><span data-lucide="layout-dashboard"></span><span class="nav-label">Cruscotto</span></a>
+          <a href="#clienti" data-target="clienti" data-tooltip="Clienti"><span data-lucide="users"></span><span class="nav-label">Clienti</span></a>
+          <a href="#interventi" data-target="interventi" data-tooltip="Interventi"><span data-lucide="calendar-check"></span><span class="nav-label">Interventi</span></a>
+          <a href="#fatture" data-target="fatture" data-tooltip="Fatture"><span data-lucide="receipt"></span><span class="nav-label">Fatture</span></a>
+          <a href="#presenze" data-target="presenze" data-tooltip="Presenze"><span data-lucide="clock"></span><span class="nav-label">Presenze</span></a>
+          <a href="#preventivi" data-target="preventivi" data-tooltip="Preventivi"><span data-lucide="file-plus"></span><span class="nav-label">Preventivi</span></a>
+          <a href="#magazzino" data-target="magazzino" data-tooltip="Magazzino"><span data-lucide="package"></span><span class="nav-label">Magazzino</span></a>
+          <a href="#veicoli" data-target="veicoli" data-tooltip="Veicoli"><span data-lucide="truck"></span><span class="nav-label">Veicoli</span></a>
+          <a href="#configurazioni" data-target="configurazioni" data-tooltip="Configurazioni"><span data-lucide="settings-2"></span><span class="nav-label">Configurazioni</span></a>
         </nav>
-        <div style="margin-top:auto; padding: 0 20px;">
-          <button id="logout-button" class="btn btn-secondary btn-sm" style="width:100%;">Logout</button>
+        <div id="sidebar-bottom" style="margin-top:auto; padding: 0 20px; padding-bottom: 8px;">
+          <button id="logout-button" class="btn btn-secondary btn-sm" style="width:100%;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span class="logout-label">Logout</span>
+          </button>
         </div>
       </aside>
 
@@ -1548,6 +1560,46 @@
         document.querySelector('.sidebar')?.classList.remove('open')
         document.getElementById('sidebar-backdrop')?.classList.remove('open')
       }
+
+      // ── Sidebar collapse ─────────────────────────────
+      ;(function initSidebarCollapse() {
+        const layout = document.querySelector('.app-layout')
+        const toggle = document.getElementById('sidebar-toggle')
+        const KEY = 'washin-sb-collapsed'
+
+        function setCollapsed(collapsed, save) {
+          layout?.classList.toggle('sidebar-collapsed', collapsed)
+          if (save) localStorage.setItem(KEY, collapsed ? '1' : '0')
+        }
+
+        const saved = localStorage.getItem(KEY)
+        setCollapsed(saved !== null ? saved === '1' : window.innerWidth < 1100)
+
+        toggle?.addEventListener('click', () => {
+          const next = !layout?.classList.contains('sidebar-collapsed')
+          setCollapsed(next, true)
+        })
+
+        window.addEventListener('resize', () => {
+          if (localStorage.getItem(KEY) === null) setCollapsed(window.innerWidth < 1100)
+        })
+
+        // Floating tooltip for collapsed nav items
+        const tip = document.createElement('div')
+        tip.style.cssText = 'position:fixed;z-index:500;background:#0f172a;color:#e2e8f0;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:600;pointer-events:none;opacity:0;transition:opacity 0.12s ease;box-shadow:0 4px 14px rgba(0,0,0,0.35);white-space:nowrap;font-family:Outfit,sans-serif;'
+        document.body.appendChild(tip)
+
+        document.getElementById('sidebar-nav')?.addEventListener('mouseover', e => {
+          const link = e.target.closest('a[data-tooltip]')
+          if (!link || !layout?.classList.contains('sidebar-collapsed')) { tip.style.opacity = '0'; return }
+          const r = link.getBoundingClientRect()
+          tip.textContent = link.dataset.tooltip
+          tip.style.left = (r.right + 10) + 'px'
+          tip.style.top = Math.round(r.top + r.height / 2 - 14) + 'px'
+          tip.style.opacity = '1'
+        })
+        document.getElementById('sidebar-nav')?.addEventListener('mouseout', () => { tip.style.opacity = '0' })
+      })()
 
       function maybeRefreshCruscotto(target) {
         if (target === 'cruscotto') window.dispatchEvent(new Event('cruscotto:refresh'))
