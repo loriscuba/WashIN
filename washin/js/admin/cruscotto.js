@@ -97,16 +97,28 @@ function buildPopup(iv) {
   `
 }
 
-function addMarker(L, iv, lat, lng) {
-  const color = STATUS_COLORS[iv.stato] || '#6b7280'
-  return L.circleMarker([lat, lng], {
-    radius: 13,
-    fillColor: color,
-    color: '#fff',
-    weight: 2.5,
-    opacity: 1,
-    fillOpacity: 0.92,
-  }).bindPopup(buildPopup(iv), { maxWidth: 260 }).addTo(_markersLayer)
+function buildMarker(L, lat, lng, ivs) {
+  const multi = ivs.length > 1
+  const color = multi ? '#6366f1' : (STATUS_COLORS[ivs[0].stato] || '#6b7280')
+  const size = multi ? 30 : 26
+  const label = multi ? `<span style="color:#fff;font-weight:800;font-size:12px;line-height:1;">${ivs.length}</span>` : ''
+  const icon = L.divIcon({
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;">${label}</div>`,
+    className: '',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  })
+
+  const popupContent = ivs.length === 1
+    ? buildPopup(ivs[0])
+    : `<div style="font-size:13px;min-width:220px;">
+         <p style="margin:0 0 8px;font-weight:700;color:#6366f1;">📍 ${ivs[0].sedi_cliente?.nome_sede || 'Sede'} — ${ivs.length} interventi</p>
+         ${ivs.map(iv => buildPopup(iv)).join('<hr style="margin:8px 0;border:none;border-top:1px solid #e5e7eb;">')}
+       </div>`
+
+  return L.marker([lat, lng], { icon })
+    .bindPopup(popupContent, { maxWidth: 300 })
+    .addTo(_markersLayer)
 }
 
 async function renderMappaOggi(interventi) {
@@ -127,50 +139,51 @@ async function renderMappaOggi(interventi) {
     _markersLayer.clearLayers()
   }
 
-  const withCoords = []
+  // 1. Separate interventions with known coords from those to geocode
+  const resolved = []
   const toGeocode = []
-
   for (const iv of interventi) {
     const sede = iv.sedi_cliente
     if (!sede) continue
     if (sede.lat && sede.lng) {
-      withCoords.push({ iv, lat: sede.lat, lng: sede.lng })
+      resolved.push({ iv, lat: Number(sede.lat), lng: Number(sede.lng) })
     } else {
       toGeocode.push(iv)
     }
   }
 
-  // Place markers with known coords immediately
-  const allMarkers = []
-  for (const { iv, lat, lng } of withCoords) {
-    allMarkers.push(addMarker(L, iv, lat, lng))
-  }
-  if (allMarkers.length) {
-    _mapInstance.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.3))
-  }
-
-  // Geocode missing sedi and add incrementally
+  // 2. Geocode sedi without coordinates (rate-limited)
   let first = true
   for (const iv of toGeocode) {
     const sede = iv.sedi_cliente
-    const address = [sede.indirizzo, iv.contratti?.clienti?.citta || sede.clienti?.citta].filter(Boolean).join(', ')
+    const address = [sede.indirizzo, iv.contratti?.clienti?.citta].filter(Boolean).join(', ')
     if (!address) continue
     if (!first) await sleep(1100)
     first = false
     const coords = await geocodeSede(iv.sede_id, address)
-    if (!coords) continue
-    const m = addMarker(L, iv, coords.lat, coords.lng)
-    allMarkers.push(m)
+    if (coords) resolved.push({ iv, lat: coords.lat, lng: coords.lng })
+  }
+
+  // 3. Group by coordinates so stacked interventions share one marker
+  const byCoord = new Map()
+  for (const { iv, lat, lng } of resolved) {
+    const key = `${lat.toFixed(5)},${lng.toFixed(5)}`
+    if (!byCoord.has(key)) byCoord.set(key, { lat, lng, ivs: [] })
+    byCoord.get(key).ivs.push(iv)
+  }
+
+  // 4. Place one marker per unique location
+  const allMarkers = []
+  for (const { lat, lng, ivs } of byCoord.values()) {
+    allMarkers.push(buildMarker(L, lat, lng, ivs))
+  }
+
+  if (allMarkers.length) {
     _mapInstance.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.3))
   }
 
-  if (!allMarkers.length) {
-    const noData = document.getElementById('mappa-no-data')
-    if (noData) noData.style.display = 'flex'
-  } else {
-    const noData = document.getElementById('mappa-no-data')
-    if (noData) noData.style.display = 'none'
-  }
+  const noData = document.getElementById('mappa-no-data')
+  if (noData) noData.style.display = allMarkers.length ? 'none' : 'flex'
 }
 
 function setMapView(view) {
