@@ -453,9 +453,14 @@
             <button id="add-cliente-ana-button" class="btn btn-primary">+ Nuovo cliente</button>
           </div>
 
-          <div style="margin-bottom:14px;">
+          <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div style="display:flex;border:1.5px solid var(--gray-300);border-radius:8px;overflow:hidden;">
+              <button class="clienti-attivo-btn" data-attivo="true"  style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#0d9488;color:#fff;">Attivi</button>
+              <button class="clienti-attivo-btn" data-attivo="false" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#fff;color:#6b7280;border-left:1px solid var(--gray-300);">Inattivi</button>
+              <button class="clienti-attivo-btn" data-attivo=""      style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#fff;color:#6b7280;border-left:1px solid var(--gray-300);">Tutti</button>
+            </div>
             <input type="search" id="anagrafica-search" placeholder="🔍 Cerca cliente, P.IVA, contratto, città, provincia…"
-              style="padding:9px 14px;border:1.5px solid var(--gray-300);border-radius:10px;font-size:14px;width:100%;max-width:480px;box-sizing:border-box;outline:none;" />
+              style="padding:9px 14px;border:1.5px solid var(--gray-300);border-radius:10px;font-size:14px;flex:1;min-width:200px;max-width:480px;box-sizing:border-box;outline:none;" />
           </div>
 
           <div id="anagrafica-list"></div>
