@@ -5,6 +5,7 @@ let _allContratti = []
 let _search = ''
 let _sortCol = ''
 let _sortDir = 'asc'
+let _statoFiltro = 'attivo'
 
 function sortValue(c, col) {
   switch (col) {
@@ -184,7 +185,7 @@ export async function saveContratto(formData) {
 }
 
 async function reload() {
-  _allContratti = await loadContratti()
+  _allContratti = await loadContratti(_statoFiltro ? { stato: _statoFiltro } : {})
   filterAndRender()
 }
 
@@ -197,6 +198,19 @@ export function initContratti() {
 
     addBtn?.addEventListener('click', () => openModalContratto())
     modalClose?.addEventListener('click', () => modal?.classList.remove('active'))
+
+    // Filtro stato
+    document.querySelectorAll('.contratti-stato-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _statoFiltro = btn.dataset.stato
+        document.querySelectorAll('.contratti-stato-btn').forEach(b => {
+          const active = b.dataset.stato === _statoFiltro
+          b.style.background = active ? '#0d9488' : '#fff'
+          b.style.color = active ? '#fff' : '#6b7280'
+        })
+        reload()
+      })
+    })
 
     // Ricerca cliente
     document.getElementById('contratti-search')?.addEventListener('input', e => {
