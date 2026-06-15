@@ -7,6 +7,7 @@ import { openSchedaContratto } from './modelli_contratti.js'
 
 let _tree = []
 let _search = ''
+let _attivoFiltro = true
 
 const EUR = n => n != null
   ? new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n)
@@ -72,7 +73,9 @@ function matches(cliente) {
 export function renderAnagrafica() {
   const container = document.getElementById('anagrafica-list')
   if (!container) return
-  const filtered = _tree.filter(matches)
+  const filtered = _tree
+    .filter(c => _attivoFiltro === null ? true : c.attivo === _attivoFiltro)
+    .filter(matches)
   if (!filtered.length) {
     container.innerHTML = `<div class="ana-empty-state">
       <div style="color:var(--gray-300);margin-bottom:12px;">${ICO.search}</div>
@@ -222,6 +225,19 @@ export async function reloadAnagrafica() {
 }
 
 export function initAnagrafica() {
+  document.querySelectorAll('.clienti-attivo-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.attivo
+      _attivoFiltro = val === '' ? null : val === 'true'
+      document.querySelectorAll('.clienti-attivo-btn').forEach(b => {
+        const active = b.dataset.attivo === btn.dataset.attivo
+        b.style.background = active ? '#0d9488' : '#fff'
+        b.style.color = active ? '#fff' : '#6b7280'
+      })
+      renderAnagrafica()
+    })
+  })
+
   document.getElementById('anagrafica-search')?.addEventListener('input', e => {
     _search = e.target.value.trim()
     renderAnagrafica()
