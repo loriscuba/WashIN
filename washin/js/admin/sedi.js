@@ -26,24 +26,44 @@ async function nominatimSearch(query) {
     const city = ad.city || ad.town || ad.village || ad.municipality || ''
     const prov = (ad.county || '').replace(/Provincia (di |del |della |dell')/i, '').slice(0, 2).toUpperCase() || 'SV'
     const clean = [road + (num ? ' ' + num : ''), [cap, city, prov].filter(Boolean).join(' ')].filter(Boolean).join(', ')
-    return { lat: parseFloat(a.lat), lng: parseFloat(a.lon), displayName: clean || a.display_name }
+    return {
+      lat: parseFloat(a.lat),
+      lng: parseFloat(a.lon),
+      displayName: clean || a.display_name,
+      houseNumber: ad.house_number || null,
+    }
   } catch(err) {
     if (err.name !== 'AbortError') console.warn('Nominatim:', err)
     return null
   }
 }
 
+// Estrae il civico dalla parte di strada (prima della prima virgola), es. "Via Roma 50, ..." → "50"
+function extractInputNum(address) {
+  const streetPart = address.split(',')[0] || ''
+  const m = streetPart.match(/\s+(\d{1,4}[A-Za-z]?)\s*$/)
+  return m ? m[1].toUpperCase() : null
+}
+
 async function runGeoCheck(address) {
   const t = address?.trim()
   if (!t || t.length < 6) return null
+  const inputNum = extractInputNum(t)
   const exact = await nominatimSearch(t)
-  if (exact) return { found: true, ...exact }
+  if (exact) {
+    // Controlla se il civico è confermato da Nominatim
+    const returnedNum = exact.houseNumber?.toUpperCase() || null
+    const civicOk = !inputNum || (!!returnedNum && (
+      returnedNum === inputNum || returnedNum.includes(inputNum)
+    ))
+    return { found: true, civicOk, inputNum, ...exact }
+  }
   // Fallback: rimuovi il numero civico e riprova
   const m = t.match(/^(.*?)\s+\d+[A-Za-z]?\s*,(.*)$/)
   if (m) {
     const noNum = (m[1] + ', ' + m[2]).replace(/,\s*,/, ',').trim()
     const fallback = await nominatimSearch(noNum)
-    if (fallback) return { found: false, suggestion: fallback.displayName, ...fallback }
+    if (fallback) return { found: false, civicOk: false, inputNum, suggestion: fallback.displayName, ...fallback }
   }
   return null
 }
@@ -293,8 +313,10 @@ export function initSedi() {
           form._geoResult = result
           if (!result) {
             geofb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
-          } else if (result.found) {
-            geofb.innerHTML = `<span style="color:#059669;">✓ Verificato: <em style="font-style:normal;">${result.displayName}</em></span>`
+          } else if (result.found && result.civicOk) {
+            geofb.innerHTML = `<span style="color:#059669;">✓ Via e civico verificati: <em style="font-style:normal;">${result.displayName}</em></span>`
+          } else if (result.found && !result.civicOk) {
+            geofb.innerHTML = `<span style="color:#d97706;">⚠ Via trovata ma civico ${result.inputNum ? '<strong>' + result.inputNum + '</strong> ' : ''}non confermato in OpenStreetMap: <em style="font-style:normal;">${result.displayName}</em></span>`
           } else {
             geofb.innerHTML = `<span style="color:#d97706;">⚠ Civico non trovato — indirizzo più vicino:</span><br>
               <button type="button" class="geo-suggest-btn" style="margin-top:4px;padding:3px 10px;background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#92400e;cursor:pointer;">
