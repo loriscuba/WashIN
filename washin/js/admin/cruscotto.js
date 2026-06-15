@@ -456,9 +456,10 @@ export async function loadMagazzinoAlert() {
     const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)
     const { data, error } = await supabase.from('magazzino').select('*').eq('attivo', true)
     if (error) throw error
-    const items = (data || []).filter(p =>
-      (p.quantita_disponibile ?? 0) <= 5 || (p.scadenza && p.scadenza <= in30)
-    ).sort((a, b) => {
+    const items = (data || []).filter(p => {
+      const soglia = p.soglia_minima ?? 5
+      return (p.quantita_disponibile ?? 0) <= soglia || (p.scadenza && p.scadenza <= in30)
+    }).sort((a, b) => {
       if (a.scadenza && b.scadenza) return a.scadenza.localeCompare(b.scadenza)
       if (a.scadenza) return -1
       if (b.scadenza) return 1
@@ -475,7 +476,7 @@ export async function loadMagazzinoAlert() {
     items.forEach(p => {
       const isExpired = p.scadenza && p.scadenza < today
       const isExpiring = p.scadenza && p.scadenza <= in30
-      const isLowStock = (p.quantita_disponibile ?? 0) <= 5
+      const isLowStock = (p.quantita_disponibile ?? 0) <= (p.soglia_minima ?? 5)
       const badges = []
       if (isExpired) badges.push('<span class="badge badge-danger">Scaduto</span>')
       else if (isExpiring) badges.push('<span class="badge badge-warning">In scadenza</span>')
