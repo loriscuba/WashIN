@@ -337,13 +337,23 @@ export async function openModalIntervento(id = null){
           tempiDiv.style.display = 'none'
         }
       }
+      const ricSec = document.getElementById('ricorrenza-section')
+      if (ricSec) ricSec.style.display = 'none'
     } else {
       form.reset()
       delete form.dataset.interventoId
       const matList = document.getElementById('materiali-list')
       if (matList) matList.innerHTML = ''
-      const tempiDiv = document.getElementById('intervento-tempi-effettivi')
+      const tempiDiv = document.getElementById('intervento-tempi-effettivo')
       if (tempiDiv) tempiDiv.style.display = 'none'
+      const ricSec = document.getElementById('ricorrenza-section')
+      if (ricSec) ricSec.style.display = ''
+      const ricTog = document.getElementById('ricorrenza-toggle')
+      if (ricTog) ricTog.checked = false
+      const ricOpts = document.getElementById('ricorrenza-opts')
+      if (ricOpts) ricOpts.style.display = 'none'
+      const ricPrev = document.getElementById('ricorrenza-preview')
+      if (ricPrev) ricPrev.textContent = ''
     }
 
     modal.classList.add('active')
@@ -353,7 +363,7 @@ export async function openModalIntervento(id = null){
   }
 }
 
-export async function saveIntervento(formData){
+export async function saveIntervento(formData, { silent = false } = {}){
   try{
     const fields = {
       contratto_id: formData.contratto_id || null,
@@ -387,7 +397,7 @@ export async function saveIntervento(formData){
         tipo: 'info'
       }).then(({ error: ne }) => { if (ne) console.warn('Notifica:', ne.message) })
     })
-    showToast('Intervento salvato','success')
+    if (!silent) showToast('Intervento salvato','success')
     return savedId
   }catch(err){
     showToast('Errore salvataggio intervento','error')
@@ -671,10 +681,40 @@ export function initInterventi(){
 
     document.getElementById('add-materiale-btn')?.addEventListener('click', () => addMaterialeRow())
 
+    // ── Ricorrenza ────────────────────────────────────
+    function updateRicorrenzaPreview() {
+      const preview = document.getElementById('ricorrenza-preview')
+      if (!preview) return
+      const datePart = form?.querySelector('[name="data_pianificata"]')?.value
+      const tipo = form?.querySelector('[name="ricorrenza_tipo"]')?.value || 'settimanale'
+      const count = parseInt(form?.querySelector('[name="ricorrenza_count"]')?.value || 2)
+      if (!datePart || count < 2) { preview.textContent = ''; return }
+      const dates = []
+      const base = new Date(datePart + 'T12:00:00')
+      for (let i = 0; i < Math.min(count, 6); i++) {
+        const d = new Date(base)
+        if (tipo === 'settimanale') d.setDate(d.getDate() + i * 7)
+        else d.setMonth(d.getMonth() + i)
+        dates.push(d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }))
+      }
+      const suffix = count > 6 ? ` … +${count - 6} altri` : ''
+      preview.textContent = `${count} interventi: ${dates.join(' · ')}${suffix}`
+    }
+
+    document.getElementById('ricorrenza-toggle')?.addEventListener('change', e => {
+      const opts = document.getElementById('ricorrenza-opts')
+      if (opts) opts.style.display = e.target.checked ? 'block' : 'none'
+      if (e.target.checked) updateRicorrenzaPreview()
+    })
+    form?.querySelector('[name="ricorrenza_tipo"]')?.addEventListener('change', updateRicorrenzaPreview)
+    form?.querySelector('[name="ricorrenza_count"]')?.addEventListener('input', updateRicorrenzaPreview)
+    form?.querySelector('[name="data_pianificata"]')?.addEventListener('change', updateRicorrenzaPreview)
+
     if (form){
       form.addEventListener('submit', async (e)=>{
         e.preventDefault()
         const fd = new FormData(form)
+        const isNew = !form.dataset.interventoId
         const payload = {
           id: form.dataset.interventoId || undefined,
           operatore_id: fd.get('operatore_id') || null,
@@ -690,8 +730,29 @@ export function initInterventi(){
           stato: fd.get('stato') || null,
           km_percorsi: fd.get('km_percorsi') || 0,
         }
-        const savedId = await saveIntervento(payload)
-        if (savedId) await saveMateriali(savedId)
+
+        const ricEnabled = isNew && document.getElementById('ricorrenza-toggle')?.checked
+        const ricTipo = fd.get('ricorrenza_tipo') || 'settimanale'
+        const ricCount = Math.max(2, Math.min(52, parseInt(fd.get('ricorrenza_count') || 2)))
+        const useRic = ricEnabled && ricCount >= 2
+
+        const savedId = await saveIntervento(payload, { silent: useRic })
+        if (savedId) {
+          await saveMateriali(savedId)
+          if (useRic) {
+            const base = new Date(payload.data_pianificata + 'T12:00:00')
+            for (let i = 1; i < ricCount; i++) {
+              const d = new Date(base)
+              if (ricTipo === 'settimanale') d.setDate(d.getDate() + i * 7)
+              else d.setMonth(d.getMonth() + i)
+              await saveIntervento(
+                { ...payload, id: undefined, data_pianificata: d.toISOString().slice(0, 10) },
+                { silent: true }
+              )
+            }
+            showToast(`Creati ${ricCount} interventi ${ricTipo === 'settimanale' ? 'settimanali' : 'mensili'}`, 'success')
+          }
+        }
         modal.classList.remove('active')
         refreshView()
       })
