@@ -20,7 +20,7 @@ function endOfMonth(date){
 
 export async function loadInterventi(filtri = {}){
   try{
-    let query = supabase.from('interventi').select("*, operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome), sedi_cliente(nome_sede,indirizzo, clienti(ragione_sociale))")
+    let query = supabase.from('interventi').select("*, operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome), sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale))")
 
     if (filtri.date) {
       query = query.eq('data_pianificata', filtri.date)
@@ -55,7 +55,7 @@ function createPill(intervento){
   const op1 = intervento.operatore ? `${intervento.operatore.nome || ''} ${intervento.operatore.cognome || ''}`.trim() : ''
   const op2 = intervento.operatore2 ? `${intervento.operatore2.nome || ''} ${intervento.operatore2.cognome || ''}`.trim() : ''
   const operatorName = [op1, op2].filter(Boolean).join(' + ') || 'Operatore'
-  const cliente = intervento.sedi_cliente?.clienti?.ragione_sociale || ''
+  const cliente = intervento.contratti?.clienti?.ragione_sociale || ''
   span.textContent = `${operatorName} — ${cliente}`
   // color by stato
   switch(intervento.stato){
@@ -136,7 +136,7 @@ export function renderListaInterventi(interventi){
       const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
       const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
       const operatorName = [op1, op2].filter(Boolean).join(' + ') || '-'
-      const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || '-'
+      const cliente = iv.contratti?.clienti?.ragione_sociale || '-'
       const badgeClass = STATO_BADGE[iv.stato] || 'badge-warning'
       const avviaBtn = iv.stato === 'pianificato'
         ? `<button class="btn btn-sm btn-primary" data-action="avvia-intervento" data-id="${iv.id}">▶ Avvia</button>`
