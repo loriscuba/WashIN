@@ -713,6 +713,26 @@ export function initInterventi(){
         e.preventDefault()
         const fd = new FormData(form)
         const isNew = !form.dataset.interventoId
+
+        // ── Validazione campi obbligatori ──────────────────────
+        const required = [
+          { name: 'operatore_id',    label: 'Operatore' },
+          { name: 'contratto_id',    label: 'Contratto' },
+          { name: 'sede_id',         label: 'Sede' },
+          { name: 'data_pianificata',label: 'Data' },
+        ]
+        const missing = []
+        required.forEach(({ name, label }) => {
+          const el = form.querySelector(`[name="${name}"]`)
+          const empty = !fd.get(name)
+          if (el) el.style.borderColor = empty ? '#dc2626' : ''
+          if (empty) missing.push(label)
+        })
+        if (missing.length) {
+          showToast(`Campi obbligatori mancanti: ${missing.join(', ')}`, 'error')
+          return
+        }
+
         const payload = {
           id: form.dataset.interventoId || undefined,
           operatore_id: fd.get('operatore_id') || null,
