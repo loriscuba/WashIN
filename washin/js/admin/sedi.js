@@ -1,6 +1,53 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
 
+// ── Geocoding live check ──────────────────────────────────────────────────────
+
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms) }
+}
+
+let _geoAbortCtrl = null
+
+async function nominatimSearch(query) {
+  if (_geoAbortCtrl) _geoAbortCtrl.abort()
+  _geoAbortCtrl = new AbortController()
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Italia')}&format=json&limit=1&accept-language=it&addressdetails=1`
+    const res = await fetch(url, { headers: { 'User-Agent': 'WashIN/1.0' }, signal: _geoAbortCtrl.signal })
+    const data = await res.json()
+    _geoAbortCtrl = null
+    if (!data.length) return null
+    const a = data[0]
+    const ad = a.address || {}
+    const road = ad.road || ad.pedestrian || ad.footway || ''
+    const num = ad.house_number || ''
+    const cap = ad.postcode || ''
+    const city = ad.city || ad.town || ad.village || ad.municipality || ''
+    const prov = (ad.county || '').replace(/Provincia (di |del |della |dell')/i, '').slice(0, 2).toUpperCase() || 'SV'
+    const clean = [road + (num ? ' ' + num : ''), [cap, city, prov].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+    return { lat: parseFloat(a.lat), lng: parseFloat(a.lon), displayName: clean || a.display_name }
+  } catch(err) {
+    if (err.name !== 'AbortError') console.warn('Nominatim:', err)
+    return null
+  }
+}
+
+async function runGeoCheck(address) {
+  const t = address?.trim()
+  if (!t || t.length < 6) return null
+  const exact = await nominatimSearch(t)
+  if (exact) return { found: true, ...exact }
+  // Fallback: rimuovi il numero civico e riprova
+  const m = t.match(/^(.*?)\s+\d+[A-Za-z]?\s*,(.*)$/)
+  if (m) {
+    const noNum = (m[1] + ', ' + m[2]).replace(/,\s*,/, ',').trim()
+    const fallback = await nominatimSearch(noNum)
+    if (fallback) return { found: false, suggestion: fallback.displayName, ...fallback }
+  }
+  return null
+}
+
 export async function loadSedi(filtri = {}) {
   try {
     let q = supabase.from('sedi_cliente').select('*, contratti(numero_contratto, clienti(ragione_sociale))')
@@ -136,6 +183,43 @@ export async function openModalSede(id = null, prefilledContrattoId = null) {
       modal.querySelector('h2').textContent = 'Nuova Sede'
       if (prefilledContrattoId && contrattoSelect) contrattoSelect.value = prefilledContrattoId
     }
+    // ── Check live geocoding sull'indirizzo ────────────────────────────────
+    const indirizzoEl = form.querySelector('[name="indirizzo"]')
+    form.querySelector('.indirizzo-geo-fb')?.remove()
+    const fb = document.createElement('div')
+    fb.className = 'indirizzo-geo-fb'
+    fb.style.cssText = 'margin-top:6px;font-size:12px;min-height:20px;line-height:1.5;'
+    indirizzoEl?.parentNode?.insertBefore(fb, indirizzoEl.nextSibling)
+
+    let _geoResult = null
+
+    const checkGeo = debounce(async val => {
+      const t = val?.trim()
+      if (!t || t.length < 6) { fb.innerHTML = ''; _geoResult = null; return }
+      fb.innerHTML = '<span style="color:#6b7280;">⏳ Verifica indirizzo...</span>'
+      const result = await runGeoCheck(t)
+      _geoResult = result
+      if (!result) {
+        fb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
+      } else if (result.found) {
+        fb.innerHTML = `<span style="color:#059669;">✓ Verificato: <em style="font-style:normal;">${result.displayName}</em></span>`
+      } else {
+        fb.innerHTML = `<span style="color:#d97706;">⚠ Via non trovata al civico indicato — indirizzo più vicino:</span><br>
+          <button type="button" class="geo-suggest-btn" style="margin-top:4px;padding:3px 10px;background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#92400e;cursor:pointer;">
+            ↩ Usa "${result.displayName}"
+          </button>`
+        fb.querySelector('.geo-suggest-btn')?.addEventListener('click', () => {
+          if (indirizzoEl) { indirizzoEl.value = result.displayName; indirizzoEl.dispatchEvent(new Event('input')) }
+        })
+      }
+    }, 800)
+
+    if (indirizzoEl) {
+      indirizzoEl.oninput = e => checkGeo(e.target.value)
+      if (id && indirizzoEl.value) checkGeo(indirizzoEl.value)
+    }
+    form._getGeoCoords = () => (_geoResult?.found ? { lat: _geoResult.lat, lng: _geoResult.lng } : null)
+
     modal.classList.add('active')
   } catch (err) {
     showToast('Errore apertura modal sede', 'error')
@@ -152,6 +236,8 @@ export async function saveSede(formData) {
       piano: formData.piano || null,
       mq_totali: formData.mq_totali ? parseFloat(formData.mq_totali) : null,
       note_accesso: formData.note_accesso || null,
+      lat: formData.lat ?? null,
+      lng: formData.lng ?? null,
     }
     let error
     if (formData.id) {
@@ -182,6 +268,7 @@ export function initSedi() {
     if (form) {
       form.addEventListener('submit', async e => {
         e.preventDefault()
+        const geoCoords = form._getGeoCoords?.()
         const payload = {
           id: form.dataset.sedeId || undefined,
           contratto_id: form.querySelector('[name="contratto_id"]').value,
@@ -190,6 +277,8 @@ export function initSedi() {
           piano: form.querySelector('[name="piano"]').value,
           mq_totali: form.querySelector('[name="mq_totali"]').value,
           note_accesso: form.querySelector('[name="note_accesso"]').value,
+          lat: geoCoords?.lat ?? null,
+          lng: geoCoords?.lng ?? null,
         }
         await saveSede(payload)
         form.reset()
