@@ -264,6 +264,15 @@ export async function loadInterventiOggi(){
 
     _interventiOggi = data || []
 
+    const btnM = document.getElementById('btn-view-mappa')
+    if (btnM) {
+      const hasData = _interventiOggi.length > 0
+      btnM.disabled = !hasData
+      btnM.title = hasData ? '' : 'Nessun intervento oggi'
+      btnM.style.opacity = hasData ? '' : '0.4'
+      btnM.style.cursor = hasData ? '' : 'not-allowed'
+    }
+
     const tbody = document.getElementById('interventi-oggi-body')
     if (tbody) {
       tbody.innerHTML = ''
@@ -286,7 +295,8 @@ export async function loadInterventiOggi(){
       })
     }
 
-    if (_mapView === 'mappa') await renderMappaOggi(_interventiOggi)
+    if (_mapView === 'mappa' && _interventiOggi.length === 0) setMapView('lista')
+    else if (_mapView === 'mappa') await renderMappaOggi(_interventiOggi)
     return _interventiOggi
   }catch(err){
     showToast('Errore caricamento interventi oggi','error')
