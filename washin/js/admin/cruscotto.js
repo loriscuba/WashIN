@@ -83,7 +83,7 @@ function buildPopup(iv) {
   const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
   const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
   const op = [op1, op2].filter(Boolean).join(' + ') || '-'
-  const cliente = sede.clienti?.ragione_sociale || '-'
+  const cliente = iv.contratti?.clienti?.ragione_sociale || sede.clienti?.ragione_sociale || '-'
   const color = STATUS_COLORS[iv.stato] || '#6b7280'
   const label = STATUS_LABEL[iv.stato] || iv.stato
   return `
@@ -153,7 +153,7 @@ async function renderMappaOggi(interventi) {
   let first = true
   for (const iv of toGeocode) {
     const sede = iv.sedi_cliente
-    const address = [sede.indirizzo, sede.clienti?.citta].filter(Boolean).join(', ')
+    const address = [sede.indirizzo, iv.contratti?.clienti?.citta || sede.clienti?.citta].filter(Boolean).join(', ')
     if (!address) continue
     if (!first) await sleep(1100)
     first = false
@@ -258,7 +258,8 @@ export async function loadInterventiOggi(){
       *,
       operatore:profili!operatore_id(nome,cognome),
       operatore2:profili!operatore2_id(nome,cognome),
-      sedi_cliente(nome_sede, indirizzo, lat, lng, clienti(ragione_sociale, citta))
+      sedi_cliente(nome_sede, indirizzo, lat, lng),
+      contratti!contratto_id(clienti(ragione_sociale, citta))
     `).eq('data_pianificata', today).order('ora_inizio_pianificata', { ascending: true })
     if (error) throw error
 
@@ -281,7 +282,7 @@ export async function loadInterventiOggi(){
         const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
         const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
         const op = [op1, op2].filter(Boolean).join(' + ') || '-'
-        const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || '-'
+        const cliente = iv.contratti?.clienti?.ragione_sociale || '-'
         const color = STATUS_COLORS[iv.stato] || '#6b7280'
         tr.innerHTML = `
           <td>${iv.ora_inizio_pianificata || '-'}</td>
