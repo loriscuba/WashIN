@@ -183,42 +183,14 @@ export async function openModalSede(id = null, prefilledContrattoId = null) {
       modal.querySelector('h2').textContent = 'Nuova Sede'
       if (prefilledContrattoId && contrattoSelect) contrattoSelect.value = prefilledContrattoId
     }
-    // ── Check live geocoding sull'indirizzo ────────────────────────────────
-    const indirizzoEl = form.querySelector('[name="indirizzo"]')
-    form.querySelector('.indirizzo-geo-fb')?.remove()
-    const fb = document.createElement('div')
-    fb.className = 'indirizzo-geo-fb'
-    fb.style.cssText = 'margin-top:6px;font-size:12px;min-height:20px;line-height:1.5;'
-    indirizzoEl?.parentNode?.insertBefore(fb, indirizzoEl.nextSibling)
-
-    let _geoResult = null
-
-    const checkGeo = debounce(async val => {
-      const t = val?.trim()
-      if (!t || t.length < 6) { fb.innerHTML = ''; _geoResult = null; return }
-      fb.innerHTML = '<span style="color:#6b7280;">⏳ Verifica indirizzo...</span>'
-      const result = await runGeoCheck(t)
-      _geoResult = result
-      if (!result) {
-        fb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
-      } else if (result.found) {
-        fb.innerHTML = `<span style="color:#059669;">✓ Verificato: <em style="font-style:normal;">${result.displayName}</em></span>`
-      } else {
-        fb.innerHTML = `<span style="color:#d97706;">⚠ Via non trovata al civico indicato — indirizzo più vicino:</span><br>
-          <button type="button" class="geo-suggest-btn" style="margin-top:4px;padding:3px 10px;background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#92400e;cursor:pointer;">
-            ↩ Usa "${result.displayName}"
-          </button>`
-        fb.querySelector('.geo-suggest-btn')?.addEventListener('click', () => {
-          if (indirizzoEl) { indirizzoEl.value = result.displayName; indirizzoEl.dispatchEvent(new Event('input')) }
-        })
-      }
-    }, 800)
-
-    if (indirizzoEl) {
-      indirizzoEl.oninput = e => checkGeo(e.target.value)
-      if (id && indirizzoEl.value) checkGeo(indirizzoEl.value)
+    // Resetta il feedback e, in modifica, rilancia il check sull'indirizzo esistente
+    const _geoFb = document.getElementById('sede-indirizzo-geo-fb')
+    if (_geoFb) _geoFb.innerHTML = ''
+    form._geoResult = null
+    if (id) {
+      const _ind = form.querySelector('[name="indirizzo"]')
+      if (_ind?.value) _ind.dispatchEvent(new Event('input'))
     }
-    form._getGeoCoords = () => (_geoResult?.found ? { lat: _geoResult.lat, lng: _geoResult.lng } : null)
 
     modal.classList.add('active')
   } catch (err) {
@@ -303,6 +275,43 @@ export function initSedi() {
         await openStoricSede(t.dataset.id, t.dataset.nome || '')
       }
     })
+
+    // ── Geocoding live — setup una sola volta ─────────────────────────────
+    if (form) {
+      const indirizzoInput = form.querySelector('[name="indirizzo"]')
+      if (indirizzoInput) {
+        const geofb = document.createElement('div')
+        geofb.id = 'sede-indirizzo-geo-fb'
+        geofb.style.cssText = 'margin-top:6px;font-size:12px;min-height:20px;line-height:1.5;'
+        indirizzoInput.parentNode?.insertBefore(geofb, indirizzoInput.nextSibling)
+
+        indirizzoInput.addEventListener('input', debounce(async e => {
+          const val = e.target.value?.trim()
+          if (!val || val.length < 6) { geofb.innerHTML = ''; form._geoResult = null; return }
+          geofb.innerHTML = '<span style="color:#6b7280;">⏳ Verifica indirizzo...</span>'
+          const result = await runGeoCheck(val)
+          form._geoResult = result
+          if (!result) {
+            geofb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
+          } else if (result.found) {
+            geofb.innerHTML = `<span style="color:#059669;">✓ Verificato: <em style="font-style:normal;">${result.displayName}</em></span>`
+          } else {
+            geofb.innerHTML = `<span style="color:#d97706;">⚠ Civico non trovato — indirizzo più vicino:</span><br>
+              <button type="button" class="geo-suggest-btn" style="margin-top:4px;padding:3px 10px;background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#92400e;cursor:pointer;">
+                ↩ Usa "${result.displayName}"
+              </button>`
+            geofb.querySelector('.geo-suggest-btn')?.addEventListener('click', () => {
+              indirizzoInput.value = result.displayName
+              indirizzoInput.dispatchEvent(new Event('input'))
+            })
+          }
+        }, 800))
+
+        form._getGeoCoords = () => form._geoResult?.found
+          ? { lat: form._geoResult.lat, lng: form._geoResult.lng }
+          : null
+      }
+    }
 
     loadSedi().then(renderTabellaSedi)
   } catch (err) {
