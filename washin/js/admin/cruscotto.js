@@ -62,19 +62,48 @@ async function sleep(ms) {
 }
 
 async function geocodeSede(sedeId, address) {
-  if (!address) return null
+  if (!address?.trim()) return null
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Italia')}&format=json&limit=1&accept-language=it`
     const res = await fetch(url, { headers: { 'User-Agent': 'WashIN/1.0' } })
     const data = await res.json()
-    if (!data.length) return null
+    if (!data.length) { console.warn('Geocoding: nessun risultato per', address); return null }
     const lat = parseFloat(data[0].lat)
     const lng = parseFloat(data[0].lon)
-    await supabase.from('sedi_cliente').update({ lat, lng }).eq('id', sedeId)
+    const { error } = await supabase.from('sedi_cliente').update({ lat, lng }).eq('id', sedeId)
+    if (error) console.error('Geocoding: errore salvataggio sede', sedeId, error)
+    else console.info('Geocoding OK:', address, '→', lat, lng)
     return { lat, lng }
   } catch (err) {
     console.warn('Geocoding failed:', address, err)
     return null
+  }
+}
+
+async function geocodeAllSedi() {
+  try {
+    const { data: sedi, error } = await supabase
+      .from('sedi_cliente')
+      .select('id, indirizzo, lat, lng, contratti(clienti(citta))')
+      .is('lat', null)
+      .not('indirizzo', 'is', null)
+    if (error || !sedi?.length) return
+
+    console.info(`Geocodifica automatica: ${sedi.length} sedi da aggiornare`)
+    let done = 0
+    let first = true
+    for (const sede of sedi) {
+      if (!sede.indirizzo?.trim()) continue
+      const citta = sede.contratti?.clienti?.citta
+      const address = [sede.indirizzo, citta].filter(Boolean).join(', ')
+      if (!first) await sleep(1200)
+      first = false
+      const coords = await geocodeSede(sede.id, address)
+      if (coords) done++
+    }
+    if (done) console.info(`Geocodifica completata: ${done}/${sedi.length} sedi aggiornate`)
+  } catch(err) {
+    console.warn('Errore geocodifica automatica:', err)
   }
 }
 
@@ -540,6 +569,7 @@ export function initCruscotto(){
     document.getElementById('btn-view-mappa')?.addEventListener('click', () => setMapView('mappa'))
 
     refreshAll()
+    geocodeAllSedi() // background: geocodifica sedi senza coordinate
   }catch(err){
     showToast('Errore inizializzazione cruscotto','error')
     console.error(err)
