@@ -408,15 +408,6 @@ export async function printPreventivo(id) {
     <tr class="total-row"><td colspan="3" style="text-align:right;">TOTALE</td><td style="text-align:right;color:#0D9488;">${fmt(totale)}</td></tr>
   </tbody>
 </table>
-${costoTot > 0 ? `
-<div class="cost-box">
-  <h3 style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:.5px;">Dettaglio costi (interno)</h3>
-  <div class="cost-row"><span>Operatori (${p.n_operatori || 1} × ${fmt(p.costo_orario)}/h × ${p.ore_stimate || 0}h)</span><span>${fmt(costoOp)}</span></div>
-  ${costoProd > 0 ? `<div class="cost-row"><span>Prodotti</span><span>${fmt(costoProd)}</span></div>` : ''}
-  ${costoKm > 0 ? `<div class="cost-row"><span>Trasporto (${p.km_per_intervento} km × ${p.n_interventi_mese} interv. × €${p.costo_km_perkm}/km)</span><span>${fmt(costoKm)}</span></div>` : ''}
-  ${costoAltri > 0 ? `<div class="cost-row"><span>Altri costi${p.altri_costi_nota ? ' — ' + p.altri_costi_nota : ''}</span><span>${fmt(costoAltri)}</span></div>` : ''}
-  <div class="cost-row"><span>Costo totale / Margine ${margine}%</span><span>${fmt(costoTot)}</span></div>
-</div>` : ''}
 ${p.note ? `<div style="margin-top:16px;padding:14px 18px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:4px;"><strong style="font-size:11px;text-transform:uppercase;color:#92400e;">Note</strong><p style="margin-top:6px;">${p.note.replace(/\n/g,'<br>')}</p></div>` : ''}
 <div class="footer">
   <div style="font-size:11px;color:#6b7280;">
