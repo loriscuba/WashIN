@@ -288,10 +288,8 @@ export async function openModalIntervento(id = null){
         opt.textContent = `${c.numero_contratto || c.id.slice(0,8)} — ${c.clienti?.ragione_sociale || ''}`
         contrattoSelect.appendChild(opt)
       })
-      // quando cambia contratto → ricarica sedi
-      contrattoSelect.addEventListener('change', e => {
-        loadSediByContratto(e.target.value, sedeSelect)
-      })
+      // quando cambia contratto → ricarica sedi (onchange sovrascrive, evita accumulo listener)
+      contrattoSelect.onchange = e => loadSediByContratto(e.target.value, sedeSelect)
     }
 
     // carica prodotti magazzino prima di tutto, così addMaterialeRow li trova già pronti
