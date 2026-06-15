@@ -104,6 +104,7 @@ function buildClienteEl(cliente) {
       <div class="ana-main">
         <span class="ana-name">${cliente.ragione_sociale || '—'}</span>
         <span class="ana-submeta">
+          <span class="ana-type-tag ana-tag-cliente">Cliente</span>
           ${cliente.tipo ? `<span class="ana-chip">${cliente.tipo}</span>` : ''}
           ${cliente.piva ? `<span class="ana-chip">${ICO.hash} ${cliente.piva}</span>` : ''}
           ${meta ? `<span class="ana-chip">${ICO.mapPin} ${meta}</span>` : ''}
@@ -158,6 +159,7 @@ function buildContrattoHtml(c, nomeCliente, tipoCliente = '') {
         <div class="ana-main">
           <span class="ana-name" style="font-size:14px;">${c.numero_contratto || '—'}</span>
           <span class="ana-submeta">
+            <span class="ana-type-tag ana-tag-contratto">Contratto</span>
             <span class="ana-chip">${ICO.fileText} ${c.tipo || '-'}</span>
             ${c.importo_mensile != null ? `<span class="ana-chip" style="color:#059669;font-weight:600;">${EUR(c.importo_mensile)}/mese</span>` : ''}
           </span>
@@ -191,6 +193,7 @@ function buildSedeHtml(s) {
         <div class="ana-main">
           <span class="ana-name" style="font-size:13px;">${s.nome_sede || '—'}</span>
           <span class="ana-submeta">
+            <span class="ana-type-tag ana-tag-sede">Sede</span>
             ${s.indirizzo ? `<span class="ana-chip">${s.indirizzo}</span>` : ''}
             ${s.mq_totali != null ? `<span class="ana-chip">${s.mq_totali} mq</span>` : ''}
           </span>

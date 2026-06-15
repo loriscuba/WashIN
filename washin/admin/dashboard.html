@@ -187,10 +187,36 @@
         cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
       }
       .ana-row:hover { border-color: #0d9488; box-shadow: 0 2px 8px rgba(13,148,136,0.10); }
-      .ana-cliente-row { background: #f8fafc; }
-      .ana-contratto-row { margin-left: 28px; background: #fff; }
-      .ana-sede-row { margin-left: 56px; cursor: default; }
-      .ana-sede-row:hover { border-color: var(--gray-200,#e5e7eb); box-shadow: none; }
+      /* ── Level color coding ── */
+      .ana-cliente-row {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        border-left: 4px solid #2563eb;
+      }
+      .ana-cliente-row:hover { border-color: #93c5fd; border-left-color: #2563eb; box-shadow: 0 2px 8px rgba(37,99,235,0.10); }
+      .ana-contratto-row {
+        margin-left: 28px;
+        background: #f0fdfa;
+        border-color: #99f6e4;
+        border-left: 4px solid #0d9488;
+      }
+      .ana-contratto-row:hover { border-color: #5eead4; border-left-color: #0d9488; box-shadow: 0 2px 8px rgba(13,148,136,0.10); }
+      .ana-sede-row {
+        margin-left: 56px;
+        cursor: default;
+        background: #faf5ff;
+        border-color: #e9d5ff;
+        border-left: 4px solid #7c3aed;
+      }
+      .ana-sede-row:hover { border-color: #e9d5ff; border-left-color: #7c3aed; box-shadow: none; }
+      /* ── Type label pills ── */
+      .ana-type-tag {
+        font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+        border-radius: 4px; padding: 2px 5px; display: inline-flex; align-items: center; flex-shrink: 0;
+      }
+      .ana-tag-cliente  { background: #dbeafe; color: #1d4ed8; }
+      .ana-tag-contratto{ background: #ccfbf1; color: #0f766e; }
+      .ana-tag-sede     { background: #ede9fe; color: #6d28d9; }
       .ana-arrow { color: var(--gray-400,#9ca3af); flex-shrink: 0; width: 16px; display: flex; align-items: center; justify-content: center; }
       .ana-main { flex: 1; min-width: 0; }
       .ana-name { font-size: 15px; font-weight: 700; color: var(--gray-900,#111827); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
