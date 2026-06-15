@@ -94,8 +94,7 @@ async function geocodeAllSedi() {
     let first = true
     for (const sede of sedi) {
       if (!sede.indirizzo?.trim()) continue
-      const citta = sede.contratti?.clienti?.citta
-      const address = [sede.indirizzo, citta].filter(Boolean).join(', ')
+      const address = sede.indirizzo?.trim()
       if (!first) await sleep(1200)
       first = false
       const coords = await geocodeSede(sede.id, address)
@@ -225,7 +224,7 @@ async function renderMappaOggi(interventi) {
   for (const iv of interventi) {
     const sede = iv.sedi_cliente
     if (!sede || (sede.lat && sede.lng)) continue
-    const address = [sede.indirizzo, iv.contratti?.clienti?.citta].filter(Boolean).join(', ')
+    const address = sede.indirizzo?.trim()
     if (!address) continue
     if (!first) await sleep(1100)
     first = false
