@@ -1,6 +1,17 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
 
+const EUR = n => n != null
+  ? new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n)
+  : '-'
+
+const CAT_LABEL = {
+  detergenti: 'Detergenti', disinfettanti: 'Disinfettanti', sgrassatori: 'Sgrassatori',
+  decalcificanti: 'Anticalcare', prodotti_wc: 'Prodotti WC', vetri: 'Vetri/superfici',
+  pavimenti: 'Pavimenti', panni: 'Panni/microfibre', carta: 'Carta', sacchi: 'Sacchi',
+  attrezzature: 'Attrezzature', dpi: 'Guanti/DPI', altro: 'Altro',
+}
+
 export async function loadMagazzino(filtri = {}) {
   try {
     let query = supabase.from('magazzino').select('*').order('nome', { ascending: true })
@@ -17,9 +28,12 @@ export async function loadMagazzino(filtri = {}) {
 
 function createMagazzinoRow(p) {
   const tr = document.createElement('tr')
-  const qty = p.quantita_disponibile != null ? p.quantita_disponibile : '-'
+  const qty = p.quantita_disponibile ?? 0
+  const soglia = p.soglia_minima ?? null
+  const lowStock = soglia != null && qty <= soglia
   const today = new Date().toISOString().slice(0, 10)
   const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)
+
   let scadenzaHtml = '-'
   if (p.scadenza) {
     const label = new Date(p.scadenza + 'T00:00:00').toLocaleDateString('it-IT')
@@ -30,12 +44,25 @@ function createMagazzinoRow(p) {
     else
       scadenzaHtml = label
   }
+
+  const catLabel = CAT_LABEL[p.categoria] || p.categoria || ''
+  const qtyText = `${qty} ${p.unita_misura || ''}`
+  const qtyHtml = lowStock
+    ? `<span style="color:#dc2626;font-weight:600;" title="Sotto soglia minima">${qtyText} ⚠</span>` +
+      `<br><span style="font-size:11px;color:var(--gray-400);">min. ${soglia} ${p.unita_misura || ''}</span>`
+    : qtyText + (soglia != null ? `<br><span style="font-size:11px;color:var(--gray-400);">min. ${soglia}</span>` : '')
+
   tr.innerHTML = `
-    <td><strong>${p.nome}</strong></td>
+    <td>
+      <strong>${p.nome}</strong>
+      ${catLabel ? `<br><span style="font-size:11px;color:var(--gray-500);">${catLabel}</span>` : ''}
+      ${p.codice_prodotto ? `<br><span style="font-size:10px;color:var(--gray-400);font-family:monospace;">${p.codice_prodotto}</span>` : ''}
+    </td>
+    <td style="font-size:13px;color:var(--gray-600);">${p.fornitore || '-'}</td>
     <td>${p.unita_misura || '-'}</td>
+    <td>${EUR(p.costo_unitario)}</td>
+    <td>${qtyHtml}</td>
     <td>${scadenzaHtml}</td>
-    <td style="color:var(--gray-600);font-size:13px;">${p.descrizione || '-'}</td>
-    <td>${qty} ${p.unita_misura || ''}</td>
     <td><span class="badge ${p.attivo ? 'badge-success' : 'badge-warning'}">${p.attivo ? 'Attivo' : 'Inattivo'}</span></td>
     <td>
       <button class="btn btn-sm btn-secondary" data-action="edit-magazzino" data-id="${p.id}">Modifica</button>
@@ -49,7 +76,7 @@ export function renderTabellaMagazzino(prodotti) {
   if (!tbody) return
   tbody.innerHTML = ''
   if (!prodotti.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun prodotto in magazzino</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--gray-500);padding:24px;">Nessun prodotto in magazzino</td></tr>'
     return
   }
   prodotti.forEach(p => tbody.appendChild(createMagazzinoRow(p)))
@@ -90,9 +117,16 @@ export async function saveMagazzino(payload) {
   try {
     const fields = {
       nome: payload.nome || null,
+      categoria: payload.categoria || null,
+      codice_prodotto: payload.codice_prodotto || null,
+      fornitore: payload.fornitore || null,
       unita_misura: payload.unita_misura || 'lt',
+      costo_unitario: payload.costo_unitario !== '' && payload.costo_unitario != null
+        ? parseFloat(payload.costo_unitario) : null,
       descrizione: payload.descrizione || null,
       quantita_disponibile: payload.quantita_disponibile !== '' ? parseFloat(payload.quantita_disponibile) : 0,
+      soglia_minima: payload.soglia_minima !== '' && payload.soglia_minima != null
+        ? parseFloat(payload.soglia_minima) : null,
       scadenza: payload.scadenza || null,
       attivo: Boolean(payload.attivo)
     }
@@ -129,9 +163,14 @@ export function initMagazzino() {
         const payload = {
           id: form.dataset.magazzinoId || undefined,
           nome: fd.get('nome'),
+          categoria: fd.get('categoria'),
+          codice_prodotto: fd.get('codice_prodotto'),
+          fornitore: fd.get('fornitore'),
           unita_misura: fd.get('unita_misura'),
+          costo_unitario: fd.get('costo_unitario'),
           descrizione: fd.get('descrizione'),
           quantita_disponibile: fd.get('quantita_disponibile'),
+          soglia_minima: fd.get('soglia_minima'),
           scadenza: fd.get('scadenza'),
           attivo: form.querySelector('[name="attivo"]').checked
         }
