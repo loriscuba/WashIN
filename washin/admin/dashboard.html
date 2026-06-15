@@ -669,32 +669,32 @@
             <p style="color: var(--gray-500); margin-top:8px;">Dati azienda e informazioni di contatto.</p>
           </div>
           <div class="card">
-            <form style="display:grid; gap:18px;">
+            <form id="azienda-form" style="display:grid; gap:18px;">
               <div class="form-group">
                 <label>Ragione sociale</label>
-                <input type="text" value="WashIN Srl">
+                <input name="ragione_sociale" type="text" placeholder="es. WashIN Srl">
               </div>
               <div class="form-group">
                 <label>P.IVA</label>
-                <input type="text" value="01234567890">
+                <input name="piva" type="text" placeholder="es. 01234567890">
               </div>
               <div class="form-group">
                 <label>Indirizzo</label>
-                <input type="text" value="Via Roma 12, Milano">
+                <input name="indirizzo" type="text" placeholder="es. Via Roma 12, Savona">
               </div>
               <div class="form-group">
                 <label>Email</label>
-                <input type="email" value="info@washin.it">
+                <input name="email" type="email" placeholder="es. info@washin.it">
               </div>
               <div class="form-group">
                 <label>Telefono</label>
-                <input type="text" value="02 1234 5678">
+                <input name="telefono" type="text" placeholder="es. 019 123456">
               </div>
               <div class="form-group">
                 <label>IBAN</label>
-                <input type="text" value="IT60X0542811101000000123456">
+                <input name="iban" type="text" placeholder="es. IT60X0542811101000000123456">
               </div>
-              <button class="btn btn-primary btn-sm" type="button">Salva</button>
+              <button class="btn btn-primary btn-sm" type="submit">Salva</button>
             </form>
           </div>
         </section>
@@ -1646,6 +1646,7 @@
       import { initContoEconomico } from '../js/admin/contoeconomico.js'
       import { initAnagrafica } from '../js/admin/anagrafica.js'
       import { initModelliContratti } from '../js/admin/modelli_contratti.js'
+      import { initImpostazioni } from '../js/admin/impostazioni.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -1800,6 +1801,7 @@
         initContoEconomico()
         initAnagrafica()
         initModelliContratti()
+        initImpostazioni()
       })
     </script>
   </body>
