@@ -311,14 +311,9 @@ export function initSedi() {
           geofb.innerHTML = '<span style="color:#6b7280;">⏳ Verifica indirizzo...</span>'
           const result = await runGeoCheck(val)
           form._geoResult = result
-          if (!result) {
-            geofb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
-          } else if (result.found && result.civicOk) {
-            geofb.innerHTML = `<span style="color:#059669;">✓ Via e civico verificati: <em style="font-style:normal;">${result.displayName}</em></span>`
-          } else if (result.found && !result.civicOk) {
-            geofb.innerHTML = `<span style="color:#d97706;">⚠ Via trovata ma civico ${result.inputNum ? '<strong>' + result.inputNum + '</strong> ' : ''}non confermato in OpenStreetMap: <em style="font-style:normal;">${result.displayName}</em></span>`
-          } else {
-            geofb.innerHTML = `<span style="color:#d97706;">⚠ Civico non trovato — indirizzo più vicino:</span><br>
+
+          const showSuggest = (msg) => {
+            geofb.innerHTML = `<span style="color:#d97706;">${msg}</span><br>
               <button type="button" class="geo-suggest-btn" style="margin-top:4px;padding:3px 10px;background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#92400e;cursor:pointer;">
                 ↩ Usa "${result.displayName}"
               </button>`
@@ -326,6 +321,21 @@ export function initSedi() {
               indirizzoInput.value = result.displayName
               indirizzoInput.dispatchEvent(new Event('input'))
             })
+          }
+
+          if (!result) {
+            geofb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
+          } else if (result.found && !result.inputNum) {
+            // Nessun civico digitato — via trovata, avvisa di aggiungere il numero
+            geofb.innerHTML = `<span style="color:#2563eb;">ℹ Via verificata senza civico — <em style="font-style:normal;">${result.displayName}</em></span>`
+          } else if (result.found && result.civicOk) {
+            geofb.innerHTML = `<span style="color:#059669;">✓ Via e civico verificati: <em style="font-style:normal;">${result.displayName}</em></span>`
+          } else if (result.found && !result.civicOk) {
+            // Via trovata ma civico non in OSM — suggerisci la via senza numero
+            showSuggest(`⚠ Via trovata ma civico <strong>${result.inputNum}</strong> non confermato in OpenStreetMap:`)
+          } else {
+            // Fallback: via trovata solo senza numero
+            showSuggest('⚠ Indirizzo non trovato — indirizzo più vicino:')
           }
         }, 800))
 
