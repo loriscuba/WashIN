@@ -90,35 +90,11 @@ function buildPopup(iv) {
     <div style="font-size:13px;line-height:1.5;min-width:190px;">
       <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#111;">${iv.ora_inizio_pianificata || '--:--'} — ${iv.tipo_pulizia || '-'}</p>
       <p style="margin:0 0 3px;color:#374151;"><strong>${cliente}</strong></p>
-      <p style="margin:0 0 3px;color:#6b7280;">📍 ${sede.nome_sede || '-'}</p>
+      <p style="margin:0 0 3px;color:#6b7280;">📍 ${sede.nome_sede || '-'}${sede.indirizzo ? `<br><span style="font-size:11px;">${sede.indirizzo}</span>` : ''}</p>
       <p style="margin:0 0 6px;color:#6b7280;">👷 ${op}</p>
       <span style="display:inline-block;padding:2px 10px;border-radius:4px;background:${color};color:#fff;font-size:11px;font-weight:600;">${label}</span>
     </div>
   `
-}
-
-function buildMarker(L, lat, lng, ivs) {
-  const multi = ivs.length > 1
-  const color = multi ? '#6366f1' : (STATUS_COLORS[ivs[0].stato] || '#6b7280')
-  const size = multi ? 30 : 26
-  const label = multi ? `<span style="color:#fff;font-weight:800;font-size:12px;line-height:1;">${ivs.length}</span>` : ''
-  const icon = L.divIcon({
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;">${label}</div>`,
-    className: '',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  })
-
-  const popupContent = ivs.length === 1
-    ? buildPopup(ivs[0])
-    : `<div style="font-size:13px;min-width:220px;">
-         <p style="margin:0 0 8px;font-weight:700;color:#6366f1;">📍 ${ivs[0].sedi_cliente?.nome_sede || 'Sede'} — ${ivs.length} interventi</p>
-         ${ivs.map(iv => buildPopup(iv)).join('<hr style="margin:8px 0;border:none;border-top:1px solid #e5e7eb;">')}
-       </div>`
-
-  return L.marker([lat, lng], { icon })
-    .bindPopup(popupContent, { maxWidth: 300 })
-    .addTo(_markersLayer)
 }
 
 async function renderMappaOggi(interventi) {
@@ -126,6 +102,14 @@ async function renderMappaOggi(interventi) {
   if (!mapDiv || mapDiv.style.display === 'none') return
 
   const L = await ensureLeaflet()
+
+  // Fix Leaflet divIcon white background once
+  if (!document.getElementById('washin-map-css')) {
+    const s = document.createElement('style')
+    s.id = 'washin-map-css'
+    s.textContent = '.washin-map-icon{background:transparent!important;border:none!important;}'
+    document.head.appendChild(s)
+  }
 
   if (!_mapInstance) {
     _mapInstance = L.map('mappa-oggi', { zoomControl: true }).setView([44.5, 11.3], 6)
@@ -139,51 +123,92 @@ async function renderMappaOggi(interventi) {
     _markersLayer.clearLayers()
   }
 
-  // 1. Separate interventions with known coords from those to geocode
-  const resolved = []
-  const toGeocode = []
+  const coordMap = new Map()   // key → { lat, lng, ivs, marker }
+  const allFeatures = []
+
+  function makeIcon(ivs) {
+    const multi = ivs.length > 1
+    const color = multi ? '#6366f1' : (STATUS_COLORS[ivs[0].stato] || '#6b7280')
+    const size = multi ? 30 : 26
+    const inner = multi
+      ? `<span style="color:#fff;font-weight:800;font-size:12px;">${ivs.length}</span>`
+      : ''
+    return L.divIcon({
+      html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;">${inner}</div>`,
+      className: 'washin-map-icon',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    })
+  }
+
+  function makePopup(ivs) {
+    if (ivs.length === 1) return buildPopup(ivs[0])
+    const nomeSede = ivs[0].sedi_cliente?.nome_sede || 'Sede'
+    return `<div style="font-size:13px;min-width:220px;">
+      <p style="margin:0 0 8px;font-weight:700;color:#6366f1;">📍 ${nomeSede} — ${ivs.length} interventi</p>
+      ${ivs.map(iv => buildPopup(iv)).join('<hr style="margin:8px 0;border:none;border-top:1px solid #e5e7eb;">')}
+    </div>`
+  }
+
+  function fitAll() {
+    if (!allFeatures.length) return
+    try {
+      const bounds = L.featureGroup(allFeatures).getBounds()
+      if (!bounds.isValid()) return
+      const ne = bounds.getNorthEast(), sw = bounds.getSouthWest()
+      if (Math.abs(ne.lat - sw.lat) < 0.0001 && Math.abs(ne.lng - sw.lng) < 0.0001) {
+        _mapInstance.setView([ne.lat, ne.lng], 15)
+      } else {
+        _mapInstance.fitBounds(bounds.pad(0.3))
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  function placeOrUpdate(iv, lat, lng) {
+    const key = `${lat.toFixed(5)},${lng.toFixed(5)}`
+    if (coordMap.has(key)) {
+      const entry = coordMap.get(key)
+      entry.ivs.push(iv)
+      entry.marker.setIcon(makeIcon(entry.ivs))
+      entry.marker.setPopupContent(makePopup(entry.ivs))
+    } else {
+      const ivs = [iv]
+      const marker = L.marker([lat, lng], { icon: makeIcon(ivs) })
+        .bindPopup(makePopup(ivs), { maxWidth: 300 })
+        .addTo(_markersLayer)
+      coordMap.set(key, { ivs, marker })
+      allFeatures.push(marker)
+    }
+    fitAll()
+    const noData = document.getElementById('mappa-no-data')
+    if (noData) noData.style.display = 'none'
+  }
+
+  // 1. Place markers with known coordinates immediately
   for (const iv of interventi) {
     const sede = iv.sedi_cliente
     if (!sede) continue
-    if (sede.lat && sede.lng) {
-      resolved.push({ iv, lat: Number(sede.lat), lng: Number(sede.lng) })
-    } else {
-      toGeocode.push(iv)
-    }
+    if (sede.lat && sede.lng) placeOrUpdate(iv, Number(sede.lat), Number(sede.lng))
   }
 
-  // 2. Geocode sedi without coordinates (rate-limited)
+  // 2. Geocode sedi without coordinates incrementally
   let first = true
-  for (const iv of toGeocode) {
+  for (const iv of interventi) {
     const sede = iv.sedi_cliente
+    if (!sede || (sede.lat && sede.lng)) continue
     const address = [sede.indirizzo, iv.contratti?.clienti?.citta].filter(Boolean).join(', ')
     if (!address) continue
     if (!first) await sleep(1100)
     first = false
     const coords = await geocodeSede(iv.sede_id, address)
-    if (coords) resolved.push({ iv, lat: coords.lat, lng: coords.lng })
+    if (coords) placeOrUpdate(iv, coords.lat, coords.lng)
   }
 
-  // 3. Group by coordinates so stacked interventions share one marker
-  const byCoord = new Map()
-  for (const { iv, lat, lng } of resolved) {
-    const key = `${lat.toFixed(5)},${lng.toFixed(5)}`
-    if (!byCoord.has(key)) byCoord.set(key, { lat, lng, ivs: [] })
-    byCoord.get(key).ivs.push(iv)
+  // Show "no data" only if nothing placed at all
+  if (coordMap.size === 0) {
+    const noData = document.getElementById('mappa-no-data')
+    if (noData) noData.style.display = 'flex'
   }
-
-  // 4. Place one marker per unique location
-  const allMarkers = []
-  for (const { lat, lng, ivs } of byCoord.values()) {
-    allMarkers.push(buildMarker(L, lat, lng, ivs))
-  }
-
-  if (allMarkers.length) {
-    _mapInstance.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.3))
-  }
-
-  const noData = document.getElementById('mappa-no-data')
-  if (noData) noData.style.display = allMarkers.length ? 'none' : 'flex'
 }
 
 function setMapView(view) {
@@ -300,7 +325,11 @@ export async function loadInterventiOggi(){
         tr.innerHTML = `
           <td>${iv.ora_inizio_pianificata || '-'}</td>
           <td>${op}</td>
-          <td>${cliente} / ${iv.sedi_cliente?.nome_sede || '-'}</td>
+          <td>
+            <strong>${cliente}</strong><br>
+            ${iv.sedi_cliente?.nome_sede || '-'}
+            ${iv.sedi_cliente?.indirizzo ? `<br><span style="font-size:11px;color:var(--gray-500);">${iv.sedi_cliente.indirizzo}</span>` : ''}
+          </td>
           <td>${iv.tipo_pulizia || '-'}</td>
           <td><span class="badge" style="background:${color};color:#fff;">${STATUS_LABEL[iv.stato] || iv.stato}</span></td>
           <td><button class="btn btn-sm btn-secondary" data-action="open" data-id="${iv.id}">Dettaglio</button></td>

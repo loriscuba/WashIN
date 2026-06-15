@@ -147,7 +147,11 @@ export function renderListaInterventi(interventi){
       tr.innerHTML = `
         <td style="white-space:nowrap;">${iv.data_pianificata}${iv.ora_inizio_pianificata ? '<br><span style="font-size:11px;color:var(--gray-500);">P: ' + iv.ora_inizio_pianificata.slice(0,5) + (iv.ora_fine_pianificata ? '–' + iv.ora_fine_pianificata.slice(0,5) : '') + '</span>' : ''}${iv.inizio_effettivo ? '<br><span style="font-size:11px;color:#059669;">▶ ' + new Date(iv.inizio_effettivo).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) + (iv.fine_effettivo ? '–' + new Date(iv.fine_effettivo).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '') + '</span>' : ''}</td>
         <td>${operatorName}</td>
-        <td>${cliente} / ${iv.sedi_cliente?.nome_sede || '-'}</td>
+        <td>
+          <strong>${cliente}</strong><br>
+          ${iv.sedi_cliente?.nome_sede || '-'}
+          ${iv.sedi_cliente?.indirizzo ? `<br><span style="font-size:11px;color:var(--gray-500);">${iv.sedi_cliente.indirizzo}</span>` : ''}
+        </td>
         <td>${iv.tipo_pulizia || '-'}</td>
         <td>
           <span class="badge ${badgeClass}">${iv.stato}</span>
