@@ -423,6 +423,11 @@
               <strong>Modelli Contratti</strong>
               <p>Template per tipo cliente</p>
             </a>
+            <a href="#fornitori" data-target="fornitori" class="config-card">
+              <div class="config-card-icon">🚚</div>
+              <strong>Fornitori</strong>
+              <p>Anagrafica fornitori</p>
+            </a>
             <a href="#impostazioni" data-target="impostazioni" class="config-card">
               <div class="config-card-icon">🏢</div>
               <strong>Dati Azienda</strong>
@@ -441,6 +446,42 @@
             </div>
           </div>
           <div id="modelli-list"></div>
+        </section>
+
+        <!-- ── Fornitori ─────────────────────────────── -->
+        <section id="fornitori" class="section hidden">
+          <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+              <h1>Fornitori</h1>
+              <p style="color: var(--gray-500); margin-top:8px;">Anagrafica fornitori: prodotti, attrezzature, noleggi e servizi.</p>
+            </div>
+            <button id="add-fornitore-button" class="btn btn-primary">+ Nuovo fornitore</button>
+          </div>
+          <div style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <div style="display:flex;border:1.5px solid var(--gray-300);border-radius:8px;overflow:hidden;">
+              <button class="fornitori-attivo-btn" data-attivo="true"  style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#0d9488;color:#fff;">Attivi</button>
+              <button class="fornitori-attivo-btn" data-attivo="false" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#fff;color:#6b7280;border-left:1px solid var(--gray-300);">Inattivi</button>
+              <button class="fornitori-attivo-btn" data-attivo=""      style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#fff;color:#6b7280;border-left:1px solid var(--gray-300);">Tutti</button>
+            </div>
+          </div>
+          <div class="table-container card">
+            <table class="washin-table">
+              <thead>
+                <tr>
+                  <th>Fornitore</th>
+                  <th>Referente</th>
+                  <th>Pagamento</th>
+                  <th>Tempi consegna</th>
+                  <th>Ordine minimo</th>
+                  <th>Valutazione</th>
+                  <th>Stato</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="fornitori-table-body"></tbody>
+            </table>
+          </div>
         </section>
 
         <!-- ── Clienti ──────────────────────────────── -->
@@ -1383,6 +1424,86 @@
       </div>
     </div>
 
+    <!-- ── Modal Fornitore ── -->
+    <div class="modal-overlay" id="fornitore-modal">
+      <div class="modal-box">
+        <h2>Nuovo Fornitore</h2>
+        <form>
+          <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Identificazione</p>
+          <div class="form-group"><label>Ragione sociale *</label><input name="ragione_sociale" type="text" required placeholder="es. Diversey Italia Srl"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>P.IVA</label><input name="piva" type="text"></div>
+            <div class="form-group"><label>Codice fiscale</label><input name="codice_fiscale" type="text"></div>
+          </div>
+          <div class="form-group"><label>Categoria</label>
+            <select name="categoria">
+              <option value="">-- Seleziona --</option>
+              <option value="detergenza_chimica">Detergenza/chimici</option>
+              <option value="materiali_consumo">Materiali di consumo (carta, sacchi, panni)</option>
+              <option value="attrezzature">Attrezzature/macchinari</option>
+              <option value="dpi_sicurezza">DPI/sicurezza</option>
+              <option value="noleggio">Noleggio</option>
+              <option value="manutenzione">Manutenzione/assistenza</option>
+              <option value="divise">Divise/abbigliamento</option>
+              <option value="altro">Altro</option>
+            </select>
+          </div>
+
+          <p style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Contatti</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Referente</label><input name="referente" type="text"></div>
+            <div class="form-group"><label>Telefono</label><input name="telefono" type="text"></div>
+          </div>
+          <div class="form-group"><label>Email</label><input name="email" type="email"></div>
+          <div class="form-group"><label>Indirizzo</label><input name="indirizzo" type="text"></div>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Città</label><input name="citta" type="text"></div>
+            <div class="form-group"><label>CAP</label><input name="cap" type="text"></div>
+            <div class="form-group"><label>Provincia</label><input name="provincia" type="text" maxlength="5" placeholder="es. MI"></div>
+          </div>
+
+          <p style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Condizioni commerciali</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Termini di pagamento</label>
+              <select name="termini_pagamento">
+                <option value="">-- Seleziona --</option>
+                <option value="immediato">Immediato</option>
+                <option value="30gg">30 gg</option>
+                <option value="60gg">60 gg</option>
+                <option value="90gg">90 gg</option>
+                <option value="rimessa_diretta">Rimessa diretta</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Tempi di consegna (giorni)</label><input name="tempi_consegna_giorni" type="number" min="0" step="1" placeholder="es. 3"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Ordine minimo (€)</label><input name="ordine_minimo" type="number" step="0.01" min="0" placeholder="0.00"></div>
+            <div class="form-group"><label>Sconto concordato (%)</label><input name="sconto_concordato" type="number" step="0.1" min="0" max="100" placeholder="0"></div>
+          </div>
+          <div class="form-group"><label>IBAN</label><input name="iban" type="text" placeholder="IT00 X000 0000 0000 0000 0000 000"></div>
+          <div class="form-group"><label>Certificazioni</label><input name="certificazioni" type="text" placeholder="es. ISO 9001, ISO 14001, Ecolabel"></div>
+          <div class="form-group"><label>Valutazione</label>
+            <select name="valutazione">
+              <option value="">-- Nessuna --</option>
+              <option value="1">★☆☆☆☆</option>
+              <option value="2">★★☆☆☆</option>
+              <option value="3">★★★☆☆</option>
+              <option value="4">★★★★☆</option>
+              <option value="5">★★★★★</option>
+            </select>
+          </div>
+
+          <p style="margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Note</p>
+          <div class="form-group"><label>Note</label><textarea name="note" rows="2" placeholder="Note opzionali"></textarea></div>
+          <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-weight:400;"><input name="attivo" type="checkbox" checked style="width:auto;"> Attivo</label></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="fornitore-cancel">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva fornitore</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- ── Modal Storico Sede ── -->
     <div class="modal-overlay" id="storico-sede-modal">
       <div class="modal-box" style="max-width:700px;">
@@ -1742,6 +1863,7 @@
       import { initAnagrafica } from '../js/admin/anagrafica.js'
       import { initModelliContratti } from '../js/admin/modelli_contratti.js'
       import { initImpostazioni } from '../js/admin/impostazioni.js'
+      import { initFornitori } from '../js/admin/fornitori.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -1897,6 +2019,7 @@
         initAnagrafica()
         initModelliContratti()
         initImpostazioni()
+        initFornitori()
       })
     </script>
   </body>
