@@ -57,19 +57,16 @@ async function ensureLeaflet() {
   })
 }
 
-async function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms))
-}
-
 async function geocodeSede(sedeId, address) {
   if (!address?.trim()) return null
+  const key = window.GOOGLE_MAPS_KEY
+  if (!key) return null
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Italia')}&format=json&limit=1&accept-language=it`
-    const res = await fetch(url, { headers: { 'User-Agent': 'WashIN/1.0' } })
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address + ', Italia')}&key=${key}&language=it&region=it`
+    const res = await fetch(url)
     const data = await res.json()
-    if (!data.length) { console.warn('Geocoding: nessun risultato per', address); return null }
-    const lat = parseFloat(data[0].lat)
-    const lng = parseFloat(data[0].lon)
+    if (data.status !== 'OK' || !data.results?.length) { console.warn('Geocoding: nessun risultato per', address); return null }
+    const { lat, lng } = data.results[0].geometry.location
     const { error } = await supabase.from('sedi_cliente').update({ lat, lng }).eq('id', sedeId)
     if (error) console.error('Geocoding: errore salvataggio sede', sedeId, error)
     else console.info('Geocoding OK:', address, '→', lat, lng)
@@ -91,13 +88,9 @@ async function geocodeAllSedi() {
 
     console.info(`Geocodifica automatica: ${sedi.length} sedi da aggiornare`)
     let done = 0
-    let first = true
     for (const sede of sedi) {
       if (!sede.indirizzo?.trim()) continue
-      const address = sede.indirizzo?.trim()
-      if (!first) await sleep(1200)
-      first = false
-      const coords = await geocodeSede(sede.id, address)
+      const coords = await geocodeSede(sede.id, sede.indirizzo.trim())
       if (coords) done++
     }
     if (done) console.info(`Geocodifica completata: ${done}/${sedi.length} sedi aggiornate`)
@@ -220,14 +213,11 @@ async function renderMappaOggi(interventi) {
   }
 
   // 2. Geocode sedi without coordinates incrementally
-  let first = true
   for (const iv of interventi) {
     const sede = iv.sedi_cliente
     if (!sede || (sede.lat && sede.lng)) continue
     const address = sede.indirizzo?.trim()
     if (!address) continue
-    if (!first) await sleep(1100)
-    first = false
     const coords = await geocodeSede(iv.sede_id, address)
     if (coords) placeOrUpdate(iv, coords.lat, coords.lng)
   }
