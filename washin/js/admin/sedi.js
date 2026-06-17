@@ -9,31 +9,33 @@ function debounce(fn, ms) {
 
 let _geoAbortCtrl = null
 
-async function nominatimSearch(query) {
+async function googleGeocode(query) {
   if (_geoAbortCtrl) _geoAbortCtrl.abort()
   _geoAbortCtrl = new AbortController()
+  const key = window.GOOGLE_MAPS_KEY
+  if (!key) return null
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Italia')}&format=json&limit=1&accept-language=it&addressdetails=1`
-    const res = await fetch(url, { headers: { 'User-Agent': 'WashIN/1.0' }, signal: _geoAbortCtrl.signal })
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query + ', Italia')}&key=${key}&language=it&region=it`
+    const res = await fetch(url, { signal: _geoAbortCtrl.signal })
     const data = await res.json()
     _geoAbortCtrl = null
-    if (!data.length) return null
-    const a = data[0]
-    const ad = a.address || {}
-    const road = ad.road || ad.pedestrian || ad.footway || ''
-    const num = ad.house_number || ''
-    const cap = ad.postcode || ''
-    const city = ad.city || ad.town || ad.village || ad.municipality || ''
-    const prov = (ad.county || '').replace(/Provincia (di |del |della |dell')/i, '').slice(0, 2).toUpperCase() || 'SV'
-    const clean = [road + (num ? ' ' + num : ''), [cap, city, prov].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+    if (data.status !== 'OK' || !data.results?.length) return null
+    const r = data.results[0]
+    const comps = r.address_components || []
+    const get = (...types) => comps.find(c => types.every(t => c.types.includes(t)))?.long_name || ''
+    const houseNumber = get('street_number') || null
+    const road = get('route')
+    const city = get('locality') || get('administrative_area_level_3') || get('administrative_area_level_2') || ''
+    const cap = get('postal_code')
+    const clean = [road + (houseNumber ? ' ' + houseNumber : ''), [cap, city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
     return {
-      lat: parseFloat(a.lat),
-      lng: parseFloat(a.lon),
-      displayName: clean || a.display_name,
-      houseNumber: ad.house_number || null,
+      lat: r.geometry.location.lat,
+      lng: r.geometry.location.lng,
+      displayName: clean || r.formatted_address,
+      houseNumber,
     }
   } catch(err) {
-    if (err.name !== 'AbortError') console.warn('Nominatim:', err)
+    if (err.name !== 'AbortError') console.warn('Google Geocoding:', err)
     return null
   }
 }
@@ -49,23 +51,13 @@ async function runGeoCheck(address) {
   const t = address?.trim()
   if (!t || t.length < 6) return null
   const inputNum = extractInputNum(t)
-  const exact = await nominatimSearch(t)
-  if (exact) {
-    // Controlla se il civico è confermato da Nominatim
-    const returnedNum = exact.houseNumber?.toUpperCase() || null
-    const civicOk = !inputNum || (!!returnedNum && (
-      returnedNum === inputNum || returnedNum.includes(inputNum)
-    ))
-    return { found: true, civicOk, inputNum, ...exact }
-  }
-  // Fallback: rimuovi il numero civico e riprova
-  const m = t.match(/^(.*?)\s+\d+[A-Za-z]?\s*,(.*)$/)
-  if (m) {
-    const noNum = (m[1] + ', ' + m[2]).replace(/,\s*,/, ',').trim()
-    const fallback = await nominatimSearch(noNum)
-    if (fallback) return { found: false, civicOk: false, inputNum, suggestion: fallback.displayName, ...fallback }
-  }
-  return null
+  const result = await googleGeocode(t)
+  if (!result) return null
+  const returnedNum = result.houseNumber?.toUpperCase() || null
+  const civicOk = !inputNum || (!!returnedNum && (
+    returnedNum === inputNum || returnedNum.includes(inputNum)
+  ))
+  return { found: true, civicOk, inputNum, ...result }
 }
 
 export async function loadSedi(filtri = {}) {
