@@ -14,15 +14,19 @@ let _aziendaGeo = undefined   // undefined = not loaded, false = not available, 
 const _geoCache = {}
 
 async function geocodeAddress(address) {
-  const key = (address || '').trim().toLowerCase()
-  if (!key) return null
-  if (_geoCache[key] !== undefined) return _geoCache[key]
+  const cacheKey = (address || '').trim().toLowerCase()
+  if (!cacheKey) return null
+  if (_geoCache[cacheKey] !== undefined) return _geoCache[cacheKey]
+  const apiKey = window.GOOGLE_MAPS_KEY
+  if (!apiKey) return null
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(key + ', Italia')}&format=json&limit=1`
-    const res = await fetch(url, { headers: { 'User-Agent': 'WashIN/1.0' } })
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cacheKey + ', Italia')}&key=${apiKey}&language=it&region=it`
+    const res = await fetch(url)
     const data = await res.json()
-    const result = data.length ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null
-    _geoCache[key] = result
+    const result = (data.status === 'OK' && data.results?.length)
+      ? { lat: data.results[0].geometry.location.lat, lng: data.results[0].geometry.location.lng }
+      : null
+    _geoCache[cacheKey] = result
     return result
   } catch { return null }
 }

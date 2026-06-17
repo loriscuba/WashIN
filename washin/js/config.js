@@ -6,3 +6,4 @@ const SUPABASE_ANON_KEY = 'sb_publishable_egNpno2yrS2XnnMtJ4zCvg_GeaBhEv8';
 
 window.SUPABASE_URL = SUPABASE_URL
 window.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY
+window.GOOGLE_MAPS_KEY = 'AIzaSyAMTyde2dGMQjjFKHU3XfnQaL4PySBFNj0'
