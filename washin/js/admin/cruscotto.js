@@ -49,7 +49,7 @@ async function ensureGoogleMaps() {
     const cb = '_gmcb_' + Date.now()
     window[cb] = () => resolve(window.google.maps)
     const s = document.createElement('script')
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=${cb}`
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=${cb}&loading=async&libraries=marker`
     s.async = true
     s.onerror = reject
     document.head.appendChild(s)
@@ -130,11 +130,12 @@ async function renderMappaOggi(interventi) {
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
+      mapId: 'DEMO_MAP_ID',
     })
     _mapInfoWindow = new gm.InfoWindow()
     _mapInstance.addListener('click', () => _mapInfoWindow.close())
   } else {
-    _mapMarkers.forEach(m => m.setMap(null))
+    _mapMarkers.forEach(m => { m.map = null })
     _mapMarkers = []
     _mapInfoWindow.close()
     gm.event.trigger(_mapInstance, 'resize')
@@ -144,19 +145,19 @@ async function renderMappaOggi(interventi) {
   const bounds = new gm.LatLngBounds()
   let hasMarkers = false
 
-  function makeIcon(ivs) {
+  function makeMarkerEl(ivs) {
     const multi = ivs.length > 1
     const color = multi ? '#6366f1' : (STATUS_COLORS[ivs[0].stato] || '#6b7280')
     const size = multi ? 30 : 26
-    const inner = multi
-      ? `<text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="Arial,sans-serif">${ivs.length}</text>`
-      : ''
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="${color}" stroke="white" stroke-width="3"/>${inner}</svg>`
-    return {
-      url: 'data:image/svg+xml,' + encodeURIComponent(svg),
-      scaledSize: new gm.Size(size, size),
-      anchor: new gm.Point(size / 2, size / 2),
+    const el = document.createElement('div')
+    el.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;cursor:pointer;`
+    if (multi) {
+      const span = document.createElement('span')
+      span.textContent = ivs.length
+      span.style.cssText = 'color:white;font-size:12px;font-weight:bold;font-family:Arial,sans-serif;line-height:1;'
+      el.appendChild(span)
     }
+    return el
   }
 
   function makePopupContent(ivs) {
@@ -186,17 +187,17 @@ async function renderMappaOggi(interventi) {
     if (coordMap.has(key)) {
       const entry = coordMap.get(key)
       entry.ivs.push(iv)
-      entry.marker.setIcon(makeIcon(entry.ivs))
+      entry.marker.content = makeMarkerEl(entry.ivs)
       entry.content = makePopupContent(entry.ivs)
     } else {
       const ivs = [iv]
-      const marker = new gm.Marker({ position: pos, map: _mapInstance, icon: makeIcon(ivs) })
+      const marker = new gm.marker.AdvancedMarkerElement({ position: pos, map: _mapInstance, content: makeMarkerEl(ivs) })
       const entry = { ivs, marker, content: makePopupContent(ivs) }
       coordMap.set(key, entry)
       _mapMarkers.push(marker)
       marker.addListener('click', () => {
         _mapInfoWindow.setContent(entry.content)
-        _mapInfoWindow.open(_mapInstance, marker)
+        _mapInfoWindow.open({ map: _mapInstance, anchor: marker })
       })
     }
     fitBounds()
