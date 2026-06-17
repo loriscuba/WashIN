@@ -19,7 +19,7 @@ async function googleGeocode(query) {
     const res = await fetch(url, { signal: _geoAbortCtrl.signal })
     const data = await res.json()
     _geoAbortCtrl = null
-    if (data.status !== 'OK' || !data.results?.length) return null
+    if (data.status !== 'OK' || !data.results?.length) { console.warn('Google Geocoding status:', data.status, data.error_message || ''); return null }
     const r = data.results[0]
     const comps = r.address_components || []
     const get = (...types) => comps.find(c => types.every(t => c.types.includes(t)))?.long_name || ''

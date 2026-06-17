@@ -64,7 +64,7 @@ async function geocodeSede(sedeId, address) {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address + ', Italia')}&key=${key}&language=it&region=it`
     const res = await fetch(url)
     const data = await res.json()
-    if (data.status !== 'OK' || !data.results?.length) { console.warn('Geocoding: nessun risultato per', address); return null }
+    if (data.status !== 'OK' || !data.results?.length) { console.warn('Geocoding: nessun risultato per', address, '— status:', data.status, data.error_message || ''); return null }
     const { lat, lng } = data.results[0].geometry.location
     const { error } = await supabase.from('sedi_cliente').update({ lat, lng }).eq('id', sedeId)
     if (error) console.error('Geocoding: errore salvataggio sede', sedeId, error)
