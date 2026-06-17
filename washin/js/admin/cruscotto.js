@@ -21,7 +21,8 @@ function parseTimeToSeconds(t){
 // ── Mappa ────────────────────────────────────────────────────────────────────
 
 let _mapInstance = null
-let _markersLayer = null
+let _mapMarkers = []
+let _mapInfoWindow = null
 let _interventiOggi = []
 let _mapView = 'lista'
 
@@ -40,18 +41,16 @@ const STATUS_LABEL = {
   annullato:   'Annullato',
 }
 
-async function ensureLeaflet() {
-  if (window.L) return window.L
-  if (!document.querySelector('link[href*="leaflet"]')) {
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-    document.head.appendChild(link)
-  }
+async function ensureGoogleMaps() {
+  if (window.google?.maps?.Map) return window.google.maps
+  const key = window.GOOGLE_MAPS_KEY
+  if (!key) throw new Error('GOOGLE_MAPS_KEY non configurata')
   return new Promise((resolve, reject) => {
+    const cb = '_gmcb_' + Date.now()
+    window[cb] = () => resolve(window.google.maps)
     const s = document.createElement('script')
-    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-    s.onload = () => resolve(window.L)
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=${cb}`
+    s.async = true
     s.onerror = reject
     document.head.appendChild(s)
   })
@@ -122,47 +121,45 @@ async function renderMappaOggi(interventi) {
   const mapDiv = document.getElementById('mappa-oggi')
   if (!mapDiv || mapDiv.style.display === 'none') return
 
-  const L = await ensureLeaflet()
-
-  // Fix Leaflet divIcon white background once
-  if (!document.getElementById('washin-map-css')) {
-    const s = document.createElement('style')
-    s.id = 'washin-map-css'
-    s.textContent = '.washin-map-icon{background:transparent!important;border:none!important;}'
-    document.head.appendChild(s)
-  }
+  const gm = await ensureGoogleMaps()
 
   if (!_mapInstance) {
-    _mapInstance = L.map('mappa-oggi', { zoomControl: true }).setView([44.5, 11.3], 6)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 18,
-    }).addTo(_mapInstance)
-    _markersLayer = L.layerGroup().addTo(_mapInstance)
+    _mapInstance = new gm.Map(mapDiv, {
+      center: { lat: 44.5, lng: 11.3 },
+      zoom: 6,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+    })
+    _mapInfoWindow = new gm.InfoWindow()
+    _mapInstance.addListener('click', () => _mapInfoWindow.close())
   } else {
-    _mapInstance.invalidateSize()
-    _markersLayer.clearLayers()
+    _mapMarkers.forEach(m => m.setMap(null))
+    _mapMarkers = []
+    _mapInfoWindow.close()
+    gm.event.trigger(_mapInstance, 'resize')
   }
 
-  const coordMap = new Map()   // key → { lat, lng, ivs, marker }
-  const allFeatures = []
+  const coordMap = new Map()
+  const bounds = new gm.LatLngBounds()
+  let hasMarkers = false
 
   function makeIcon(ivs) {
     const multi = ivs.length > 1
     const color = multi ? '#6366f1' : (STATUS_COLORS[ivs[0].stato] || '#6b7280')
     const size = multi ? 30 : 26
     const inner = multi
-      ? `<span style="color:#fff;font-weight:800;font-size:12px;">${ivs.length}</span>`
+      ? `<text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="12" font-weight="bold" font-family="Arial,sans-serif">${ivs.length}</text>`
       : ''
-    return L.divIcon({
-      html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;">${inner}</div>`,
-      className: 'washin-map-icon',
-      iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
-    })
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="${color}" stroke="white" stroke-width="3"/>${inner}</svg>`
+    return {
+      url: 'data:image/svg+xml,' + encodeURIComponent(svg),
+      scaledSize: new gm.Size(size, size),
+      anchor: new gm.Point(size / 2, size / 2),
+    }
   }
 
-  function makePopup(ivs) {
+  function makePopupContent(ivs) {
     if (ivs.length === 1) return buildPopup(ivs[0])
     const nomeSede = ivs[0].sedi_cliente?.nome_sede || 'Sede'
     return `<div style="font-size:13px;min-width:220px;">
@@ -171,36 +168,38 @@ async function renderMappaOggi(interventi) {
     </div>`
   }
 
-  function fitAll() {
-    if (!allFeatures.length) return
-    try {
-      const bounds = L.featureGroup(allFeatures).getBounds()
-      if (!bounds.isValid()) return
-      const ne = bounds.getNorthEast(), sw = bounds.getSouthWest()
-      if (Math.abs(ne.lat - sw.lat) < 0.0001 && Math.abs(ne.lng - sw.lng) < 0.0001) {
-        _mapInstance.setView([ne.lat, ne.lng], 15)
-      } else {
-        _mapInstance.fitBounds(bounds.pad(0.3))
-      }
-    } catch(e) { /* ignore */ }
+  function fitBounds() {
+    if (!hasMarkers) return
+    if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+      _mapInstance.setCenter(bounds.getCenter())
+      _mapInstance.setZoom(15)
+    } else {
+      _mapInstance.fitBounds(bounds, { padding: 50 })
+    }
   }
 
   function placeOrUpdate(iv, lat, lng) {
     const key = `${lat.toFixed(5)},${lng.toFixed(5)}`
+    const pos = { lat, lng }
+    bounds.extend(pos)
+    hasMarkers = true
     if (coordMap.has(key)) {
       const entry = coordMap.get(key)
       entry.ivs.push(iv)
       entry.marker.setIcon(makeIcon(entry.ivs))
-      entry.marker.setPopupContent(makePopup(entry.ivs))
+      entry.content = makePopupContent(entry.ivs)
     } else {
       const ivs = [iv]
-      const marker = L.marker([lat, lng], { icon: makeIcon(ivs) })
-        .bindPopup(makePopup(ivs), { maxWidth: 300 })
-        .addTo(_markersLayer)
-      coordMap.set(key, { ivs, marker })
-      allFeatures.push(marker)
+      const marker = new gm.Marker({ position: pos, map: _mapInstance, icon: makeIcon(ivs) })
+      const entry = { ivs, marker, content: makePopupContent(ivs) }
+      coordMap.set(key, entry)
+      _mapMarkers.push(marker)
+      marker.addListener('click', () => {
+        _mapInfoWindow.setContent(entry.content)
+        _mapInfoWindow.open(_mapInstance, marker)
+      })
     }
-    fitAll()
+    fitBounds()
     const noData = document.getElementById('mappa-no-data')
     if (noData) noData.style.display = 'none'
   }
@@ -222,8 +221,7 @@ async function renderMappaOggi(interventi) {
     if (coords) placeOrUpdate(iv, coords.lat, coords.lng)
   }
 
-  // Show "no data" only if nothing placed at all
-  if (coordMap.size === 0) {
+  if (!hasMarkers) {
     const noData = document.getElementById('mappa-no-data')
     if (noData) noData.style.display = 'flex'
   }

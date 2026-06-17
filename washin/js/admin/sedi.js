@@ -318,16 +318,11 @@ export function initSedi() {
           if (!result) {
             geofb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
           } else if (result.found && !result.inputNum) {
-            // Nessun civico digitato — via trovata, avvisa di aggiungere il numero
             geofb.innerHTML = `<span style="color:#2563eb;">ℹ Via verificata senza civico — <em style="font-style:normal;">${result.displayName}</em></span>`
           } else if (result.found && result.civicOk) {
             geofb.innerHTML = `<span style="color:#059669;">✓ Via e civico verificati: <em style="font-style:normal;">${result.displayName}</em></span>`
-          } else if (result.found && !result.civicOk) {
-            // Via trovata ma civico non in OSM — suggerisci la via senza numero
-            showSuggest(`⚠ Via trovata ma civico <strong>${result.inputNum}</strong> non confermato in OpenStreetMap:`)
           } else {
-            // Fallback: via trovata solo senza numero
-            showSuggest('⚠ Indirizzo non trovato — indirizzo più vicino:')
+            showSuggest(`⚠ Civico <strong>${result.inputNum}</strong> non trovato — indirizzo più vicino:`)
           }
         }, 800))
 
