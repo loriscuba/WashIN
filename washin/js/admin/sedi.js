@@ -7,37 +7,56 @@ function debounce(fn, ms) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms) }
 }
 
-let _geoAbortCtrl = null
+let _gmLoadPromise = null
 
-async function googleGeocode(query) {
-  if (_geoAbortCtrl) _geoAbortCtrl.abort()
-  _geoAbortCtrl = new AbortController()
+async function ensureGeocoder() {
+  if (window.google?.maps?.Geocoder) return new window.google.maps.Geocoder()
+  if (_gmLoadPromise) return _gmLoadPromise
   const key = window.GOOGLE_MAPS_KEY
   if (!key) return null
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query + ', Italia')}&key=${key}&language=it&region=it`
-    const res = await fetch(url, { signal: _geoAbortCtrl.signal })
-    const data = await res.json()
-    _geoAbortCtrl = null
-    if (data.status !== 'OK' || !data.results?.length) { console.warn('Google Geocoding status:', data.status, data.error_message || ''); return null }
-    const r = data.results[0]
-    const comps = r.address_components || []
-    const get = (...types) => comps.find(c => types.every(t => c.types.includes(t)))?.long_name || ''
-    const houseNumber = get('street_number') || null
-    const road = get('route')
-    const city = get('locality') || get('administrative_area_level_3') || get('administrative_area_level_2') || ''
-    const cap = get('postal_code')
-    const clean = [road + (houseNumber ? ' ' + houseNumber : ''), [cap, city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
-    return {
-      lat: r.geometry.location.lat,
-      lng: r.geometry.location.lng,
-      displayName: clean || r.formatted_address,
-      houseNumber,
-    }
-  } catch(err) {
-    if (err.name !== 'AbortError') console.warn('Google Geocoding:', err)
-    return null
-  }
+  _gmLoadPromise = new Promise(resolve => {
+    const cb = '_gmsedi_' + Date.now()
+    window[cb] = () => { _gmLoadPromise = null; resolve(new window.google.maps.Geocoder()) }
+    const s = document.createElement('script')
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=${cb}&loading=async&libraries=marker`
+    s.async = true
+    s.onerror = () => { _gmLoadPromise = null; resolve(null) }
+    document.head.appendChild(s)
+  })
+  return _gmLoadPromise
+}
+
+async function googleGeocode(query) {
+  const geocoder = await ensureGeocoder()
+  if (!geocoder) return null
+  return new Promise(resolve => {
+    geocoder.geocode({ address: query + ', Italia', region: 'IT', language: 'it' }, (results, status) => {
+      if (status === 'REQUEST_DENIED') {
+        console.error('Geocoding REQUEST_DENIED — controlla le restrizioni HTTP referrer della chiave API in Google Cloud Console → Credenziali')
+        resolve({ _denied: true })
+        return
+      }
+      if (status !== 'OK' || !results?.length) {
+        console.warn('Google Geocoding status:', status)
+        resolve(null)
+        return
+      }
+      const r = results[0]
+      const comps = r.address_components || []
+      const get = (...types) => comps.find(c => types.every(t => c.types.includes(t)))?.long_name || ''
+      const houseNumber = get('street_number') || null
+      const road = get('route')
+      const city = get('locality') || get('administrative_area_level_3') || get('administrative_area_level_2') || ''
+      const cap = get('postal_code')
+      const clean = [road + (houseNumber ? ' ' + houseNumber : ''), [cap, city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+      resolve({
+        lat: r.geometry.location.lat(),
+        lng: r.geometry.location.lng(),
+        displayName: clean || r.formatted_address,
+        houseNumber,
+      })
+    })
+  })
 }
 
 // Estrae il civico dalla parte di strada (prima della prima virgola), es. "Via Roma 50, ..." → "50"
@@ -52,7 +71,7 @@ async function runGeoCheck(address) {
   if (!t || t.length < 6) return null
   const inputNum = extractInputNum(t)
   const result = await googleGeocode(t)
-  if (!result) return null
+  if (!result || result._denied) return result ?? null
   const returnedNum = result.houseNumber?.toUpperCase() || null
   const civicOk = !inputNum || (!!returnedNum && (
     returnedNum === inputNum || returnedNum.includes(inputNum)
@@ -302,7 +321,7 @@ export function initSedi() {
           if (!val || val.length < 6) { geofb.innerHTML = ''; form._geoResult = null; return }
           geofb.innerHTML = '<span style="color:#6b7280;">⏳ Verifica indirizzo...</span>'
           const result = await runGeoCheck(val)
-          form._geoResult = result
+          form._geoResult = (result && !result._denied) ? result : null
 
           const showSuggest = (msg) => {
             geofb.innerHTML = `<span style="color:#d97706;">${msg}</span><br>
@@ -315,7 +334,9 @@ export function initSedi() {
             })
           }
 
-          if (!result) {
+          if (result?._denied) {
+            geofb.innerHTML = '<span style="color:#dc2626;">✗ Chiave API Google non autorizzata — aggiungi <strong>https://loriscuba.github.io/*</strong> nelle restrizioni HTTP referrer (Google Cloud Console → Credenziali → modifica chiave API)</span>'
+          } else if (!result) {
             geofb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
           } else if (result.found && !result.inputNum) {
             geofb.innerHTML = `<span style="color:#2563eb;">ℹ Via verificata senza civico — <em style="font-style:normal;">${result.displayName}</em></span>`
