@@ -58,22 +58,23 @@ async function ensureGoogleMaps() {
 
 async function geocodeSede(sedeId, address) {
   if (!address?.trim()) return null
-  const key = window.GOOGLE_MAPS_KEY
-  if (!key) return null
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address + ', Italia')}&key=${key}&language=it&region=it`
-    const res = await fetch(url)
-    const data = await res.json()
-    if (data.status !== 'OK' || !data.results?.length) { console.warn('Geocoding: nessun risultato per', address, '— status:', data.status, data.error_message || ''); return null }
-    const { lat, lng } = data.results[0].geometry.location
-    const { error } = await supabase.from('sedi_cliente').update({ lat, lng }).eq('id', sedeId)
-    if (error) console.error('Geocoding: errore salvataggio sede', sedeId, error)
-    else console.info('Geocoding OK:', address, '→', lat, lng)
-    return { lat, lng }
-  } catch (err) {
-    console.warn('Geocoding failed:', address, err)
-    return null
-  }
+  if (!window.google?.maps?.Geocoder) return null
+  return new Promise(resolve => {
+    const geocoder = new window.google.maps.Geocoder()
+    geocoder.geocode({ address: address + ', Italia', region: 'it' }, async (results, status) => {
+      if (status !== 'OK' || !results?.length) {
+        console.warn('Geocoding: nessun risultato per', address, '— status:', status)
+        resolve(null)
+        return
+      }
+      const lat = results[0].geometry.location.lat()
+      const lng = results[0].geometry.location.lng()
+      const { error } = await supabase.from('sedi_cliente').update({ lat, lng }).eq('id', sedeId)
+      if (error) console.error('Geocoding: errore salvataggio sede', sedeId, error)
+      else console.info('Geocoding OK:', address, '→', lat, lng)
+      resolve({ lat, lng })
+    })
+  })
 }
 
 async function geocodeAllSedi() {
