@@ -175,38 +175,53 @@ function parseDocumentText(text, docType) {
   }
 
   if (docType === 'carta_identita') {
-    // Approccio riga-per-riga: più robusto di regex multilinea per output OCR variabile
     const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)
     console.log('[OCR carta_identita] testo grezzo:\n' + text)
 
+    // Estrae il primo nome/cognome valido dalla riga ignorando artefatti OCR
+    const CONNECTORS = new Set(['DE', 'DI', 'DEL', 'DELLA', 'DEGLI', 'LO', 'LA', 'LE', 'D'])
+    const extractName = (line) => {
+      const words = line.toUpperCase().split(/\s+/)
+      const result = []
+      for (const w of words) {
+        if (/^[A-ZÀÈÉÌÒÙŁ\-']{2,}$/.test(w)) {
+          result.push(w)
+          if (!CONNECTORS.has(w)) break
+        } else break
+      }
+      return result.length ? result.join(' ') : null
+    }
+
+    // Controlla se una riga è un'etichetta CIE (non un valore)
+    const isLabel = (s) => /COGNOME|SURNAME|NOME|NAME|LUOGO|BIRTH|SESSO|SEX|STATURA|HEIGHT|EMISSIONE|ISSUING|SCADENZA|EXPIRY|FIRMA|HOLDER|CITTADINANZA|NATIONALITY|CODICE|FISCAL|COMUNE|MUNICIPALITY|IDENTIT|MINISTERO|REPUBBLICA/i.test(s)
+
     for (let i = 0; i < lines.length; i++) {
       const up = lines[i].toUpperCase()
-      const next = (lines[i + 1] || '').trim()
-      const next2 = (lines[i + 2] || '').trim()
 
-      // Cognome: riga con "COGNOME" e "SURNAME" → riga successiva è il valore
-      if (up.includes('COGNOME') && up.includes('SURNAME') && !r.cognome) {
-        const val = next || next2
-        if (val && /^[A-ZÀÈÉÌÒÙŁ]/i.test(val) && !/NOME|DATE|BIRTH|LUOGO/.test(val.toUpperCase())) {
-          r.cognome = val.toUpperCase()
+      // Cognome
+      if (up.includes('COGNOME') && !r.cognome) {
+        for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
+          if (!isLabel(lines[j])) {
+            const n = extractName(lines[j])
+            if (n) { r.cognome = n; break }
+          }
         }
       }
 
-      // Nome: riga con "NOME" e "NAME" ma non "COGNOME" → riga successiva è il valore
-      if (up.includes('NOME') && up.includes('NAME') && !up.includes('COGNOME') && !r.nome) {
-        const val = next || next2
-        if (val && /^[A-ZÀÈÉÌÒÙŁ]/i.test(val) && !/NOME|DATE|BIRTH|LUOGO/.test(val.toUpperCase())) {
-          r.nome = val.toUpperCase()
+      // Nome (riga con "NOME" ma non "COGNOME")
+      if (up.includes('NOME') && !up.includes('COGNOME') && !r.nome) {
+        for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
+          if (!isLabel(lines[j]) && lines[j].toUpperCase() !== r.cognome) {
+            const n = extractName(lines[j])
+            if (n) { r.nome = n; break }
+          }
         }
       }
 
-      // Codice Fiscale: riga con "CODICE FISCALE" o "FISCAL CODE"
-      if ((up.includes('CODICE FISCALE') || up.includes('FISCAL CODE')) && !r.codice_fiscale) {
-        // Cerca il CF nella riga corrente (dopo il label) o in quella successiva
-        const candidates = [up, next.toUpperCase(), next2.toUpperCase()]
-        for (const c of candidates) {
-          // Lenient: accetta I→1 nella parte del codice comune (posizione 12)
-          const m = c.match(/([A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z0-9][0-9]{3}[A-Z])/i)
+      // Codice Fiscale
+      if ((up.includes('CODICE') || up.includes('FISCAL')) && !r.codice_fiscale) {
+        for (let j = i; j <= i + 3 && j < lines.length; j++) {
+          const m = lines[j].match(/([A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z0-9][0-9]{3}[A-Z])/i)
           if (m) { r.codice_fiscale = m[1].toUpperCase(); break }
         }
       }
@@ -216,7 +231,7 @@ function parseDocumentText(text, docType) {
     const dataN = text.match(/(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/)
     if (dataN) r._data_nascita = `${dataN[3]}-${dataN[2]}-${dataN[1]}`
 
-    // CF fallback: regex generale sul testo intero (più lieve)
+    // CF fallback sull'intero testo (cattura anche casi senza label vicina)
     if (!r.codice_fiscale) {
       const m = text.match(/([A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z0-9][0-9]{3}[A-Z])/i)
       if (m) r.codice_fiscale = m[1].toUpperCase()
