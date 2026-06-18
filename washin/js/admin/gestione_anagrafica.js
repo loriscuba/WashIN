@@ -11,6 +11,262 @@ const FMT_EUR = v => new Intl.NumberFormat('it-IT', { style: 'currency', currenc
 let _currentOpId = null
 let _operatori = []
 
+// ── PDF.js — caricamento lazy ─────────────────────────────────────────────────
+
+let _pdfjsPromise = null
+function ensurePdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib)
+  if (_pdfjsPromise) return _pdfjsPromise
+  _pdfjsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+      resolve(window.pdfjsLib)
+    }
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return _pdfjsPromise
+}
+
+async function extractTextFromFile(file) {
+  if (!file) return ''
+  if (file.type === 'application/pdf') {
+    try {
+      const pdfjs = await ensurePdfJs()
+      const buf = await file.arrayBuffer()
+      const pdf = await pdfjs.getDocument({ data: buf }).promise
+      let text = ''
+      for (let i = 1; i <= Math.min(pdf.numPages, 4); i++) {
+        const page = await pdf.getPage(i)
+        const content = await page.getTextContent()
+        text += content.items.map(it => it.str).join(' ') + '\n'
+      }
+      return text
+    } catch (err) {
+      console.warn('PDF text extraction:', err)
+      return ''
+    }
+  }
+  return ''  // immagini: nessuna estrazione testo lato client
+}
+
+// ── Parsing campi da testo estratto ──────────────────────────────────────────
+
+function parseDocumentText(text, docType) {
+  const r = {}
+  if (!text) return r
+
+  // Codice Fiscale
+  const cfM = text.match(/\b([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])\b/i)
+  if (cfM) r.codice_fiscale = cfM[1].toUpperCase()
+
+  // IBAN italiano
+  const ibanM = text.match(/\b(IT\s*\d{2}\s*[A-Z0-9]\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{4}\s*\d{3})\b/i)
+  if (ibanM) r.iban_dipendente = ibanM[1].replace(/\s+/g, '').toUpperCase()
+
+  if (docType === 'busta_paga') {
+    // Matricola
+    const matrM = text.match(/[Mm]atricola[\s:]+([A-Z0-9]{3,12})/i)
+    if (matrM) r.matricola = matrM[1]
+
+    // Competenza mese anno (es. "Competenza: Gennaio 2024" oppure "03/2024")
+    const compM = text.match(/[Cc]ompetenza[\s:]+([A-Za-z]+)\s+(\d{4})/)
+    if (compM) {
+      const idx = MESI.findIndex(m => m.toLowerCase().startsWith(compM[1].toLowerCase().slice(0,3)))
+      if (idx >= 0) { r._bp_mese = idx + 1; r._bp_anno = parseInt(compM[2]) }
+    }
+    if (!r._bp_mese) {
+      const mmyyM = text.match(/(\d{2})\/(\d{4})/)
+      if (mmyyM) { r._bp_mese = parseInt(mmyyM[1]); r._bp_anno = parseInt(mmyyM[2]) }
+    }
+
+    // Paga base
+    const pbM = text.match(/[Pp]aga\s+[Bb]ase[\s:€]+([0-9]{1,6}[.,][0-9]{2})/)
+    if (pbM) r.paga_base = parseFloat(pbM[1].replace(',', '.'))
+
+    // Totale netto
+    const nettoM = text.match(/[Nn]etto[\s:€a-z]+([0-9]{1,6}[.,][0-9]{2})/)
+    if (nettoM) r._bp_netto = parseFloat(nettoM[1].replace(',', '.'))
+
+    // Totale lordo
+    const lordoM = text.match(/[Ll]ordo[\s:€a-z]+([0-9]{1,6}[.,][0-9]{2})/)
+    if (lordoM) r._bp_lordo = parseFloat(lordoM[1].replace(',', '.'))
+
+    // Nome Cognome da intestazione busta (linee iniziali)
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+    // Cerca pattern "COGNOME NOME" come prima riga lunga in maiuscolo
+    for (const line of lines.slice(0, 8)) {
+      const parole = line.match(/^([A-ZÀÈÉÌÒÙ]{2,}\s+[A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ]{2,})?)$/)
+      if (parole && !r.cognome) {
+        const parts = parole[1].split(/\s+/)
+        r.cognome = parts[0]
+        r.nome = parts.slice(1).join(' ')
+        break
+      }
+    }
+  }
+
+  if (docType === 'carta_identita') {
+    const cognomeM = text.match(/[Cc]ognome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s]+?)(?=\s*[\n\r])/m)
+      || text.match(/[Cc]ognome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ]+)/i)
+    if (cognomeM) r.cognome = cognomeM[1].trim()
+
+    const nomeM = text.match(/\b[Nn]ome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s]+?)(?=\s*[\n\r])/m)
+      || text.match(/\b[Nn]ome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ]+)/i)
+    if (nomeM) r.nome = nomeM[1].trim()
+
+    // Data di nascita
+    const dataN = text.match(/(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/)
+    if (dataN) r._data_nascita = `${dataN[3]}-${dataN[2]}-${dataN[1]}`
+  }
+
+  return r
+}
+
+// ── Anteprima documento ───────────────────────────────────────────────────────
+
+function showDocumentPreview(file, container) {
+  if (!container) return
+  const url = URL.createObjectURL(file)
+  if (file.type === 'application/pdf') {
+    container.innerHTML = `<iframe src="${url}#toolbar=0" style="width:100%;height:100%;min-height:420px;border:none;border-radius:6px;" title="Anteprima PDF"></iframe>`
+  } else {
+    container.innerHTML = `<img src="${url}" style="max-width:100%;max-height:520px;object-fit:contain;border-radius:6px;display:block;margin:auto;" alt="Anteprima documento">`
+  }
+  container.style.display = ''
+}
+
+// ── Modal nuovo operatore ─────────────────────────────────────────────────────
+
+function openModalNuovoOp() {
+  const modal = document.getElementById('hr-nuovo-modal')
+  if (!modal) return
+  const form = document.getElementById('hr-nuovo-form')
+  if (form) form.reset()
+  const preview = document.getElementById('hr-nuovo-preview')
+  if (preview) { preview.innerHTML = ''; preview.style.display = 'none' }
+  const estrato = document.getElementById('hr-nuovo-estratto')
+  if (estrato) estrato.innerHTML = ''
+  modal.classList.add('active')
+}
+
+async function handleNuovoFileChange(file) {
+  if (!file) return
+  const docType = document.querySelector('input[name="hr-doc-type"]:checked')?.value || 'busta_paga'
+  const preview = document.getElementById('hr-nuovo-preview')
+  showDocumentPreview(file, preview)
+
+  const estratoDiv = document.getElementById('hr-nuovo-estratto')
+  if (estratoDiv) estratoDiv.innerHTML = '<span style="color:var(--gray-500);font-size:12px;">⏳ Estrazione testo in corso...</span>'
+
+  const text = await extractTextFromFile(file)
+  const parsed = parseDocumentText(text, docType)
+
+  // Popola i campi del form
+  const form = document.getElementById('hr-nuovo-form')
+  if (form) {
+    const set = (name, val) => { if (val != null) { const el = form.querySelector(`[name="${name}"]`); if (el) el.value = val } }
+    set('nome', parsed.nome)
+    set('cognome', parsed.cognome)
+    set('codice_fiscale', parsed.codice_fiscale)
+    set('iban_dipendente', parsed.iban_dipendente)
+    set('matricola', parsed.matricola)
+    set('paga_base', parsed.paga_base)
+    // Memorizza dati busta per salvataggio
+    form.dataset.bpMese = parsed._bp_mese || ''
+    form.dataset.bpAnno = parsed._bp_anno || ''
+    form.dataset.bpLordo = parsed._bp_lordo || ''
+    form.dataset.bpNetto = parsed._bp_netto || ''
+    form.dataset.dataNascita = parsed._data_nascita || ''
+  }
+
+  if (estratoDiv) {
+    const campi = Object.entries(parsed)
+      .filter(([k]) => !k.startsWith('_'))
+      .map(([k, v]) => `<strong>${k.replace('_', ' ')}:</strong> ${v}`)
+    estratoDiv.innerHTML = campi.length
+      ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.8;">${campi.join('<br>')}</div>`
+      : '<span style="color:var(--gray-400);font-size:12px;">Nessun dato estratto automaticamente — compila manualmente</span>'
+  }
+}
+
+async function saveNuovoOperatore() {
+  const form = document.getElementById('hr-nuovo-form')
+  if (!form) return
+  const g = name => form.querySelector(`[name="${name}"]`)?.value?.trim() || null
+
+  if (!g('cognome') && !g('nome')) {
+    showToast('Inserisci almeno nome o cognome', 'error')
+    return
+  }
+
+  const fields = {
+    nome: g('nome'),
+    cognome: g('cognome'),
+    codice_fiscale: g('codice_fiscale') ? g('codice_fiscale').toUpperCase() : null,
+    email: g('email'),
+    telefono: g('telefono'),
+    matricola: g('matricola'),
+    iban_dipendente: g('iban_dipendente'),
+    qualifica: g('qualifica'),
+    data_assunzione: g('data_assunzione') || null,
+    tipo_contratto: g('tipo_contratto') || null,
+    ccnl: g('ccnl') || null,
+    paga_base: g('paga_base') ? parseFloat(g('paga_base')) : null,
+    ruolo: 'operatore',
+    attivo: true,
+  }
+
+  try {
+    const { data, error } = await supabase.from('profili').insert(fields).select('id').single()
+    if (error) throw error
+
+    const newId = data.id
+
+    // Upload documento + salva busta paga se presente
+    const fileInput = form.querySelector('[name="file"]')
+    const file = fileInput?.files?.[0]
+    const docType = document.querySelector('input[name="hr-doc-type"]:checked')?.value
+    let filePath = null
+
+    if (file && newId) {
+      const ext = file.name.split('.').pop() || 'pdf'
+      const folder = docType === 'busta_paga' ? 'buste-paga' : 'documenti-hr'
+      const path = `${newId}/${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from(folder).upload(path, file)
+      if (!upErr) filePath = path
+    }
+
+    // Se busta paga: salva record busta
+    if (docType === 'busta_paga' && newId && (form.dataset.bpMese || form.dataset.bpAnno)) {
+      const bpPayload = {
+        operatore_id: newId,
+        mese: parseInt(form.dataset.bpMese) || new Date().getMonth() + 1,
+        anno: parseInt(form.dataset.bpAnno) || new Date().getFullYear(),
+        paga_base: fields.paga_base || 0,
+        totale_lordo: parseFloat(form.dataset.bpLordo) || 0,
+        totale_netto: parseFloat(form.dataset.bpNetto) || 0,
+        file_path: filePath,
+        stato: 'caricata',
+      }
+      await supabase.from('buste_paga').insert(bpPayload)
+    }
+
+    showToast('Operatore creato', 'success')
+    document.getElementById('hr-nuovo-modal')?.classList.remove('active')
+    _operatori = await loadOperatoriHR()
+    renderTabellaHR(_operatori)
+    // Apri subito l'anagrafica del nuovo operatore
+    await openModalAnag(newId)
+  } catch (err) {
+    showToast('Errore creazione operatore', 'error')
+    console.error(err)
+  }
+}
+
 // ── Data loading ─────────────────────────────────────────────────────────────
 
 async function loadOperatoriHR() {
@@ -414,6 +670,31 @@ export function initGestioneAnagrafica() {
         el.addEventListener('input', () => ricalcola(bustaForm))
       })
     }
+
+    // ── Nuovo operatore ─────────────────────────────────────────────────────
+    document.getElementById('hr-nuovo-btn')?.addEventListener('click', openModalNuovoOp)
+
+    document.getElementById('hr-nuovo-close')?.addEventListener('click', () =>
+      document.getElementById('hr-nuovo-modal')?.classList.remove('active'))
+
+    document.getElementById('hr-nuovo-save')?.addEventListener('click', saveNuovoOperatore)
+
+    document.getElementById('hr-nuovo-file-input')?.addEventListener('change', e => {
+      const file = e.target.files?.[0]
+      if (file) handleNuovoFileChange(file)
+    })
+
+    // Cambio tipo documento reimposta preview
+    document.querySelectorAll('input[name="hr-doc-type"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const file = document.getElementById('hr-nuovo-file-input')?.files?.[0]
+        const manuale = document.querySelector('input[name="hr-doc-type"]:checked')?.value === 'manuale'
+        const preview = document.getElementById('hr-nuovo-preview')
+        if (manuale && preview) { preview.innerHTML = ''; preview.style.display = 'none' }
+        if (file && !manuale) handleNuovoFileChange(file)
+      })
+    })
+
   } catch (err) {
     showToast('Errore inizializzazione Gestione Anagrafica', 'error')
     console.error(err)
