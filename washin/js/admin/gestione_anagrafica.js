@@ -49,16 +49,43 @@ function ensureTesseract() {
 
 async function extractTextFromFile(file, onProgress) {
   if (!file) return ''
+
   if (file.type === 'application/pdf') {
     try {
       const pdfjs = await ensurePdfJs()
       const buf = await file.arrayBuffer()
       const pdf = await pdfjs.getDocument({ data: buf }).promise
+      const numPages = Math.min(pdf.numPages, 4)
+
+      // Try digital text extraction first
       let text = ''
-      for (let i = 1; i <= Math.min(pdf.numPages, 4); i++) {
+      for (let i = 1; i <= numPages; i++) {
         const page = await pdf.getPage(i)
         const content = await page.getTextContent()
         text += content.items.map(it => it.str).join(' ') + '\n'
+      }
+
+      // If no text found (scanned PDF), fall back to OCR via canvas render
+      if (text.trim().length < 30) {
+        if (onProgress) onProgress(0)
+        const Tesseract = await ensureTesseract()
+        text = ''
+        for (let i = 1; i <= numPages; i++) {
+          const page = await pdf.getPage(i)
+          const viewport = page.getViewport({ scale: 2.5 })
+          const canvas = document.createElement('canvas')
+          canvas.width = viewport.width
+          canvas.height = viewport.height
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+          const dataUrl = canvas.toDataURL('image/png')
+          const pageProgress = pct => {
+            if (onProgress) onProgress(Math.round(((i - 1) / numPages + pct / 100 / numPages) * 100))
+          }
+          const result = await Tesseract.recognize(dataUrl, 'ita+eng', {
+            logger: m => { if (m.status === 'recognizing text') pageProgress(Math.round(m.progress * 100)) }
+          })
+          text += result.data.text + '\n'
+        }
       }
       return text
     } catch (err) {
@@ -66,6 +93,7 @@ async function extractTextFromFile(file, onProgress) {
       return ''
     }
   }
+
   if (file.type.startsWith('image/')) {
     try {
       const Tesseract = await ensureTesseract()
@@ -207,10 +235,7 @@ async function handleNuovoFileChange(file) {
   showDocumentPreview(file, preview)
 
   const estratoDiv = document.getElementById('hr-nuovo-estratto')
-  const isImage = file.type.startsWith('image/')
-  if (estratoDiv) estratoDiv.innerHTML = isImage
-    ? '<span style="color:var(--gray-500);font-size:12px;">⏳ OCR in corso (~10 s)… 0%</span>'
-    : '<span style="color:var(--gray-500);font-size:12px;">⏳ Estrazione testo in corso…</span>'
+  if (estratoDiv) estratoDiv.innerHTML = '<span style="color:var(--gray-500);font-size:12px;">⏳ Analisi documento in corso…</span>'
 
   const text = await extractTextFromFile(file, pct => {
     if (estratoDiv) estratoDiv.innerHTML = `<span style="color:var(--gray-500);font-size:12px;">⏳ OCR in corso… ${pct}%</span>`
