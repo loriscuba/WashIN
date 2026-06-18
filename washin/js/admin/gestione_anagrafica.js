@@ -72,16 +72,16 @@ async function extractTextFromFile(file, onProgress) {
         text = ''
         for (let i = 1; i <= numPages; i++) {
           const page = await pdf.getPage(i)
-          const viewport = page.getViewport({ scale: 2.5 })
+          const viewport = page.getViewport({ scale: 2.0 })
           const canvas = document.createElement('canvas')
           canvas.width = viewport.width
           canvas.height = viewport.height
           await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-          const dataUrl = canvas.toDataURL('image/png')
           const pageProgress = pct => {
             if (onProgress) onProgress(Math.round(((i - 1) / numPages + pct / 100 / numPages) * 100))
           }
-          const result = await Tesseract.recognize(dataUrl, 'ita+eng', {
+          // pass canvas directly — avoids heavy PNG encoding step
+          const result = await Tesseract.recognize(canvas, 'ita+eng', {
             logger: m => { if (m.status === 'recognizing text') pageProgress(Math.round(m.progress * 100)) }
           })
           text += result.data.text + '\n'
@@ -175,25 +175,37 @@ function parseDocumentText(text, docType) {
   }
 
   if (docType === 'carta_identita') {
-    // Cognome — gestisce "COGNOME/SURNAME\nVALORE" (output OCR CIE) e "Cognome: valore"
-    const cognomeM = text.match(/COGNOME\s*\/?\s*SURNAME\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
-      || text.match(/[Cc]ognome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
-      || text.match(/[Cc]ognome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ\-]+)/i)
-    if (cognomeM) r.cognome = cognomeM[1].trim()
+    // Helper: cerca valore dopo un'etichetta bilingue (label su riga, valore sulla riga dopo OPPURE stesso riga)
+    const afterLabel = (patterns) => {
+      for (const p of patterns) {
+        const m = text.match(p)
+        if (m) return m[1].trim()
+      }
+      return null
+    }
 
-    // Nome — gestisce "NOME/NAME\nVALORE" e "Nome: valore"
-    const nomeM = text.match(/NOME\s*\/?\s*NAME\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
-      || text.match(/\b[Nn]ome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
-      || text.match(/\b[Nn]ome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ\-]+)/i)
-    if (nomeM) r.nome = nomeM[1].trim()
+    // Cognome
+    r.cognome = afterLabel([
+      /COGNOME\s*\/\s*SURNAME[^\n]*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
+      /COGNOME\s*\/?\s*SURNAME\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/i,
+      /COGNOME[\n\r\s:]+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
+    ])
 
-    // Data di nascita
+    // Nome
+    r.nome = afterLabel([
+      /NOME\s*\/\s*NAME[^\n]*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
+      /NOME\s*\/?\s*NAME\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/i,
+      /\bNOME[\n\r\s:]+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
+    ])
+
+    // Data di nascita: cerca "01.02.1985" o "01/02/1985" — prende la prima data trovata
     const dataN = text.match(/(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/)
     if (dataN) r._data_nascita = `${dataN[3]}-${dataN[2]}-${dataN[1]}`
 
-    // Codice Fiscale dal retro (FISCAL CODE)
+    // Codice Fiscale — se non trovato dalla regex generale, cerca vicino a "FISCAL CODE"
     if (!r.codice_fiscale) {
-      const fcM = text.match(/FISCAL\s*CODE\s*[\n\r\s]+([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
+      const fcM = text.match(/FISCAL\s*CODE[^\n]*[\n\r]+\s*([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
+        || text.match(/CODICE\s*FISCALE[^\n]*[\n\r]+\s*([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
       if (fcM) r.codice_fiscale = fcM[1].toUpperCase()
     }
   }
