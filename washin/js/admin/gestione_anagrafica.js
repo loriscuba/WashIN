@@ -31,7 +31,23 @@ function ensurePdfJs() {
   return _pdfjsPromise
 }
 
-async function extractTextFromFile(file) {
+// ── Tesseract.js OCR — caricamento lazy ───────────────────────────────────────
+
+let _tesseractPromise = null
+function ensureTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract)
+  if (_tesseractPromise) return _tesseractPromise
+  _tesseractPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+    s.onload = () => resolve(window.Tesseract)
+    s.onerror = () => { _tesseractPromise = null; reject(new Error('Tesseract load failed')) }
+    document.head.appendChild(s)
+  })
+  return _tesseractPromise
+}
+
+async function extractTextFromFile(file, onProgress) {
   if (!file) return ''
   if (file.type === 'application/pdf') {
     try {
@@ -50,7 +66,28 @@ async function extractTextFromFile(file) {
       return ''
     }
   }
-  return ''  // immagini: nessuna estrazione testo lato client
+  if (file.type.startsWith('image/')) {
+    try {
+      const Tesseract = await ensureTesseract()
+      const url = URL.createObjectURL(file)
+      try {
+        const result = await Tesseract.recognize(url, 'ita+eng', {
+          logger: m => {
+            if (m.status === 'recognizing text' && onProgress) {
+              onProgress(Math.round(m.progress * 100))
+            }
+          }
+        })
+        return result.data.text
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      console.warn('OCR failed:', err)
+      return ''
+    }
+  }
+  return ''
 }
 
 // ── Parsing campi da testo estratto ──────────────────────────────────────────
@@ -110,17 +147,27 @@ function parseDocumentText(text, docType) {
   }
 
   if (docType === 'carta_identita') {
-    const cognomeM = text.match(/[Cc]ognome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s]+?)(?=\s*[\n\r])/m)
-      || text.match(/[Cc]ognome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ]+)/i)
+    // Cognome — gestisce "COGNOME/SURNAME\nVALORE" (output OCR CIE) e "Cognome: valore"
+    const cognomeM = text.match(/COGNOME\s*\/?\s*SURNAME\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
+      || text.match(/[Cc]ognome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
+      || text.match(/[Cc]ognome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ\-]+)/i)
     if (cognomeM) r.cognome = cognomeM[1].trim()
 
-    const nomeM = text.match(/\b[Nn]ome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s]+?)(?=\s*[\n\r])/m)
-      || text.match(/\b[Nn]ome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ]+)/i)
+    // Nome — gestisce "NOME/NAME\nVALORE" e "Nome: valore"
+    const nomeM = text.match(/NOME\s*\/?\s*NAME\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
+      || text.match(/\b[Nn]ome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
+      || text.match(/\b[Nn]ome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ\-]+)/i)
     if (nomeM) r.nome = nomeM[1].trim()
 
     // Data di nascita
     const dataN = text.match(/(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/)
     if (dataN) r._data_nascita = `${dataN[3]}-${dataN[2]}-${dataN[1]}`
+
+    // Codice Fiscale dal retro (FISCAL CODE)
+    if (!r.codice_fiscale) {
+      const fcM = text.match(/FISCAL\s*CODE\s*[\n\r\s]+([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
+      if (fcM) r.codice_fiscale = fcM[1].toUpperCase()
+    }
   }
 
   return r
@@ -160,9 +207,14 @@ async function handleNuovoFileChange(file) {
   showDocumentPreview(file, preview)
 
   const estratoDiv = document.getElementById('hr-nuovo-estratto')
-  if (estratoDiv) estratoDiv.innerHTML = '<span style="color:var(--gray-500);font-size:12px;">⏳ Estrazione testo in corso...</span>'
+  const isImage = file.type.startsWith('image/')
+  if (estratoDiv) estratoDiv.innerHTML = isImage
+    ? '<span style="color:var(--gray-500);font-size:12px;">⏳ OCR in corso (~10 s)… 0%</span>'
+    : '<span style="color:var(--gray-500);font-size:12px;">⏳ Estrazione testo in corso…</span>'
 
-  const text = await extractTextFromFile(file)
+  const text = await extractTextFromFile(file, pct => {
+    if (estratoDiv) estratoDiv.innerHTML = `<span style="color:var(--gray-500);font-size:12px;">⏳ OCR in corso… ${pct}%</span>`
+  })
   const parsed = parseDocumentText(text, docType)
 
   // Popola i campi del form
