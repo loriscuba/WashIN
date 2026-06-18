@@ -49,16 +49,43 @@ function ensureTesseract() {
 
 async function extractTextFromFile(file, onProgress) {
   if (!file) return ''
+
   if (file.type === 'application/pdf') {
     try {
       const pdfjs = await ensurePdfJs()
       const buf = await file.arrayBuffer()
       const pdf = await pdfjs.getDocument({ data: buf }).promise
+      const numPages = Math.min(pdf.numPages, 4)
+
+      // Try digital text extraction first
       let text = ''
-      for (let i = 1; i <= Math.min(pdf.numPages, 4); i++) {
+      for (let i = 1; i <= numPages; i++) {
         const page = await pdf.getPage(i)
         const content = await page.getTextContent()
         text += content.items.map(it => it.str).join(' ') + '\n'
+      }
+
+      // If no text found (scanned PDF), fall back to OCR via canvas render
+      if (text.trim().length < 30) {
+        if (onProgress) onProgress(0)
+        const Tesseract = await ensureTesseract()
+        text = ''
+        for (let i = 1; i <= numPages; i++) {
+          const page = await pdf.getPage(i)
+          const viewport = page.getViewport({ scale: 2.0 })
+          const canvas = document.createElement('canvas')
+          canvas.width = viewport.width
+          canvas.height = viewport.height
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+          const pageProgress = pct => {
+            if (onProgress) onProgress(Math.round(((i - 1) / numPages + pct / 100 / numPages) * 100))
+          }
+          // pass canvas directly — avoids heavy PNG encoding step
+          const result = await Tesseract.recognize(canvas, 'ita+eng', {
+            logger: m => { if (m.status === 'recognizing text') pageProgress(Math.round(m.progress * 100)) }
+          })
+          text += result.data.text + '\n'
+        }
       }
       return text
     } catch (err) {
@@ -66,6 +93,7 @@ async function extractTextFromFile(file, onProgress) {
       return ''
     }
   }
+
   if (file.type.startsWith('image/')) {
     try {
       const Tesseract = await ensureTesseract()
@@ -147,25 +175,37 @@ function parseDocumentText(text, docType) {
   }
 
   if (docType === 'carta_identita') {
-    // Cognome — gestisce "COGNOME/SURNAME\nVALORE" (output OCR CIE) e "Cognome: valore"
-    const cognomeM = text.match(/COGNOME\s*\/?\s*SURNAME\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
-      || text.match(/[Cc]ognome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
-      || text.match(/[Cc]ognome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ\-]+)/i)
-    if (cognomeM) r.cognome = cognomeM[1].trim()
+    // Helper: cerca valore dopo un'etichetta bilingue (label su riga, valore sulla riga dopo OPPURE stesso riga)
+    const afterLabel = (patterns) => {
+      for (const p of patterns) {
+        const m = text.match(p)
+        if (m) return m[1].trim()
+      }
+      return null
+    }
 
-    // Nome — gestisce "NOME/NAME\nVALORE" e "Nome: valore"
-    const nomeM = text.match(/NOME\s*\/?\s*NAME\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
-      || text.match(/\b[Nn]ome\s*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s\-]+?)(?=\s*[\n\r])/m)
-      || text.match(/\b[Nn]ome[:\s]+([A-ZÀÈÉÌÒÙ][A-Za-zÀ-ÿ\-]+)/i)
-    if (nomeM) r.nome = nomeM[1].trim()
+    // Cognome
+    r.cognome = afterLabel([
+      /COGNOME\s*\/\s*SURNAME[^\n]*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
+      /COGNOME\s*\/?\s*SURNAME\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/i,
+      /COGNOME[\n\r\s:]+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
+    ])
 
-    // Data di nascita
+    // Nome
+    r.nome = afterLabel([
+      /NOME\s*\/\s*NAME[^\n]*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
+      /NOME\s*\/?\s*NAME\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/i,
+      /\bNOME[\n\r\s:]+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
+    ])
+
+    // Data di nascita: cerca "01.02.1985" o "01/02/1985" — prende la prima data trovata
     const dataN = text.match(/(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/)
     if (dataN) r._data_nascita = `${dataN[3]}-${dataN[2]}-${dataN[1]}`
 
-    // Codice Fiscale dal retro (FISCAL CODE)
+    // Codice Fiscale — se non trovato dalla regex generale, cerca vicino a "FISCAL CODE"
     if (!r.codice_fiscale) {
-      const fcM = text.match(/FISCAL\s*CODE\s*[\n\r\s]+([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
+      const fcM = text.match(/FISCAL\s*CODE[^\n]*[\n\r]+\s*([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
+        || text.match(/CODICE\s*FISCALE[^\n]*[\n\r]+\s*([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
       if (fcM) r.codice_fiscale = fcM[1].toUpperCase()
     }
   }
@@ -207,10 +247,7 @@ async function handleNuovoFileChange(file) {
   showDocumentPreview(file, preview)
 
   const estratoDiv = document.getElementById('hr-nuovo-estratto')
-  const isImage = file.type.startsWith('image/')
-  if (estratoDiv) estratoDiv.innerHTML = isImage
-    ? '<span style="color:var(--gray-500);font-size:12px;">⏳ OCR in corso (~10 s)… 0%</span>'
-    : '<span style="color:var(--gray-500);font-size:12px;">⏳ Estrazione testo in corso…</span>'
+  if (estratoDiv) estratoDiv.innerHTML = '<span style="color:var(--gray-500);font-size:12px;">⏳ Analisi documento in corso…</span>'
 
   const text = await extractTextFromFile(file, pct => {
     if (estratoDiv) estratoDiv.innerHTML = `<span style="color:var(--gray-500);font-size:12px;">⏳ OCR in corso… ${pct}%</span>`
