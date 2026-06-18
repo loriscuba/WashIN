@@ -175,38 +175,51 @@ function parseDocumentText(text, docType) {
   }
 
   if (docType === 'carta_identita') {
-    // Helper: cerca valore dopo un'etichetta bilingue (label su riga, valore sulla riga dopo OPPURE stesso riga)
-    const afterLabel = (patterns) => {
-      for (const p of patterns) {
-        const m = text.match(p)
-        if (m) return m[1].trim()
+    // Approccio riga-per-riga: più robusto di regex multilinea per output OCR variabile
+    const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)
+    console.log('[OCR carta_identita] testo grezzo:\n' + text)
+
+    for (let i = 0; i < lines.length; i++) {
+      const up = lines[i].toUpperCase()
+      const next = (lines[i + 1] || '').trim()
+      const next2 = (lines[i + 2] || '').trim()
+
+      // Cognome: riga con "COGNOME" e "SURNAME" → riga successiva è il valore
+      if (up.includes('COGNOME') && up.includes('SURNAME') && !r.cognome) {
+        const val = next || next2
+        if (val && /^[A-ZÀÈÉÌÒÙŁ]/i.test(val) && !/NOME|DATE|BIRTH|LUOGO/.test(val.toUpperCase())) {
+          r.cognome = val.toUpperCase()
+        }
       }
-      return null
+
+      // Nome: riga con "NOME" e "NAME" ma non "COGNOME" → riga successiva è il valore
+      if (up.includes('NOME') && up.includes('NAME') && !up.includes('COGNOME') && !r.nome) {
+        const val = next || next2
+        if (val && /^[A-ZÀÈÉÌÒÙŁ]/i.test(val) && !/NOME|DATE|BIRTH|LUOGO/.test(val.toUpperCase())) {
+          r.nome = val.toUpperCase()
+        }
+      }
+
+      // Codice Fiscale: riga con "CODICE FISCALE" o "FISCAL CODE"
+      if ((up.includes('CODICE FISCALE') || up.includes('FISCAL CODE')) && !r.codice_fiscale) {
+        // Cerca il CF nella riga corrente (dopo il label) o in quella successiva
+        const candidates = [up, next.toUpperCase(), next2.toUpperCase()]
+        for (const c of candidates) {
+          // Lenient: accetta I→1 nella parte del codice comune (posizione 12)
+          const m = c.match(/([A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z0-9][0-9]{3}[A-Z])/i)
+          if (m) { r.codice_fiscale = m[1].toUpperCase(); break }
+        }
+      }
     }
 
-    // Cognome
-    r.cognome = afterLabel([
-      /COGNOME\s*\/\s*SURNAME[^\n]*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
-      /COGNOME\s*\/?\s*SURNAME\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/i,
-      /COGNOME[\n\r\s:]+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
-    ])
-
-    // Nome
-    r.nome = afterLabel([
-      /NOME\s*\/\s*NAME[^\n]*[\n\r]+\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
-      /NOME\s*\/?\s*NAME\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/i,
-      /\bNOME[\n\r\s:]+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\-']+)/m,
-    ])
-
-    // Data di nascita: cerca "01.02.1985" o "01/02/1985" — prende la prima data trovata
+    // Data di nascita: cerca "01.02.1985" o "01/02/1985"
     const dataN = text.match(/(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/)
     if (dataN) r._data_nascita = `${dataN[3]}-${dataN[2]}-${dataN[1]}`
 
-    // Codice Fiscale — se non trovato dalla regex generale, cerca vicino a "FISCAL CODE"
+    // CF fallback: regex generale sul testo intero (più lieve)
     if (!r.codice_fiscale) {
-      const fcM = text.match(/FISCAL\s*CODE[^\n]*[\n\r]+\s*([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
-        || text.match(/CODICE\s*FISCALE[^\n]*[\n\r]+\s*([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])/i)
-      if (fcM) r.codice_fiscale = fcM[1].toUpperCase()
+      const m = text.match(/([A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z0-9][0-9]{3}[A-Z])/i)
+      if (m) r.codice_fiscale = m[1].toUpperCase()
     }
   }
 
