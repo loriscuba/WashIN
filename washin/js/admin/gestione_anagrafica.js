@@ -227,9 +227,21 @@ function parseDocumentText(text, docType) {
       }
     }
 
+    // Fallback MRZ: riga "COGNOME<<NOME<<<" nell'area machine-readable
+    if (!r.nome) {
+      for (const line of lines) {
+        const m = line.match(/([A-Z]{2,})<<([A-Z]+)/)
+        if (m) {
+          if (!r.cognome) r.cognome = m[1]
+          r.nome = m[2]
+          break
+        }
+      }
+    }
+
     // Data di nascita: cerca "01.02.1985" o "01/02/1985"
     const dataN = text.match(/(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{4})/)
-    if (dataN) r._data_nascita = `${dataN[3]}-${dataN[2]}-${dataN[1]}`
+    if (dataN) r.data_nascita = `${dataN[3]}-${dataN[2]}-${dataN[1]}`
 
     // CF fallback sull'intero testo (cattura anche casi senza label vicina)
     if (!r.codice_fiscale) {
@@ -297,7 +309,7 @@ async function handleNuovoFileChange(file) {
     form.dataset.bpAnno = parsed._bp_anno || ''
     form.dataset.bpLordo = parsed._bp_lordo || ''
     form.dataset.bpNetto = parsed._bp_netto || ''
-    form.dataset.dataNascita = parsed._data_nascita || ''
+    form.dataset.dataNascita = parsed.data_nascita || ''
   }
 
   if (estratoDiv) {
