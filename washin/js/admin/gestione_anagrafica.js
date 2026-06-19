@@ -118,6 +118,51 @@ async function extractTextFromFile(file, onProgress) {
   return ''
 }
 
+// ── Estrazione testo pagina per pagina (per PDF multi-cedolino) ──────────────
+
+async function extractPageTextsFromPdf(file, onProgress) {
+  if (!file || file.type !== 'application/pdf') {
+    const text = await extractTextFromFile(file, onProgress)
+    return text ? [text] : []
+  }
+  try {
+    const pdfjs = await ensurePdfJs()
+    const buf = await file.arrayBuffer()
+    const pdf = await pdfjs.getDocument({ data: buf }).promise
+    const numPages = pdf.numPages
+    const pages = []
+
+    for (let i = 1; i <= numPages; i++) {
+      const page = await pdf.getPage(i)
+      const content = await page.getTextContent()
+      let text = content.items.map(it => it.str).join(' ') + '\n'
+
+      if (text.trim().length < 30) {
+        const Tesseract = await ensureTesseract()
+        const viewport = page.getViewport({ scale: 2.0 })
+        const canvas = document.createElement('canvas')
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+        const result = await Tesseract.recognize(canvas, 'ita+eng', {
+          logger: m => {
+            if (m.status === 'recognizing text' && onProgress)
+              onProgress(Math.round(((i - 1) / numPages + m.progress / numPages) * 100))
+          }
+        })
+        text = result.data.text + '\n'
+      } else if (onProgress) {
+        onProgress(Math.round((i / numPages) * 100))
+      }
+      pages.push(text)
+    }
+    return pages
+  } catch (err) {
+    console.warn('PDF page extraction:', err)
+    return []
+  }
+}
+
 // ── Parsing campi da testo estratto ──────────────────────────────────────────
 
 function parseDocumentText(text, docType) {
@@ -906,7 +951,7 @@ async function downloadBusta(filePath) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-export { extractTextFromFile, parseDocumentText }
+export { extractTextFromFile, extractPageTextsFromPdf, parseDocumentText }
 
 export function initGestioneAnagrafica() {
   try {
