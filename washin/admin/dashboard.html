@@ -662,10 +662,31 @@
             <div id="ti-buste-panel-pdf" style="display:none;">
               <div class="card" style="padding:20px;margin-bottom:20px;">
                 <h3 style="margin:0 0 6px;font-size:15px;">Carica cedolini PDF</h3>
-                <p style="font-size:13px;color:var(--gray-500);margin:0 0 10px;">Seleziona più PDF insieme. Verranno analizzati uno per uno (formato CED supportato; per altri formati usare CSV).</p>
+                <p style="font-size:13px;color:var(--gray-500);margin:0 0 10px;">Seleziona più PDF insieme. Formati supportati: <strong>INAIL</strong> (estrae anche anagrafica e dati contrattuali) e CED. Per altri formati usa CSV.</p>
                 <input type="file" id="ti-buste-pdf-input" accept=".pdf" multiple style="font-size:13px;display:block;margin-bottom:10px;">
                 <button class="btn btn-primary btn-sm" id="ti-parse-buste-pdf">Analizza PDF</button>
                 <div id="ti-buste-pdf-progress" style="font-size:12px;color:var(--gray-500);margin-top:8px;min-height:16px;"></div>
+              </div>
+            </div>
+
+            <!-- Anagrafiche estratte da cedolini INAIL -->
+            <div id="ti-buste-anag-preview" style="display:none;margin-bottom:20px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:15px;">Dati anagrafici e contrattuali estratti</h3>
+                <span class="badge badge-success" style="font-size:11px;">formato INAIL</span>
+              </div>
+              <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">Verranno aggiornati i profili operatori esistenti (match per Cod. Fiscale) o creati nuovi. I profili vengono salvati insieme alle buste.</p>
+              <div style="overflow-x:auto;">
+                <table class="washin-table" id="ti-buste-anag-table">
+                  <thead>
+                    <tr>
+                      <th>Cognome</th><th>Nome</th><th>Cod. Fiscale</th><th>Data nascita</th>
+                      <th>Data assunzione</th><th>Qualifica</th><th>Cat. lavorativa</th>
+                      <th>Paga base €</th><th>IBAN</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ti-buste-anag-tbody"></tbody>
+                </table>
               </div>
             </div>
 
