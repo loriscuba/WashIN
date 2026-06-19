@@ -133,43 +133,78 @@ function parseDocumentText(text, docType) {
   if (ibanM) r.iban_dipendente = ibanM[1].replace(/\s+/g, '').toUpperCase()
 
   if (docType === 'busta_paga') {
-    // Matricola
-    const matrM = text.match(/[Mm]atricola[\s:]+([A-Z0-9]{3,12})/i)
-    if (matrM) r.matricola = matrM[1]
+    const pd = s => parseFloat(String(s).replace(/\./g, '').replace(',', '.')) || 0
 
-    // Competenza mese anno (es. "Competenza: Gennaio 2024" oppure "03/2024")
-    const compM = text.match(/[Cc]ompetenza[\s:]+([A-Za-z]+)\s+(\d{4})/)
-    if (compM) {
-      const idx = MESI.findIndex(m => m.toLowerCase().startsWith(compM[1].toLowerCase().slice(0,3)))
-      if (idx >= 0) { r._bp_mese = idx + 1; r._bp_anno = parseInt(compM[2]) }
+    // CF + matricola + cognome + nome (formato CED: "CF MATR COGNOME NOME" su una riga)
+    const cfLineM = text.match(/([A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z0-9][0-9]{3}[A-Z])\s+(\d{4,8})\s+([A-Z][A-Z\-']+)\s+([A-Z][A-Z\-']+)/i)
+    if (cfLineM) {
+      if (!r.codice_fiscale) r.codice_fiscale = cfLineM[1].toUpperCase()
+      r.matricola = cfLineM[2]
+      r.cognome = cfLineM[3].toUpperCase()
+      r.nome = cfLineM[4].toUpperCase()
     }
+    // Matricola fallback da label
+    if (!r.matricola) {
+      const matrM = text.match(/[Mm]atricola[\s:]+([A-Z0-9]{3,12})/i)
+      if (matrM) r.matricola = matrM[1]
+    }
+
+    // Mese + anno + netto (CED ultima riga: "... Gennaio 2023 3.551,00")
+    const mesiNomi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+    const mNM = text.match(new RegExp(`(${mesiNomi.join('|')})\\s+(\\d{4})\\s+([\\d.]+,\\d{2})\\s*$`, 'im'))
+    if (mNM) {
+      const idx = mesiNomi.indexOf(mNM[1])
+      if (idx >= 0) { r._bp_mese = idx + 1; r._bp_anno = parseInt(mNM[2]) }
+      r._bp_netto = pd(mNM[3])
+    }
+    // Fallback: "Competenza: Gennaio 2024" oppure "03/2024"
     if (!r._bp_mese) {
-      const mmyyM = text.match(/(\d{2})\/(\d{4})/)
-      if (mmyyM) { r._bp_mese = parseInt(mmyyM[1]); r._bp_anno = parseInt(mmyyM[2]) }
+      const compM = text.match(/[Cc]ompetenza[\s:]+([A-Za-z]+)\s+(\d{4})/)
+      if (compM) {
+        const idx = MESI.findIndex(m => m.toLowerCase().startsWith(compM[1].toLowerCase().slice(0,3)))
+        if (idx >= 0) { r._bp_mese = idx + 1; r._bp_anno = parseInt(compM[2]) }
+      }
+      if (!r._bp_mese) {
+        const mmyyM = text.match(/(\d{2})\/(\d{4})/)
+        if (mmyyM) { r._bp_mese = parseInt(mmyyM[1]); r._bp_anno = parseInt(mmyyM[2]) }
+      }
     }
 
-    // Paga base
-    const pbM = text.match(/[Pp]aga\s+[Bb]ase[\s:€]+([0-9]{1,6}[.,][0-9]{2})/)
-    if (pbM) r.paga_base = parseFloat(pbM[1].replace(',', '.'))
+    // Paga base = Minimo contrattuale
+    const minimoPos = text.search(/\bMinimo\b/)
+    if (minimoPos >= 0) {
+      const mnM = text.substring(minimoPos).match(/([\d.]+,\d{2})\s+([\d.]+,\d{2})/)
+      if (mnM) r.paga_base = pd(mnM[1])
+    } else {
+      const pbM = text.match(/[Pp]aga\s+[Bb]ase[\s:€]+([0-9]{1,6}[.,][0-9]{2})/)
+      if (pbM) r.paga_base = parseFloat(pbM[1].replace(',', '.'))
+    }
 
-    // Totale netto
-    const nettoM = text.match(/[Nn]etto[\s:€a-z]+([0-9]{1,6}[.,][0-9]{2})/)
-    if (nettoM) r._bp_netto = parseFloat(nettoM[1].replace(',', '.'))
+    // Lordo: massimo tra i valori che compaiono in coppia identica adiacente (CED: lordo + lordo annuale)
+    const pairMs = [...text.matchAll(/\b(\d[\d.]+,\d{2})\s+\1\b/g)]
+    if (pairMs.length) r._bp_lordo = Math.max(...pairMs.map(m => pd(m[1])))
+    if (!r._bp_lordo) {
+      const lM = text.match(/[Ll]ordo[\s:€a-z]+([0-9]{1,6}[.,][0-9]{2})/)
+      if (lM) r._bp_lordo = parseFloat(lM[1].replace(',', '.'))
+    }
 
-    // Totale lordo
-    const lordoM = text.match(/[Ll]ordo[\s:€a-z]+([0-9]{1,6}[.,][0-9]{2})/)
-    if (lordoM) r._bp_lordo = parseFloat(lordoM[1].replace(',', '.'))
+    // Netto fallback da label
+    if (!r._bp_netto) {
+      const nettoM = text.match(/[Nn]etto[\s:€a-z]+([0-9]{1,6}[.,][0-9]{2})/)
+      if (nettoM) r._bp_netto = parseFloat(nettoM[1].replace(',', '.'))
+    }
 
-    // Nome Cognome da intestazione busta (linee iniziali)
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-    // Cerca pattern "COGNOME NOME" come prima riga lunga in maiuscolo
-    for (const line of lines.slice(0, 8)) {
-      const parole = line.match(/^([A-ZÀÈÉÌÒÙ]{2,}\s+[A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ]{2,})?)$/)
-      if (parole && !r.cognome) {
-        const parts = parole[1].split(/\s+/)
-        r.cognome = parts[0]
-        r.nome = parts.slice(1).join(' ')
-        break
+    // Cognome/nome fallback (prima riga tutto maiuscolo "COGNOME NOME")
+    if (!r.cognome) {
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+      for (const line of lines.slice(0, 8)) {
+        const parole = line.match(/^([A-ZÀÈÉÌÒÙ]{2,}\s+[A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ]{2,})?)$/)
+        if (parole) {
+          const parts = parole[1].split(/\s+/)
+          r.cognome = parts[0]
+          r.nome = parts.slice(1).join(' ')
+          break
+        }
       }
     }
   }
@@ -319,6 +354,128 @@ async function handleNuovoFileChange(file) {
     estratoDiv.innerHTML = campi.length
       ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.8;">${campi.join('<br>')}</div>`
       : '<span style="color:var(--gray-400);font-size:12px;">Nessun dato estratto automaticamente — compila manualmente</span>'
+  }
+}
+
+// ── Auto-fill busta paga da PDF (formato CED) ─────────────────────────────────
+
+async function handleBustaFileChange(file) {
+  if (!file) return
+  const form = document.getElementById('hr-busta-form')
+  if (!form) return
+
+  const titleEl = document.getElementById('hr-busta-title')
+  if (titleEl) titleEl.textContent = 'Analisi PDF in corso…'
+
+  const text = await extractTextFromFile(file)
+  if (!text?.trim()) {
+    if (titleEl) titleEl.textContent = 'Nuova busta paga'
+    return
+  }
+
+  const pd = s => parseFloat(String(s).replace(/\./g, '').replace(',', '.')) || 0
+  const set = (name, val) => {
+    if (val == null || val === 0 || val === '') return
+    const el = form.querySelector(`[name="${name}"]`)
+    if (el) el.value = typeof val === 'number' ? val.toFixed(2) : val
+  }
+  const setRaw = (name, val) => { const el = form.querySelector(`[name="${name}"]`); if (el && val != null) el.value = val }
+
+  // Mese + anno + netto (CED ultima riga: "Gennaio 2023 3.551,00")
+  const mesiNomi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+  const mNM = text.match(new RegExp(`(${mesiNomi.join('|')})\\s+(\\d{4})\\s+([\\d.]+,\\d{2})\\s*$`, 'im'))
+  let nettoPdf = 0
+  if (mNM) {
+    const idx = mesiNomi.indexOf(mNM[1])
+    if (idx >= 0) { setRaw('mese', idx + 1); setRaw('anno', mNM[2]) }
+    nettoPdf = pd(mNM[3])
+    if (titleEl) titleEl.textContent = `Busta paga — ${mNM[1]} ${mNM[2]}`
+  } else if (titleEl) titleEl.textContent = 'Nuova busta paga'
+  if (!form.querySelector('[name="mese"]')?.value) {
+    const compM = text.match(/[Cc]ompetenza[\s:]+([A-Za-z]+)\s+(\d{4})/)
+    if (compM) {
+      const idx = MESI.findIndex(m => m.toLowerCase().startsWith(compM[1].toLowerCase().slice(0, 3)))
+      if (idx >= 0) { setRaw('mese', idx + 1); setRaw('anno', compM[2]) }
+    }
+  }
+
+  // Paga base (Minimo) + Superminimo
+  const minimoPos = text.search(/\bMinimo\b/)
+  if (minimoPos >= 0) {
+    const mnM = text.substring(minimoPos).match(/([\d.]+,\d{2})\s+([\d.]+,\d{2})/)
+    if (mnM) { set('paga_base', pd(mnM[1])); set('superminimo', pd(mnM[2])) }
+  }
+
+  // Premio/Indennità varie
+  const premioM = text.match(/Premio\s+Prod[\w.]*\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})/)
+  if (premioM) set('indennita_varie', pd(premioM[1]))
+
+  // Altri elementi (fringe benefits, rimborso spese, incentivi)
+  const fringeM  = text.match(/[Ff]ringe\s+[Bb]enefits[^0-9]*([\d.]+,\d{2})/)
+  const rimborsoM = text.match(/[Rr]imborso\s+spese[^0-9]*([\d.]+,\d{2})/)
+  const inceM    = text.match(/[Ii]ncentivo[^0-9]*([\d.]+,\d{2})/)
+  const altriEl  = (fringeM ? pd(fringeM[1]) : 0) + (rimborsoM ? pd(rimborsoM[1]) : 0) + (inceM ? pd(inceM[1]) : 0)
+  if (altriEl) set('altri_elementi', altriEl)
+
+  // IRPEF: "imp_fiscale irpef giorni irpef" nel blocco bottom CED
+  const irpefM = text.match(/([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+\d{1,2}\s+\2/)
+  if (irpefM) set('irpef', pd(irpefM[2]))
+
+  // INPS dipendente: imponibile × 3 poi due valori → ultimo = ritenute sociali
+  const ritSocM = text.match(/([\d.]+,\d{2})\s+\1\s+\1\s+[\d.,]+\s+([\d.]+,\d{2})/)
+  if (ritSocM) set('contributi_inps_dip', pd(ritSocM[2]))
+
+  // Addizionali regionali + comunali
+  const addRegM = text.match(/[Aa]ddizion[\w.]*regionale[^\d]*([\d.]+,\d{2})/)
+  const addComM = text.match(/[Aa]ddizion[\w.]*comunale[^\d]*([\d.]+,\d{2})/)
+  const addTot  = (addRegM ? pd(addRegM[1]) : 0) + (addComM ? pd(addComM[1]) : 0)
+  if (addTot) set('addizionali', addTot)
+
+  // Altre ritenute (trattenuta mensa + Ctr. IVS)
+  const mensaM = text.match(/[Tt]rattenuta\s+mensa[^0-9]*([\d.]+,\d{2})/)
+  const ivsM   = text.match(/[Cc]tr\.\s*IVS[^0-9]*([\d.]+,\d{2})/)
+  const altrRit = (mensaM ? pd(mensaM[1]) : 0) + (ivsM ? pd(ivsM[1]) : 0)
+  if (altrRit) set('altre_ritenute', altrRit)
+
+  // TFR mensile
+  const tfrM = text.match(/[Tt]fr\s+a\s+fdo[^0-9]*([\d.]+,\d{2})/)
+  if (tfrM) set('tfr_mese', pd(tfrM[1]))
+
+  // Ore lavorate
+  const oreLavM = text.match(/ORE\s+LAVORATE[^\d]*([\d]+(?:[,.]\d{0,2})?)/)
+  if (oreLavM) {
+    const el = form.querySelector('[name="ore_lavorate"]')
+    if (el) el.value = parseFloat(oreLavM[1].replace(',', '.'))
+  }
+
+  // Ricalcola totali dai componenti
+  ricalcola(form)
+
+  // Override totali con valori letti direttamente dal PDF
+  const pairMs = [...text.matchAll(/\b(\d[\d.]+,\d{2})\s+\1\b/g)]
+  let lordoPdf = 0
+  if (pairMs.length) lordoPdf = Math.max(...pairMs.map(m => pd(m[1])))
+  if (lordoPdf) {
+    const lEl = form.querySelector('[name="totale_lordo"]')
+    if (lEl) lEl.value = lordoPdf.toFixed(2)
+  }
+  if (nettoPdf) {
+    const nEl = form.querySelector('[name="totale_netto"]')
+    if (nEl) nEl.value = nettoPdf.toFixed(2)
+  }
+  // Totale trattenute: "competenze trattenute 0,XX 0,XX" (arrotondamenti a fine riga)
+  const totTrM = text.match(/([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+0,\d{2}\s+0,\d{2}/)
+  if (totTrM) {
+    const rEl = form.querySelector('[name="totale_ritenute"]')
+    if (rEl) rEl.value = pd(totTrM[2]).toFixed(2)
+  }
+  // Ricalcola costo aziendale usando il lordo PDF
+  if (lordoPdf) {
+    const tfr    = parseFloat(form.querySelector('[name="tfr_mese"]')?.value || 0)
+    const inpsAz = parseFloat(form.querySelector('[name="contributi_inps_az"]')?.value || 0)
+    const inail  = parseFloat(form.querySelector('[name="inail"]')?.value || 0)
+    const caEl   = form.querySelector('[name="costo_aziendale"]')
+    if (caEl) caEl.value = (lordoPdf + inpsAz + inail + tfr).toFixed(2)
   }
 }
 
@@ -797,6 +954,11 @@ export function initGestioneAnagrafica() {
     if (bustaForm) {
       bustaForm.querySelectorAll('input[type="number"]').forEach(el => {
         el.addEventListener('input', () => ricalcola(bustaForm))
+      })
+      // Auto-fill campi da PDF cedolino
+      bustaForm.querySelector('[name="file"]')?.addEventListener('change', e => {
+        const file = e.target.files?.[0]
+        if (file) handleBustaFileChange(file)
       })
     }
 
