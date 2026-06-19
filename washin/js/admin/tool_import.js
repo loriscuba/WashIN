@@ -1,6 +1,6 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
-import { extractTextFromFile, parseDocumentText } from './gestione_anagrafica.js'
+import { extractTextFromFile, extractPageTextsFromPdf, parseDocumentText } from './gestione_anagrafica.js'
 
 const ANAG_COLS = ['cognome','nome','codice_fiscale','email','telefono','matricola',
                    'qualifica','tipo_contratto','paga_base','data_assunzione',
@@ -337,31 +337,38 @@ async function handleBustePdf(files) {
   _busteData     = []
   _busteAnagData = []
   const progress = document.getElementById('ti-buste-pdf-progress')
+  let totalPages = 0
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
-    if (progress) progress.textContent = `Elaborazione ${i + 1}/${files.length}: ${file.name}…`
-    const text = await extractTextFromFile(file, pct => {
-      if (progress) progress.textContent = `Analisi ${i + 1}/${files.length}: ${pct}%`
+    if (progress) progress.textContent = `Elaborazione file ${i + 1}/${files.length}: ${file.name}…`
+
+    // Extract text per-page so multi-payslip PDFs (one per page) work correctly
+    const pages = await extractPageTextsFromPdf(file, pct => {
+      if (progress) progress.textContent = `OCR ${file.name}: ${pct}%`
     })
 
-    const fmt = detectPayslipFormat(text)
-    if (fmt === 'inail') {
-      const { anag, busta } = parseInailPayslip(text)
-      busta._filename = file.name
-      busta._format   = 'inail'
-      anag._filename  = file.name
-      _busteData.push(busta)
-      _busteAnagData.push(anag)
-    } else {
-      const parsed = parseCedolino(text)
-      parsed._filename = file.name
-      parsed._format   = fmt
-      _busteData.push(parsed)
-    }
+    pages.forEach((text, p) => {
+      const label = pages.length > 1 ? `${file.name} (pag. ${p + 1})` : file.name
+      const fmt = detectPayslipFormat(text)
+      if (fmt === 'inail') {
+        const { anag, busta } = parseInailPayslip(text)
+        busta._filename = label
+        busta._format   = 'inail'
+        anag._filename  = label
+        _busteData.push(busta)
+        _busteAnagData.push(anag)
+      } else {
+        const parsed = parseCedolino(text)
+        parsed._filename = label
+        parsed._format   = fmt
+        _busteData.push(parsed)
+      }
+    })
+    totalPages += pages.length
   }
 
-  if (progress) progress.textContent = `${files.length} PDF analizzati (${_busteAnagData.length} formato INAIL)`
+  if (progress) progress.textContent = `${files.length} file analizzati — ${totalPages} cedolini trovati (${_busteAnagData.length} formato INAIL)`
   const ops = await loadOperatori()
   renderBusteAnagPreview()
   renderBustePreview(ops)
