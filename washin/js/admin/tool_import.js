@@ -350,14 +350,24 @@ function parseCedolino(text) {
   if (qualM) anag.qualifica = qualM[1].trim().charAt(0).toUpperCase() + qualM[1].trim().slice(1).toLowerCase()
 
   // ── Paga base: "PAGA BASE  CONTINGEN.  E.D.R.  SCATTI ANZ" + values line ───
-  const pagaBlockM = text.match(/PAGA\s+BASE[\s\S]{0,80}?CONTINGEN[\s\S]{0,80}?E\.?D\.?R[\s\S]{0,80}?SCATTI\s+ANZ\s*\n\s*([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})/i)
+  // Hourly employees use 5 decimal places (e.g. 5,79827); monthly use 2 (e.g. 1.575,18)
+  const pagaBlockM = text.match(/PAGA\s+BASE[\s\S]{0,80}?CONTINGEN[\s\S]{0,80}?E\.?D\.?R[\s\S]{0,80}?SCATTI\s+ANZ\s*\n\s*([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})/i)
   if (pagaBlockM) {
     const retribMensile = pd(pagaBlockM[1]) + pd(pagaBlockM[2]) + pd(pagaBlockM[3]) + pd(pagaBlockM[4])
-    if (retribMensile > 100) anag.paga_base = Math.round(retribMensile * 100) / 100
+    if (retribMensile > 100) {
+      anag.paga_base = Math.round(retribMensile * 100) / 100
+    } else if (retribMensile > 0) {
+      // Hourly rate — convert to monthly using standard CCNL 173h reference
+      anag.paga_base = Math.round(retribMensile * 173 * 100) / 100
+    }
   }
   if (!anag.paga_base) {
-    const pbM = text.match(/PAGA\s+BASE[^0-9\n]*([\d.]+,\d{2})/i)
-    if (pbM) { const v = pd(pbM[1]); if (v > 100) anag.paga_base = v }
+    const pbM = text.match(/PAGA\s+BASE[^0-9\n]*([\d.]+,\d{2,5})/i)
+    if (pbM) {
+      const v = pd(pbM[1])
+      if (v > 100) anag.paga_base = v
+      else if (v > 0) anag.paga_base = Math.round(v * 173 * 100) / 100
+    }
   }
 
   // Ore CCNL: look for standard CCNL hours value
@@ -395,24 +405,43 @@ function parseCedolino(text) {
   }
   if (altriTot) busta.altri_elementi = Math.round(altriTot * 100) / 100
 
-  // ── Financial totals ─────────────────────────────────────────────────────────
-  busta._bp_lordo = pickValue(text, [/TOTALE\s*LORDO[^0-9]*([\d.]+,\d{2})/gi], 200)
-  busta._bp_netto = pickValue(text, [/NETTO\s*BUSTA[^0-9]*([\d.]+,\d{2})/gi], 200)
+  // ── Financial totals (positional: CED labels are in template header, not near values) ─────────
+  // After "Tfr maturato VALUE" the summary block follows in fixed line order:
+  //   [5 nums] LORDO  IMPON_INPS  CONTR1(INPS)  CONTR4(INAIL)  TOT_CONTRIB
+  //   [1 num]  imposta sostitutiva (small ~3-5 €)
+  //   [4 nums] IMPON_IRPEF  IRPEF_LORDA  TOT_DETR  IRPEF_PAGATA
+  //   [3 nums] acconto  arrot_prec  trattenute_corpo
+  //   [2 nums] arrotondamento(tiny < 1€)  NETTO_BUSTA
+  busta.tfr_mese = pickValue(text, [/TFR\s*MESE[^0-9]*([\d.]+,\d{2})/gi], 0)
 
-  // CONTRIBUTO 1 = INPS dipendente
-  const c1M = text.match(/CONTRIBUTO\s*1[^0-9\n]*([\d.]+,\d{2})/i)
-  if (c1M) busta.contributi_inps_dip = pd(c1M[1])
+  const tfrMatM = text.match(/Tfr\s+maturato\s+([\d.]+,\d{2})/i)
+  if (tfrMatM) {
+    busta.tfr_maturato = pd(tfrMatM[1])
+    const afterTfr = text.substring(tfrMatM.index + tfrMatM[0].length)
+    const numLines = afterTfr.split('\n')
+      .map(l => l.trim())
+      .filter(l => /\d+,\d{2}/.test(l))
+      .slice(0, 10)
 
-  // CONTRIBUTO 4 = INAIL, CONTRIBUTO 5 = silicosi
-  const c4M = text.match(/CONTRIBUTO\s*4[^0-9\n]*([\d.]+,\d{2})/i)
-  if (c4M) busta.contributo_inail = pd(c4M[1])
-  const c5M = text.match(/CONTRIBUTO\s*5[^0-9\n]*([\d.]+,\d{2})/i)
-  if (c5M) busta.contributo_silicosi = pd(c5M[1])
-
-  // IRPEF
-  const allIrpef = [...text.matchAll(/TOTALE\s+TRATTENUTE\s+IRPEF[^0-9]*([\d.]+,\d{2})/gi)]
-  if (allIrpef.length) busta.irpef = Math.max(...allIrpef.map(m => pd(m[1])))
-  else { const irpefM = text.match(/IRPEF[^0-9]*([\d.]+,\d{2})/i); if (irpefM) busta.irpef = pd(irpefM[1]) }
+    let lordonFound = false, irpefFound = false
+    for (const line of numLines) {
+      const nums = [...line.matchAll(/([\d.]+,\d{2,5})/g)].map(m => pd(m[1]))
+      if (!lordonFound && nums.length >= 5 && nums[0] > 100) {
+        busta._bp_lordo           = nums[0]
+        busta.imponibile_inps     = nums[1]
+        busta.contributi_inps_dip = nums[2]
+        busta.contributo_inail    = nums[3]
+        lordonFound = true
+      } else if (lordonFound && !irpefFound && nums.length === 4 && nums[0] > 100) {
+        busta.imponibile_irpef = nums[0]
+        busta.irpef            = nums[3]
+        irpefFound = true
+      } else if (irpefFound && nums.length === 2 && nums[0] < 5 && nums[1] > 100) {
+        busta._bp_netto = nums[1]
+        break
+      }
+    }
+  }
 
   // Addizionali: 9117 (reg) + 9119 / 9173 (com)
   let addTot = 0
@@ -432,17 +461,6 @@ function parseCedolino(text) {
     if (m) altreTot += pd(m[1])
   }
   if (altreTot) busta.altre_ritenute = Math.round(altreTot * 100) / 100
-
-  // TFR mese + TFR maturato cumulativo
-  busta.tfr_mese = pickValue(text, [/TFR\s*MESE[^0-9]*([\d.]+,\d{2})/gi], 0)
-  const tfrMatM = text.match(/Tfr\s+maturato[^0-9]*([\d.]+,\d{2})/i)
-  if (tfrMatM) busta.tfr_maturato = pd(tfrMatM[1])
-
-  // Imponibili
-  const imponIrpefM = text.match(/IMPONIBILE\s+IRPEF[^0-9]*([\d.]+,\d{2})/i)
-  if (imponIrpefM) busta.imponibile_irpef = pd(imponIrpefM[1])
-  const imponInpsM = text.match(/IMPON[.\s]+CONTR[.\s]+SOC[^0-9]*([\d.]+,\d{2})/i)
-  if (imponInpsM) busta.imponibile_inps = pd(imponInpsM[1])
 
   // Pass anag fields through to busta for matching
   if (anag.paga_base) busta.paga_base = anag.paga_base
