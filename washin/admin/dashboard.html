@@ -671,11 +671,14 @@
 
             <!-- Anagrafiche estratte da cedolini INAIL -->
             <div id="ti-buste-anag-preview" style="display:none;margin-bottom:20px;">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-                <h3 style="margin:0;font-size:15px;">Dati anagrafici e contrattuali estratti</h3>
-                <span class="badge badge-success" style="font-size:11px;">formato INAIL</span>
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <h3 style="margin:0;font-size:15px;">Dati anagrafici e contrattuali estratti</h3>
+                  <span class="badge badge-success" style="font-size:11px;">formato INAIL</span>
+                </div>
+                <button class="btn btn-primary btn-sm" id="ti-buste-anag-save">Salva <span id="ti-buste-anag-count">0</span> anagrafiche</button>
               </div>
-              <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">Verranno aggiornati i profili operatori esistenti (match per Cod. Fiscale) o creati nuovi. I profili vengono salvati insieme alle buste.</p>
+              <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">Verranno creati nuovi profili o aggiornati quelli esistenti (match per Cod. Fiscale). Puoi salvare le anagrafiche anche prima di abbinare le buste.</p>
               <div style="overflow-x:auto;">
                 <table class="washin-table" id="ti-buste-anag-table">
                   <thead>
