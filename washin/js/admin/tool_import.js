@@ -417,28 +417,32 @@ function parseCedolino(text) {
   const tfrMatM = text.match(/Tfr\s+maturato\s+([\d.]+,\d{2})/i)
   if (tfrMatM) {
     busta.tfr_maturato = pd(tfrMatM[1])
+    // extractPageTextsFromPdf uses join(' ') — flat text, no newlines.
+    // Layout after "Tfr maturato VALUE":
+    //   [0]lordo [1]impon_inps [2]contr1(INPS) [3]contr4(INAIL) [4]tot_contrib
+    //   [5]imposta_sost(<20, optional) | impon_irpef
+    //   [irpefStart..+3] impon_irpef, irpef_lorda, tot_detr, IRPEF_PAGATA
+    //   [variable] acconto/addizionali block (1-5 values per employee)
+    //   [...k] arrotondamento(<1)  [k+1] NETTO_BUSTA
     const afterTfr = text.substring(tfrMatM.index + tfrMatM[0].length)
-    const numLines = afterTfr.split('\n')
-      .map(l => l.trim())
-      .filter(l => /\d+,\d{2}/.test(l))
-      .slice(0, 10)
+    const seqNums = [...afterTfr.matchAll(/([\d.]+,\d{2,5})/g)].map(m => pd(m[1]))
+    if (seqNums.length >= 13 && seqNums[0] > 300) {
+      busta._bp_lordo           = seqNums[0]
+      busta.imponibile_inps     = seqNums[1]
+      busta.contributi_inps_dip = seqNums[2]
+      busta.contributo_inail    = seqNums[3]
 
-    let lordonFound = false, irpefFound = false
-    for (const line of numLines) {
-      const nums = [...line.matchAll(/([\d.]+,\d{2,5})/g)].map(m => pd(m[1]))
-      if (!lordonFound && nums.length >= 5 && nums[0] > 100) {
-        busta._bp_lordo           = nums[0]
-        busta.imponibile_inps     = nums[1]
-        busta.contributi_inps_dip = nums[2]
-        busta.contributo_inail    = nums[3]
-        lordonFound = true
-      } else if (lordonFound && !irpefFound && nums.length === 4 && nums[0] > 100) {
-        busta.imponibile_irpef = nums[0]
-        busta.irpef            = nums[3]
-        irpefFound = true
-      } else if (irpefFound && nums.length === 2 && nums[0] < 5 && nums[1] > 100) {
-        busta._bp_netto = nums[1]
-        break
+      const irpefStart = (seqNums[5] > 0 && seqNums[5] < 20) ? 6 : 5
+      busta.imponibile_irpef = seqNums[irpefStart]
+      busta.irpef            = seqNums[irpefStart + 3]
+
+      // Acconto block has variable length — scan backward for last (tiny<1, netto>100<lordo)
+      const scanEnd = Math.min(seqNums.length - 1, 25)
+      for (let k = scanEnd - 1; k >= irpefStart + 4; k--) {
+        if (seqNums[k] < 1 && seqNums[k + 1] > 100 && seqNums[k + 1] < seqNums[0]) {
+          busta._bp_netto = seqNums[k + 1]
+          break
+        }
       }
     }
   }
