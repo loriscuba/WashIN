@@ -64,8 +64,21 @@ async function loadOperatori() {
 // ── Format detection ──────────────────────────────────────────────────────────
 
 function detectPayslipFormat(text) {
-  // Score-based: Italian INAIL payslip has several characteristic keywords
-  const hits = [
+  // CED/Teamsystem keywords take priority — these don't appear in INAIL scanned payslips
+  const cedHits = [
+    /CONTRIBUTO\s*[1-5]\b/i,
+    /IMPON[.\s]+CONTR[.\s]+SOC/i,
+    /DATI\s*STATISTICI/i,
+    /E\.D\.R\./i,
+    /CONTINGEN\./i,
+    /SCATTI\s+ANZ/i,
+    /DATA\s*SERVICES|CED\s*PAGHE/i,
+    /\b800[12]\b|\b8025\b|\b9117\b/,
+  ].filter(re => re.test(text)).length
+  if (cedHits >= 2) return 'ced'
+
+  // INAIL scanned payslip
+  const inailHits = [
     /\bINAIL\b/i,
     /NETTO\s*BUSTA/i,
     /TOTALE\s*LORDO/i,
@@ -76,9 +89,8 @@ function detectPayslipFormat(text) {
     /COMPETENZE/i,
     /TRATTENUTE/i,
   ].filter(re => re.test(text)).length
+  if (inailHits >= 2) return 'inail'
 
-  if (hits >= 2) return 'inail'
-  if (/DATA\s*SERVICES|CED\s*PAGHE/i.test(text)) return 'ced'
   return 'generic'
 }
 
@@ -265,42 +277,178 @@ function parseInailPayslip(text) {
   return { anag, busta }
 }
 
-// ── CED payslip extended parser (fallback for non-INAIL) ─────────────────────
+// ── CED / Teamsystem payslip parser ──────────────────────────────────────────
 
 function parseCedolino(text) {
-  const r = parseDocumentText(text, 'busta_paga')
+  console.log('[CED parser] (prime 600 char):\n', text.substring(0, 600))
 
-  const supM = text.match(/[Ss]uperminimo[\s\S]{0,40}?([\d.]+,\d{2})/)
-  if (supM) r.superminimo = pd(supM[1])
+  const anag = {}
+  const busta = {}
+  const lines = text.split('\n')
 
-  const premioM = text.match(/(?:[Pp]remio|[Ii]ndenn[ia][tà]?)[\s\S]{0,40}?([\d.]+,\d{2})/)
-  if (premioM) r.indennita_varie = pd(premioM[1])
+  const MESI_IT = ['GENNAIO','FEBBRAIO','MARZO','APRILE','MAGGIO','GIUGNO',
+                   'LUGLIO','AGOSTO','SETTEMBRE','OTTOBRE','NOVEMBRE','DICEMBRE']
 
-  const irpefM = text.match(/IRPEF[\s\S]{0,80}?([\d.]+,\d{2})\s*[\n\r]/)
-  if (irpefM) r.irpef = pd(irpefM[1])
-  if (!r.irpef) {
-    const m2 = text.match(/IRPEF[^0-9]*([\d.]+,\d{2})/)
-    if (m2) r.irpef = pd(m2[1])
+  // ── Mese + Anno ─────────────────────────────────────────────────────────────
+  for (const [idx, m] of MESI_IT.entries()) {
+    const mm = text.match(new RegExp(`\\b${m}\\s+(20\\d{2})\\b`, 'i'))
+    if (mm) { busta._bp_mese = idx + 1; busta._bp_anno = parseInt(mm[1]); break }
   }
 
-  const inpsM = text.match(/I\.?N\.?P\.?S\.?[^0-9]*([\d.]+,\d{2})\s*[\n\r]/)
-  if (inpsM) r.contributi_inps_dip = pd(inpsM[1])
+  // ── Header line: "MESE ANNO … MATRICOLA  COGNOME NOME  DD/MM/YY" ─────────
+  const headerLineIdx = lines.findIndex(l => MESI_IT.some(m => l.toUpperCase().includes(m)))
+  const headerLine = headerLineIdx >= 0 ? lines[headerLineIdx] : ''
+  if (headerLine) {
+    const nameHM = headerLine.match(/\b([A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ']{2,}){1,3})\s+\d{2}\/\d{2}\/\d{2,4}/)
+    if (nameHM) {
+      const parts = nameHM[1].trim().split(/\s+/)
+      anag.cognome = parts[0]
+      anag.nome    = parts.slice(1).join(' ')
+      const beforeName = headerLine.substring(0, headerLine.indexOf(nameHM[1]))
+      const matM = beforeName.match(/\b(\d{1,6})\s*$/)
+      if (matM && parseInt(matM[1]) < 10000) anag.matricola = matM[1]
+    }
+  }
 
+  // ── CF line: "CF  COMUNE  data_nascita  livello  data_assunzione" ──────────
+  const cfM = text.match(/\b([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])\b/i)
+  if (cfM) {
+    anag.codice_fiscale = cfM[1].toUpperCase()
+    const cfLine = lines.find(l => l.includes(cfM[1])) || ''
+    const afterCf = cfLine.substring(cfLine.indexOf(cfM[1]) + 16).trim()
+
+    // Comune: all-caps word(s) before first date
+    const comuneM = afterCf.match(/^([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s']{1,30}?)\s+\d{2}\//)
+    if (comuneM) anag.comune_residenza = comuneM[1].trim()
+
+    // Dates in CF line: first = data_nascita, second = data_assunzione
+    const cfDates = [...afterCf.matchAll(/(\d{2})\/(\d{2})\/(\d{2,4})/g)]
+    if (cfDates.length >= 1) {
+      const [, d, mo, y] = cfDates[0]
+      const year = y.length === 2 ? (parseInt(y) > 30 ? `19${y}` : `20${y}`) : y
+      anag.data_nascita = `${year}-${mo}-${d}`
+    }
+    if (cfDates.length >= 2) {
+      const [, d, mo, y] = cfDates[1]
+      const year = y.length === 2 ? (parseInt(y) < 50 ? `20${y}` : `19${y}`) : y
+      anag.data_assunzione = `${year}-${mo}-${d}`
+    }
+
+    // Livello: single digit between the two dates
+    if (cfDates.length >= 2) {
+      const between = afterCf.substring(
+        afterCf.indexOf(cfDates[0][0]) + cfDates[0][0].length,
+        afterCf.indexOf(cfDates[1][0])
+      )
+      const livM = between.match(/\b(\d{1,2})\b/)
+      if (livM && parseInt(livM[1]) <= 20) anag.categoria_lavorativa = `${livM[1]}° livello`
+    }
+  }
+
+  // ── Qualifica ───────────────────────────────────────────────────────────────
+  const qualM = text.match(/\b(OPERAI[AO]|IMPIEGAT[AO]|QUADRO|DIRIGENTE|APPRENDISTA|FUNZIONARIO|ADDETT[AO]\s+ALLE?\s+PULIZ\w*|ADDETT[AO]|AMMINISTRATORE)\b/i)
+  if (qualM) anag.qualifica = qualM[1].trim().charAt(0).toUpperCase() + qualM[1].trim().slice(1).toLowerCase()
+
+  // ── Paga base: "PAGA BASE  CONTINGEN.  E.D.R.  SCATTI ANZ" + values line ───
+  const pagaBlockM = text.match(/PAGA\s+BASE[\s\S]{0,80}?CONTINGEN[\s\S]{0,80}?E\.?D\.?R[\s\S]{0,80}?SCATTI\s+ANZ\s*\n\s*([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})/i)
+  if (pagaBlockM) {
+    const retribMensile = pd(pagaBlockM[1]) + pd(pagaBlockM[2]) + pd(pagaBlockM[3]) + pd(pagaBlockM[4])
+    if (retribMensile > 100) anag.paga_base = Math.round(retribMensile * 100) / 100
+  }
+  if (!anag.paga_base) {
+    const pbM = text.match(/PAGA\s+BASE[^0-9\n]*([\d.]+,\d{2})/i)
+    if (pbM) { const v = pd(pbM[1]); if (v > 100) anag.paga_base = v }
+  }
+
+  // Ore CCNL: look for standard CCNL hours value
+  const oreCcnlM = text.match(/\b(130|160|168|173|176|180),00\b/)
+  if (oreCcnlM) anag.ore_ccnl = parseInt(oreCcnlM[1])
+
+  // Superminimo
+  const supM = text.match(/SUPERMIN[^0-9\n]*([\d.]+,\d{2})/i)
+  if (supM) { const v = pd(supM[1]); if (v > 0) busta.superminimo = v }
+
+  // ── IBAN ─────────────────────────────────────────────────────────────────────
+  const ibanM = text.match(/\b(IT\d{2}[A-Z0-9]{23})\b/i)
+  if (ibanM) anag.iban_dipendente = ibanM[1].toUpperCase()
+
+  // ── Voce codes ───────────────────────────────────────────────────────────────
+  // 8001 = ore lavoro ordinario
+  const ore8001 = text.match(/8001[\s\S]{0,100}?(\d{2,3})[,.]00/)
+  if (ore8001) { const v = parseInt(ore8001[1]); if (v >= 1 && v <= 250) busta.ore_lavorate = v }
+  // 8002 = giorni (fallback)
+  if (!busta.ore_lavorate) {
+    const ore8002 = text.match(/8002[\s\S]{0,100}?(\d{1,2})[,.]00/)
+    if (ore8002) { const v = parseInt(ore8002[1]); if (v >= 1 && v <= 31) busta.giorni_lavorati = v }
+  }
+
+  // 8025 = straordinario
+  let straordTot = 0
+  for (const m of text.matchAll(/8025[\s\S]{0,120}?([\d.]+,\d{2})/g)) straordTot += pd(m[1])
+  if (straordTot) busta.straordinari_imp = Math.round(straordTot * 100) / 100
+
+  // 8122 = quattordicesima, 9835/9837/9838 = incentivo L.199/25
+  let altriTot = 0
+  for (const code of ['8122','9835','9837','9838']) {
+    const m = text.match(new RegExp(`${code}[\\s\\S]{0,120}?([\\d.]+,\\d{2})`))
+    if (m) altriTot += pd(m[1])
+  }
+  if (altriTot) busta.altri_elementi = Math.round(altriTot * 100) / 100
+
+  // ── Financial totals ─────────────────────────────────────────────────────────
+  busta._bp_lordo = pickValue(text, [/TOTALE\s*LORDO[^0-9]*([\d.]+,\d{2})/gi], 200)
+  busta._bp_netto = pickValue(text, [/NETTO\s*BUSTA[^0-9]*([\d.]+,\d{2})/gi], 200)
+
+  // CONTRIBUTO 1 = INPS dipendente
+  const c1M = text.match(/CONTRIBUTO\s*1[^0-9\n]*([\d.]+,\d{2})/i)
+  if (c1M) busta.contributi_inps_dip = pd(c1M[1])
+
+  // CONTRIBUTO 4 = INAIL, CONTRIBUTO 5 = silicosi
+  const c4M = text.match(/CONTRIBUTO\s*4[^0-9\n]*([\d.]+,\d{2})/i)
+  if (c4M) busta.contributo_inail = pd(c4M[1])
+  const c5M = text.match(/CONTRIBUTO\s*5[^0-9\n]*([\d.]+,\d{2})/i)
+  if (c5M) busta.contributo_silicosi = pd(c5M[1])
+
+  // IRPEF
+  const allIrpef = [...text.matchAll(/TOTALE\s+TRATTENUTE\s+IRPEF[^0-9]*([\d.]+,\d{2})/gi)]
+  if (allIrpef.length) busta.irpef = Math.max(...allIrpef.map(m => pd(m[1])))
+  else { const irpefM = text.match(/IRPEF[^0-9]*([\d.]+,\d{2})/i); if (irpefM) busta.irpef = pd(irpefM[1]) }
+
+  // Addizionali: 9117 (reg) + 9119 / 9173 (com)
   let addTot = 0
-  for (const m of text.matchAll(/[Aa]ddizional[ei]\s+(?:reg|com)[a-z]*[^0-9]*([\d.]+,\d{2})/g)) addTot += pd(m[1])
-  if (addTot) r.addizionali = addTot
+  for (const code of ['9117','9119','9173']) {
+    const m = text.match(new RegExp(`${code}[\\s\\S]{0,80}?([\\d.]+,\\d{2})`))
+    if (m) addTot += pd(m[1])
+  }
+  if (!addTot) {
+    for (const m of text.matchAll(/ADDIZ\w*\s+(?:REG|COM)[A-Z.]*[^0-9]*([\d.]+,\d{2})/gi)) addTot += pd(m[1])
+  }
+  if (addTot) busta.addizionali = Math.round(addTot * 100) / 100
 
+  // Altre ritenute: 8250 (cessione stipendio) + 9252 (prestito)
   let altreTot = 0
-  for (const m of text.matchAll(/(?:[Mm]ensa|IVS|[Aa]ltre?\s+ritenute?)[^0-9]*([\d.]+,\d{2})/g)) altreTot += pd(m[1])
-  if (altreTot) r.altre_ritenute = altreTot
+  for (const code of ['8250','9252']) {
+    const m = text.match(new RegExp(`${code}[\\s\\S]{0,80}?([\\d.]+,\\d{2})`))
+    if (m) altreTot += pd(m[1])
+  }
+  if (altreTot) busta.altre_ritenute = Math.round(altreTot * 100) / 100
 
-  const tfrM = text.match(/[Tt][Ff][Rr][^0-9a-z]*([\d.]+,\d{2})/i)
-  if (tfrM) r.tfr_mese = pd(tfrM[1])
+  // TFR mese + TFR maturato cumulativo
+  busta.tfr_mese = pickValue(text, [/TFR\s*MESE[^0-9]*([\d.]+,\d{2})/gi], 0)
+  const tfrMatM = text.match(/Tfr\s+maturato[^0-9]*([\d.]+,\d{2})/i)
+  if (tfrMatM) busta.tfr_maturato = pd(tfrMatM[1])
 
-  const oreM = text.match(/[Oo]re\s+[Ll]avorat[ea][\s:]*(\d+[.,]?\d*)/i)
-  if (oreM) r.ore_lavorate = parseFloat(oreM[1].replace(',', '.'))
+  // Imponibili
+  const imponIrpefM = text.match(/IMPONIBILE\s+IRPEF[^0-9]*([\d.]+,\d{2})/i)
+  if (imponIrpefM) busta.imponibile_irpef = pd(imponIrpefM[1])
+  const imponInpsM = text.match(/IMPON[.\s]+CONTR[.\s]+SOC[^0-9]*([\d.]+,\d{2})/i)
+  if (imponInpsM) busta.imponibile_inps = pd(imponInpsM[1])
 
-  return r
+  // Pass anag fields through to busta for matching
+  if (anag.paga_base) busta.paga_base = anag.paga_base
+  if (anag.codice_fiscale) busta.codice_fiscale = anag.codice_fiscale
+
+  return { anag, busta }
 }
 
 // ── Anagrafica (from CSV / ID documents) ─────────────────────────────────────
@@ -413,16 +561,18 @@ async function handleBustePdf(files) {
         _busteData.push(busta)
         _busteAnagData.push(anag)
       } else {
-        const parsed = parseCedolino(text)
-        parsed._filename = label
-        parsed._format   = fmt
-        _busteData.push(parsed)
+        const { anag, busta } = parseCedolino(text)
+        busta._filename = label
+        busta._format   = fmt   // 'ced' or 'generic'
+        anag._filename  = label
+        _busteData.push(busta)
+        _busteAnagData.push(anag)
       }
     })
     totalPages += pages.length
   }
 
-  if (progress) progress.textContent = `${files.length} file analizzati — ${totalPages} cedolini trovati (${_busteAnagData.length} formato INAIL)`
+  if (progress) progress.textContent = `${files.length} file analizzati — ${totalPages} cedolini trovati (${_busteAnagData.length} anagrafiche estratte)`
   const ops = await loadOperatori()
   renderBusteAnagPreview()
   renderBustePreview(ops)
@@ -514,7 +664,11 @@ function renderBustePreview(operatori) {
     const lordo = r._bp_lordo || +r.totale_lordo || 0
     const netto = r._bp_netto || +r.totale_netto || 0
     const fmt = v => (v && v !== 0) ? v.toFixed(2) : '—'
-    const isInail = r._format === 'inail'
+    const fmtBadge = r._format === 'inail'
+      ? '<span class="badge badge-success" style="font-size:10px;margin-left:4px;">INAIL</span>'
+      : r._format === 'ced'
+      ? '<span class="badge badge-info" style="font-size:10px;margin-left:4px;">CED</span>'
+      : ''
 
     return `
       <tr>
@@ -522,7 +676,7 @@ function renderBustePreview(operatori) {
           <select class="ti-buste-op" data-i="${i}" style="font-size:12px;border:1px solid #e2e8f0;border-radius:4px;padding:2px 4px;min-width:150px;">
             ${opOpts}
           </select>
-          ${isInail ? '<span class="badge badge-success" style="font-size:10px;margin-left:4px;">INAIL</span>' : ''}
+          ${fmtBadge}
         </td>
         <td>${MESI_NOMI[(mese || 1) - 1] || mese}</td>
         <td>${anno}</td>
