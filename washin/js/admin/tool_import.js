@@ -63,14 +63,40 @@ async function loadOperatori() {
 // ── Format detection ──────────────────────────────────────────────────────────
 
 function detectPayslipFormat(text) {
-  if (/POSIZIONE\s*INAIL|MATRICOLA\s*INPS.*AZIENDA|TOTALE\s*CONTRIBUTI\s*SOCIALI/i.test(text)) return 'inail'
+  // Score-based: Italian INAIL payslip has several characteristic keywords
+  const hits = [
+    /\bINAIL\b/i,
+    /NETTO\s*BUSTA/i,
+    /TOTALE\s*LORDO/i,
+    /TOTALE\s*CONTRIBUTI\s*SOCIALI/i,
+    /PAGA\s*BASE/i,
+    /MATRICOLA\s*INPS/i,
+    /TFR\s*MESE/i,
+    /COMPETENZE/i,
+    /TRATTENUTE/i,
+  ].filter(re => re.test(text)).length
+
+  if (hits >= 2) return 'inail'
   if (/DATA\s*SERVICES|CED\s*PAGHE/i.test(text)) return 'ced'
   return 'generic'
 }
 
 // ── INAIL payslip parser ──────────────────────────────────────────────────────
 
+// Helper: pick the first value that passes a sanity check
+function pickValue(text, patterns, minVal = 0) {
+  for (const re of patterns) {
+    for (const m of text.matchAll(re)) {
+      const v = pd(m[1])
+      if (v > minVal) return v
+    }
+  }
+  return null
+}
+
 function parseInailPayslip(text) {
+  console.log('[INAIL parser] testo OCR (prime 800 char):\n', text.substring(0, 800))
+
   const anag = { ccnl: 'Pulizie e Multiservizi' }
   const busta = {}
 
@@ -78,132 +104,134 @@ function parseInailPayslip(text) {
   const cfM = text.match(/\b([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])\b/i)
   if (cfM) anag.codice_fiscale = cfM[1].toUpperCase()
 
-  // COGNOME + NOME: in the header data row as "NNN COGNOME NOME DD/MM/YY"
-  // The employee code (1–3 digits) precedes the name, and the assunzione date follows
-  const nomeM = text.match(/\b(\d{1,3})\s+([A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ]{2,}){1,3})\s+\d{2}\/\d{2}\/\d{2}/)
-  if (nomeM) {
-    const parts = nomeM[2].trim().split(/\s+/)
-    anag.cognome = parts[0]
-    anag.nome    = parts.slice(1).join(' ')
-    anag.matricola = nomeM[1]
+  // COGNOME + NOME: header row pattern "NNN COGNOME NOME DD/MM/YY"
+  // Also try without trailing date (OCR might not place them on the same line)
+  const nomePatterns = [
+    /\b(\d{1,3})\s+([A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ]{2,}){1,3})\s+\d{2}\/\d{2}\/\d{2}/,
+    /\b(\d{1,3})\s+([A-ZÀÈÉÌÒÙ]{2,}\s+[A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ]{2,})?)\s*\n/,
+  ]
+  for (const re of nomePatterns) {
+    const m = text.match(re)
+    if (m) {
+      // Exclude numbers that are likely not employee codes (e.g., part of INPS number)
+      const code = parseInt(m[1])
+      if (code <= 999) {
+        const parts = m[2].trim().split(/\s+/)
+        anag.cognome   = parts[0]
+        anag.nome      = parts.slice(1).join(' ')
+        anag.matricola = m[1]
+        break
+      }
+    }
   }
 
-  // Data assunzione: first DD/MM/YY (or DD/MM/YYYY) in the header region
-  // The assunzione date is the one directly after the name block
-  if (anag.cognome) {
+  // Data assunzione: search "DATA ASSUNZIONE ... DD/MM/YY" or date after the name
+  const assM = text.match(/DATA\s+ASSUNZIONE[^\n\d]*(\d{2})\/(\d{2})\/(\d{2,4})/i)
+  if (assM) {
+    const y = assM[3].length === 2 ? `20${assM[3]}` : assM[3]
+    anag.data_assunzione = `${y}-${assM[2]}-${assM[1]}`
+  } else if (anag.cognome) {
     const nameIdx = text.indexOf(anag.cognome)
     if (nameIdx >= 0) {
-      const afterName = text.substring(nameIdx, nameIdx + 60)
-      const dm = afterName.match(/(\d{2})\/(\d{2})\/(\d{2,4})/)
+      const near = text.substring(nameIdx, nameIdx + 80)
+      const dm = near.match(/(\d{2})\/(\d{2})\/(\d{2,4})/)
       if (dm) {
         const y = dm[3].length === 2 ? `20${dm[3]}` : dm[3]
         anag.data_assunzione = `${y}-${dm[2]}-${dm[1]}`
       }
     }
   }
-  if (!anag.data_assunzione) {
-    const assM = text.match(/DATA\s+ASSUNZIONE[^\n]*?(\d{2})\/(\d{2})\/(\d{2,4})/i)
-    if (assM) {
-      const y = assM[3].length === 2 ? `20${assM[3]}` : assM[3]
-      anag.data_assunzione = `${y}-${assM[2]}-${assM[1]}`
-    }
-  }
 
-  // Data nascita: DD/MM/YY format in the CF row (year before 30 → 20xx, else 19xx)
+  // Data nascita: first DD/MM/YY after the CF (year 2-digit: >30 → 19xx, else 20xx)
   if (cfM) {
     const cfIdx = text.indexOf(cfM[1])
     if (cfIdx >= 0) {
-      const afterCF = text.substring(cfIdx, cfIdx + 250)
-      const dm = afterCF.match(/(\d{2})\/(\d{2})\/(\d{2})(?!\d)/)
-      if (dm) {
+      const afterCF = text.substring(cfIdx, cfIdx + 300)
+      // Skip data_assunzione date if already found
+      for (const dm of afterCF.matchAll(/(\d{2})\/(\d{2})\/(\d{2})(?!\d)/g)) {
         const yy = parseInt(dm[3])
         const year = yy > 30 ? `19${dm[3]}` : `20${dm[3]}`
-        anag.data_nascita = `${year}-${dm[2]}-${dm[1]}`
+        const candidate = `${year}-${dm[2]}-${dm[1]}`
+        if (candidate !== anag.data_assunzione) {
+          anag.data_nascita = candidate
+          break
+        }
       }
     }
   }
 
-  // Qualifica: OPERAIO / IMPIEGATO / etc. in the retribuzione row
+  // Qualifica
   const qualM = text.match(/\b(OPERAIO|IMPIEGATO|QUADRO|DIRIGENTE|APPRENDISTA|FUNZIONARIO)\b/i)
   if (qualM) anag.qualifica = qualM[1].charAt(0).toUpperCase() + qualM[1].slice(1).toLowerCase()
 
-  // Livello (LIVELLO N in the header area)
+  // Livello
   const livM = text.match(/LIVELLO\s+(\d+)/i)
   if (livM) anag.categoria_lavorativa = `${livM[1]}° livello`
 
-  // Paga base mensile = paga giornaliera × 173 ore convenzionali
+  // Paga base mensile = paga giornaliera × 173
   const pagaGiornM = text.match(/PAGA\s+BASE\s+([\d]+[,.][\d]+)/i)
   if (pagaGiornM) anag.paga_base = Math.round(pd(pagaGiornM[1]) * 173 * 100) / 100
 
-  // IBAN dipendente
+  // IBAN
   const ibanM = text.match(/\b(IT\d{2}[A-Z0-9]{23})\b/i)
   if (ibanM) anag.iban_dipendente = ibanM[1].toUpperCase()
 
   // ── Busta paga ──────────────────────────────────────────────────────────────
 
-  // Mese + Anno
+  // Mese + Anno — look for month name followed by 4-digit year
   const MESI = ['GENNAIO','FEBBRAIO','MARZO','APRILE','MAGGIO','GIUGNO',
                 'LUGLIO','AGOSTO','SETTEMBRE','OTTOBRE','NOVEMBRE','DICEMBRE']
-  const meseM = text.match(new RegExp(`(${MESI.join('|')})\\s+(\\d{4})`, 'i'))
+  const meseM = text.match(new RegExp(`(${MESI.join('|')})\\s+(20\\d{2})`, 'i'))
   if (meseM) {
     const idx = MESI.findIndex(m => m === meseM[1].toUpperCase())
     if (idx >= 0) { busta._bp_mese = idx + 1; busta._bp_anno = parseInt(meseM[2]) }
   }
 
-  // Ore lavorate: voce 8001 LAVORO ORDINARIO ORE
-  const oreM = text.match(/8001\D{1,10}([\d]+(?:[,.][\d]+)?)/)
+  // Ore lavorate: voce 8001, then fallback
+  const oreM = text.match(/8001\D{1,10}([\d]+(?:[,.][\d]{1,2})?)/)
   if (oreM) busta.ore_lavorate = pd(oreM[1])
   if (!busta.ore_lavorate) {
-    const ore2 = text.match(/LAVORO\s+ORDINARIO\s+ORE\D{0,20}([\d]+(?:[,.][\d]+)?)/i)
+    const ore2 = text.match(/LAVORO\s+ORDINARIO\s+ORE\D{0,20}([\d]{2,3})/i)
     if (ore2) busta.ore_lavorate = pd(ore2[1])
   }
 
-  // Paga base per la busta (da anagrafica estratta)
+  // Paga base per la busta
   if (anag.paga_base) busta.paga_base = anag.paga_base
 
-  // TOTALE LORDO
-  const lordoM = text.match(/TOTALE\s+LORDO[^0-9]*([\d.]+,\d{2})/i)
-  if (lordoM) busta._bp_lordo = pd(lordoM[1])
+  // TOTALE LORDO — must be a plausible wage (> 200 €)
+  busta._bp_lordo = pickValue(text, [/TOTALE\s*LORDO[^0-9]*([\d.]+,\d{2})/gi], 200)
 
-  // NETTO BUSTA
-  const nettoM = text.match(/NETTO\s+BUSTA[^0-9]*([\d.]+,\d{2})/i)
-  if (nettoM) busta._bp_netto = pd(nettoM[1])
+  // NETTO BUSTA — must be > 200 € (avoids picking up 0.64 ACCANTONAMENTO)
+  busta._bp_netto = pickValue(text, [/NETTO\s*BUSTA[^0-9]*([\d.]+,\d{2})/gi], 200)
 
-  // TOTALE CONTRIBUTI SOCIALI → INPS dipendente (include contrib.1 + contrib.2)
-  const inpsM = text.match(/TOTALE\s+CONTRIBUTI\s+SOCIALI[^0-9]*([\d.]+,\d{2})/i)
-  if (inpsM) busta.contributi_inps_dip = pd(inpsM[1])
+  // TOTALE CONTRIBUTI SOCIALI (INPS dipendente)
+  busta.contributi_inps_dip = pickValue(text, [/TOTALE\s*CONTRIBUTI\s*SOCIALI[^0-9]*([\d.]+,\d{2})/gi], 0)
 
-  // TOTALE TRATTENUTE IRPEF — there are two matches: "F.S." (smaller) and the actual one (larger)
+  // IRPEF: pick the largest value among all TOTALE TRATTENUTE IRPEF matches
+  // (there are two: "F.S." smaller one and the actual monthly one)
   const allIrpef = [...text.matchAll(/TOTALE\s+TRATTENUTE\s+IRPEF[^0-9]*([\d.]+,\d{2})/gi)]
-  if (allIrpef.length >= 2) {
-    // Pick the larger value (actual IRPEF, not F.S. withholding)
-    busta.irpef = Math.max(...allIrpef.map(m => pd(m[1])))
-  } else if (allIrpef.length === 1) {
-    busta.irpef = pd(allIrpef[0][1])
-  }
+  if (allIrpef.length) busta.irpef = Math.max(...allIrpef.map(m => pd(m[1])))
 
-  // Addizionali regionali + comunali (voci 9117, 9119, 9173 trattenute del mese)
-  // Match lines with RATA ADDIZ or ACCONTO ADD and grab the trattenuta value
+  // Addizionali (voci 9117, 9119, 9173)
   let addTot = 0
   for (const m of text.matchAll(/RATA\s+ADDIZ[^\n]*([\d.]+,\d{2})/gi)) addTot += pd(m[1])
   for (const m of text.matchAll(/ACCONTO\s+ADD[^\n]*([\d.]+,\d{2})/gi)) addTot += pd(m[1])
   if (addTot) busta.addizionali = Math.round(addTot * 100) / 100
 
-  // Altre ritenute: CESSIONE STIPENDIO + TRATT.BONIFICO ENTE CRED. (voci 9250, 217)
+  // Altre ritenute: cessione stipendio + altri
   let altreTot = 0
   for (const m of text.matchAll(/CESSIONE\s+STIPENDIO[^\n]*([\d.]+,\d{2})/gi)) altreTot += pd(m[1])
   for (const m of text.matchAll(/TRATT[^\n]*BONIFICO[^\n]*([\d.]+,\d{2})/gi)) altreTot += pd(m[1])
   if (altreTot) busta.altre_ritenute = Math.round(altreTot * 100) / 100
 
-  // TFR mese (da sezione DATI STATISTICI)
-  const tfrM = text.match(/TFR\s+MESE[^0-9]*([\d.]+,\d{2})/i)
-  if (tfrM) busta.tfr_mese = pd(tfrM[1])
+  // TFR mese
+  busta.tfr_mese = pickValue(text, [/TFR\s*MESE[^0-9]*([\d.]+,\d{2})/gi], 0)
 
-  // Superminimo (voce SUPERMINIMO o SUPERMINIMO AZIENDALE)
+  // Superminimo
   const supM = text.match(/SUPERMINIMO[^\n]*([\d.]+,\d{2})/i)
   if (supM) busta.superminimo = pd(supM[1])
 
-  // Straordinari → indennita_varie (voci 8025, 8101, etc.)
+  // Straordinari
   let straordTot = 0
   for (const m of text.matchAll(/STRAORDINARIO[^\n]*([\d.]+,\d{2})/gi)) straordTot += pd(m[1])
   if (straordTot) busta.straordinari_imp = Math.round(straordTot * 100) / 100
@@ -377,24 +405,45 @@ async function handleBustePdf(files) {
 function renderBusteAnagPreview() {
   const preview = document.getElementById('ti-buste-anag-preview')
   const tbody   = document.getElementById('ti-buste-anag-tbody')
+  const count   = document.getElementById('ti-buste-anag-count')
   if (!tbody) return
 
-  const fmt = v => v || '—'
+  const f = v => v || '—'
   tbody.innerHTML = _busteAnagData.map(r => `
     <tr>
-      <td>${fmt(r.cognome)}</td>
-      <td>${fmt(r.nome)}</td>
-      <td><code style="font-size:11px;">${fmt(r.codice_fiscale)}</code></td>
-      <td>${fmt(r.data_nascita)}</td>
-      <td>${fmt(r.data_assunzione)}</td>
-      <td>${fmt(r.qualifica)}</td>
-      <td>${fmt(r.categoria_lavorativa)}</td>
+      <td>${f(r.cognome)}</td>
+      <td>${f(r.nome)}</td>
+      <td><code style="font-size:11px;">${f(r.codice_fiscale)}</code></td>
+      <td>${f(r.data_nascita)}</td>
+      <td>${f(r.data_assunzione)}</td>
+      <td>${f(r.qualifica)}</td>
+      <td>${f(r.categoria_lavorativa)}</td>
       <td>${r.paga_base ? r.paga_base.toFixed(2) : '—'}</td>
-      <td style="font-size:11px;">${fmt(r.iban_dipendente)}</td>
+      <td style="font-size:11px;">${f(r.iban_dipendente)}</td>
     </tr>
   `).join('')
 
+  if (count) count.textContent = _busteAnagData.length
   if (preview) preview.style.display = _busteAnagData.length ? 'block' : 'none'
+}
+
+async function confirmBusteAnagOnly() {
+  if (!_busteAnagData.length) return
+  const rows = _busteAnagData.filter(r => r.codice_fiscale || r.cognome).map(r => {
+    const row = {}
+    ANAG_COLS.forEach(c => { if (r[c] !== undefined && r[c] !== '') row[c] = r[c] })
+    if (row.paga_base) row.paga_base = +row.paga_base || null
+    return row
+  })
+  if (!rows.length) { showToast('Nessun profilo valido da salvare', 'error'); return }
+
+  const { error } = await supabase.from('profili').upsert(rows, { onConflict: 'codice_fiscale' })
+  if (error) { showToast('Errore salvataggio anagrafica: ' + error.message, 'error'); return }
+  showToast(`${rows.length} profili salvati`, 'success')
+  _operatoriCache = null
+  // Refresh operatore dropdowns in buste preview
+  const ops = await loadOperatori()
+  renderBustePreview(ops)
 }
 
 async function handleBusteCsv(file) {
@@ -634,6 +683,9 @@ export function initToolImport() {
     if (!input?.files?.length) { showToast('Seleziona almeno un PDF', 'error'); return }
     handleBustePdf(Array.from(input.files))
   })
+
+  // Anagrafiche estratte: salva solo profili
+  document.getElementById('ti-buste-anag-save')?.addEventListener('click', confirmBusteAnagOnly)
 
   // Buste: confirm / cancel
   document.getElementById('ti-buste-confirm')?.addEventListener('click', confirmBusteImport)
