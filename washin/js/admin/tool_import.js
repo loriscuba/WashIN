@@ -412,8 +412,6 @@ function parseCedolino(text) {
   //   [4 nums] IMPON_IRPEF  IRPEF_LORDA  TOT_DETR  IRPEF_PAGATA
   //   [3 nums] acconto  arrot_prec  trattenute_corpo
   //   [2 nums] arrotondamento(tiny < 1€)  NETTO_BUSTA
-  busta.tfr_mese = pickValue(text, [/TFR\s*MESE[^0-9]*([\d.]+,\d{2})/gi], 0)
-
   const tfrMatM = text.match(/Tfr\s+maturato\s+([\d.]+,\d{2})/i)
   if (tfrMatM) {
     busta.tfr_maturato = pd(tfrMatM[1])
@@ -424,6 +422,7 @@ function parseCedolino(text) {
     //   [irpefStart..+3] impon_irpef, irpef_lorda, tot_detr, IRPEF_PAGATA
     //   [variable] acconto/addizionali block (1-5 values per employee)
     //   [...k] arrotondamento(<1)  [k+1] NETTO_BUSTA
+    //   [dati statistici row] ... IMPON_INAIL (≈ seqNums[1]) ... TFR_MESE ...
     const afterTfr = text.substring(tfrMatM.index + tfrMatM[0].length)
     const seqNums = [...afterTfr.matchAll(/([\d.]+,\d{2,5})/g)].map(m => pd(m[1]))
     if (seqNums.length >= 13 && seqNums[0] > 300) {
@@ -442,6 +441,24 @@ function parseCedolino(text) {
         if (seqNums[k] < 1 && seqNums[k + 1] > 100 && seqNums[k + 1] < seqNums[0]) {
           busta._bp_netto = seqNums[k + 1]
           break
+        }
+      }
+
+      // TFR mese: in DATI STATISTICI row, imponibile INAIL (≈ seqNums[1]) appears again
+      // The last occurrence of that value in afterTfr is the dati-stat row → next value is TFR MESE
+      const ni = Math.round(seqNums[1])
+      const niStr = ni >= 1000
+        ? `${Math.floor(ni / 1000)}\\.${(ni % 1000).toString().padStart(3, '0')}`
+        : String(ni)
+      const imponRe = new RegExp(niStr + ',\\d{2}', 'g')
+      const imponOcc = [...afterTfr.matchAll(imponRe)]
+      if (imponOcc.length >= 2) {
+        const lastM = imponOcc[imponOcc.length - 1]
+        const afterLast = afterTfr.substring(lastM.index + lastM[0].length)
+        const tfrMM = afterLast.match(/^\s*([\d.]+,\d{2})/)
+        if (tfrMM) {
+          const v = pd(tfrMM[1])
+          if (v >= 20 && v <= 700) busta.tfr_mese = v
         }
       }
     }
