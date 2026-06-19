@@ -438,6 +438,11 @@
               <strong>Gestione Anagrafica</strong>
               <p>HR, retribuzioni e buste paga</p>
             </a>
+            <a href="#tool-import" data-target="tool-import" class="config-card">
+              <div class="config-card-icon">📥</div>
+              <strong>Tool Import</strong>
+              <p>Import massivo anagrafiche e buste paga</p>
+            </a>
           </div>
         </section>
 
@@ -580,6 +585,106 @@
               </thead>
               <tbody id="hr-operatori-body"></tbody>
             </table>
+          </div>
+        </section>
+
+        <!-- ── Tool Import ────────────────────────────── -->
+        <section id="tool-import" class="section hidden">
+          <div class="page-header">
+            <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+            <h1>Tool Import</h1>
+            <p style="color:var(--gray-500);margin-top:8px;">Importa anagrafiche e buste paga storiche da CSV o PDF.</p>
+          </div>
+
+          <!-- Tab bar -->
+          <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:24px;">
+            <button class="ti-tab-btn" data-tab="anag" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--teal,#0d9488);border-bottom:2px solid var(--teal,#0d9488);margin-bottom:-2px;">Anagrafica</button>
+            <button class="ti-tab-btn" data-tab="buste" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Buste paga</button>
+          </div>
+
+          <!-- ─ Panel: Anagrafica ─ -->
+          <div id="ti-panel-anag">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+              <div class="card" style="padding:20px;">
+                <h3 style="margin:0 0 6px;font-size:15px;">1. Scarica template CSV</h3>
+                <p style="font-size:13px;color:var(--gray-500);margin:0 0 12px;">Compila il file con i dati degli operatori e ricaricalo. Puoi anche caricare direttamente PDF/foto di documenti d'identità.</p>
+                <button class="btn btn-secondary btn-sm" id="ti-dl-anag-csv">⬇ Template operatori.csv</button>
+              </div>
+              <div class="card" style="padding:20px;">
+                <h3 style="margin:0 0 6px;font-size:15px;">2. Carica file</h3>
+                <p style="font-size:13px;color:var(--gray-500);margin:0 0 10px;">CSV compilato oppure più PDF/JPG di carte d'identità.</p>
+                <input type="file" id="ti-anag-input" accept=".csv,.pdf,.jpg,.jpeg,.png" multiple style="font-size:13px;display:block;margin-bottom:10px;">
+                <button class="btn btn-primary btn-sm" id="ti-parse-anag">Analizza</button>
+                <div id="ti-anag-progress" style="font-size:12px;color:var(--gray-500);margin-top:8px;min-height:16px;"></div>
+              </div>
+            </div>
+            <div id="ti-anag-preview" style="display:none;">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+                <h3 style="margin:0;font-size:15px;">Anteprima — verifica e correggi prima di confermare</h3>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-secondary btn-sm" id="ti-anag-cancel">Annulla</button>
+                  <button class="btn btn-primary btn-sm" id="ti-anag-confirm">Importa <span id="ti-anag-count">0</span> operatori</button>
+                </div>
+              </div>
+              <div style="overflow-x:auto;">
+                <table class="washin-table" id="ti-anag-table">
+                  <thead><tr><th>#</th><th>Cognome</th><th>Nome</th><th>Cod. Fiscale</th><th>Email</th><th>Qualifica</th><th>Paga base €</th><th>Data assunzione</th><th>Stato</th></tr></thead>
+                  <tbody id="ti-anag-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- ─ Panel: Buste paga ─ -->
+          <div id="ti-panel-buste" style="display:none;">
+            <div style="display:flex;gap:8px;margin-bottom:20px;">
+              <button class="btn btn-primary btn-sm ti-buste-mode" data-mode="csv">CSV / Excel</button>
+              <button class="btn btn-secondary btn-sm ti-buste-mode" data-mode="pdf">PDF multipli</button>
+            </div>
+
+            <!-- CSV mode -->
+            <div id="ti-buste-panel-csv">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+                <div class="card" style="padding:20px;">
+                  <h3 style="margin:0 0 6px;font-size:15px;">1. Scarica template</h3>
+                  <p style="font-size:13px;color:var(--gray-500);margin:0 0 12px;">Esporta le buste paga dal tuo gestionale paghe e mappa le colonne nel nostro template.</p>
+                  <button class="btn btn-secondary btn-sm" id="ti-dl-buste-csv">⬇ Template buste_paga.csv</button>
+                </div>
+                <div class="card" style="padding:20px;">
+                  <h3 style="margin:0 0 6px;font-size:15px;">2. Carica CSV</h3>
+                  <input type="file" id="ti-buste-csv-input" accept=".csv" style="font-size:13px;display:block;margin-bottom:10px;">
+                  <button class="btn btn-primary btn-sm" id="ti-parse-buste-csv">Analizza CSV</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- PDF mode -->
+            <div id="ti-buste-panel-pdf" style="display:none;">
+              <div class="card" style="padding:20px;margin-bottom:20px;">
+                <h3 style="margin:0 0 6px;font-size:15px;">Carica cedolini PDF</h3>
+                <p style="font-size:13px;color:var(--gray-500);margin:0 0 10px;">Seleziona più PDF insieme. Verranno analizzati uno per uno (formato CED supportato; per altri formati usare CSV).</p>
+                <input type="file" id="ti-buste-pdf-input" accept=".pdf" multiple style="font-size:13px;display:block;margin-bottom:10px;">
+                <button class="btn btn-primary btn-sm" id="ti-parse-buste-pdf">Analizza PDF</button>
+                <div id="ti-buste-pdf-progress" style="font-size:12px;color:var(--gray-500);margin-top:8px;min-height:16px;"></div>
+              </div>
+            </div>
+
+            <!-- Preview tabella buste (condivisa) -->
+            <div id="ti-buste-preview" style="display:none;">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+                <h3 style="margin:0;font-size:15px;">Anteprima buste paga — abbina gli operatori se necessario</h3>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-secondary btn-sm" id="ti-buste-cancel">Annulla</button>
+                  <button class="btn btn-primary btn-sm" id="ti-buste-confirm">Salva <span id="ti-buste-count">0</span> buste</button>
+                </div>
+              </div>
+              <div style="overflow-x:auto;">
+                <table class="washin-table" id="ti-buste-table">
+                  <thead><tr><th>Operatore</th><th>Mese</th><th>Anno</th><th>Lordo €</th><th>IRPEF €</th><th>INPS dip. €</th><th>TFR €</th><th>Netto €</th><th>Stato</th></tr></thead>
+                  <tbody id="ti-buste-tbody"></tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -2139,6 +2244,7 @@
       import { initImpostazioni } from '../js/admin/impostazioni.js'
       import { initFornitori } from '../js/admin/fornitori.js'
       import { initGestioneAnagrafica } from '../js/admin/gestione_anagrafica.js'
+      import { initToolImport } from '../js/admin/tool_import.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -2296,6 +2402,7 @@
         initImpostazioni()
         initFornitori()
         initGestioneAnagrafica()
+        initToolImport()
       })
     </script>
   </body>

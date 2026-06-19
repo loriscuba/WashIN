@@ -906,6 +906,8 @@ async function downloadBusta(filePath) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+export { extractTextFromFile, parseDocumentText }
+
 export function initGestioneAnagrafica() {
   try {
     // Initial load
