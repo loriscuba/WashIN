@@ -709,8 +709,16 @@ function renderTabellaHR(operatori) {
           ? `<span class="badge ${STATO_BADGE[latest.stato] || 'badge-warning'}">${MESI[latest.mese - 1]} ${latest.anno}</span>`
           : '<span style="color:var(--gray-400);font-size:12px;">—</span>'}
       </td>
-      <td>
+      <td style="white-space:nowrap;">
         <button class="btn btn-sm btn-secondary" data-action="hr-open" data-id="${op.id}">Gestisci</button>
+        <button class="btn btn-sm btn-primary" data-action="hr-attiva"
+          data-id="${op.id}"
+          data-email="${op.email || ''}"
+          data-nome="${(op.cognome || '') + ' ' + (op.nome || '')}"
+          style="margin-left:4px;"
+          title="Crea credenziali di accesso per questo operatore">
+          Crea account
+        </button>
       </td>
     `
     tbody.appendChild(tr)
@@ -1020,8 +1028,54 @@ export function initGestioneAnagrafica() {
 
     // Table row click
     document.getElementById('hr-operatori-body')?.addEventListener('click', async e => {
-      const btn = e.target.closest('[data-action="hr-open"]')
-      if (btn?.dataset.id) await openModalAnag(btn.dataset.id)
+      const btn = e.target.closest('[data-action]')
+      if (!btn) return
+      if (btn.dataset.action === 'hr-open' && btn.dataset.id) await openModalAnag(btn.dataset.id)
+      if (btn.dataset.action === 'hr-attiva') {
+        document.getElementById('attiva-account-nome').textContent = btn.dataset.nome?.trim() || ''
+        const form = document.getElementById('attiva-account-form')
+        form.querySelector('[name="profilo_id"]').value = btn.dataset.id
+        form.querySelector('[name="email"]').value      = btn.dataset.email || ''
+        form.querySelector('[name="password"]').value  = ''
+        form.querySelector('[name="conferma"]').value  = ''
+        document.getElementById('attiva-account-modal').classList.add('active')
+      }
+    })
+
+    // Crea account: annulla
+    document.getElementById('attiva-account-cancel')?.addEventListener('click', () =>
+      document.getElementById('attiva-account-modal')?.classList.remove('active'))
+
+    // Crea account: submit
+    document.getElementById('attiva-account-form')?.addEventListener('submit', async e => {
+      e.preventDefault()
+      const form   = e.target
+      const email  = form.querySelector('[name="email"]').value.trim()
+      const pw     = form.querySelector('[name="password"]').value
+      const conf   = form.querySelector('[name="conferma"]').value
+      const pid    = form.querySelector('[name="profilo_id"]').value
+
+      if (pw !== conf) { showToast('Le password non coincidono', 'error'); return }
+      if (pw.length < 6) { showToast('Password: minimo 6 caratteri', 'error'); return }
+
+      const submitBtn = document.getElementById('attiva-account-submit')
+      submitBtn.disabled = true
+      submitBtn.textContent = 'Creazione…'
+      try {
+        const { data, error } = await supabase.functions.invoke('crea-utente-operatore', {
+          body: { email, password: pw, profilo_id: pid }
+        })
+        if (error || data?.error) throw new Error(data?.error || error?.message || 'Errore sconosciuto')
+        showToast('Account creato. L\'operatore può ora accedere.', 'success')
+        document.getElementById('attiva-account-modal').classList.remove('active')
+        _operatori = await loadOperatoriHR()
+        renderTabellaHR(_operatori)
+      } catch (err) {
+        showToast('Errore: ' + err.message, 'error')
+      } finally {
+        submitBtn.disabled = false
+        submitBtn.textContent = 'Crea account'
+      }
     })
 
     // Tabs

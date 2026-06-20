@@ -1999,6 +1999,33 @@
       </div>
     </div>
 
+    <!-- ── Modal Attiva Account Operatore ── -->
+    <div class="modal-overlay" id="attiva-account-modal">
+      <div class="modal-box" style="max-width:400px;">
+        <h2>Crea account — <span id="attiva-account-nome" style="font-weight:400;"></span></h2>
+        <p style="font-size:12px;color:var(--gray-500);margin:0 0 16px;">L'operatore potrà accedere all'app con queste credenziali.</p>
+        <form id="attiva-account-form">
+          <input type="hidden" name="profilo_id">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" name="email" required placeholder="operatore@email.it" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" name="password" required minlength="6" placeholder="Minimo 6 caratteri" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label>Conferma password</label>
+            <input type="password" name="conferma" required placeholder="Ripeti password" autocomplete="new-password">
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+            <button type="button" id="attiva-account-cancel" class="btn btn-secondary">Annulla</button>
+            <button type="submit" id="attiva-account-submit" class="btn btn-primary">Crea account</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- ── Modal Storico Sede ── -->
     <div class="modal-overlay" id="storico-sede-modal">
       <div class="modal-box" style="max-width:700px;">
