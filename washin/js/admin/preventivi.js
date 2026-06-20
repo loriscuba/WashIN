@@ -63,16 +63,21 @@ async function loadMagItems() {
 // ── CCNL cost calculation (calls Supabase RPC) ────────────────────────────────
 
 async function calcolaCostoCcnl(livello, ore) {
-  if (!livello || !(ore > 0)) return null
+  if (!livello) return null
+  // Se ore non compilate usa 173 (mese contrattuale pieno) come riferimento
+  const oreRif = ore > 0 ? ore : 173
   try {
     const { data, error } = await supabase.rpc('calcola_costo_operatore', {
       p_livello: livello,
-      p_ore_ordinarie: ore,
+      p_ore_ordinarie: oreRif,
       p_include_ratei: true,
     })
-    if (error || !data) return null
-    return data
-  } catch { return null }
+    if (error) {
+      console.error('[CCNL] RPC error (SQL migration eseguita?)', error.message)
+      return null
+    }
+    return data ? { ...data, _oreRif: oreRif, _isMonthly: ore <= 0 } : null
+  } catch (e) { console.error('[CCNL]', e); return null }
 }
 
 function showCcnlHint(result, nOp) {
@@ -81,8 +86,11 @@ function showCcnlHint(result, nOp) {
   if (!result) { hint.style.display = 'none'; return }
   const n = nOp || 1
   const fmt = v => v != null ? EUR(v) : '—'
+  const label = result._isMonthly
+    ? `Costo CCNL stimato / operatore — <em>mese pieno (${result._oreRif}h)</em>`
+    : `Costo CCNL stimato / operatore — <em>${result._oreRif}h</em>`
   hint.innerHTML = `
-    <span style="font-weight:700;color:#0d9488;">Costo CCNL stimato / operatore / mese</span>
+    <span style="font-weight:700;color:#0d9488;">${label}</span>
     <span style="display:inline-flex;flex-wrap:wrap;gap:10px;margin-left:8px;font-size:11px;">
       <span>Lordo <b>${fmt(result.lordo)}</b></span>
       <span>+INPS az. <b>${fmt(result.contributi_inps_datore)}</b></span>
