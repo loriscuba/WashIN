@@ -5,6 +5,9 @@ ALTER TABLE profili ADD COLUMN IF NOT EXISTS data_nascita          date;
 ALTER TABLE profili ADD COLUMN IF NOT EXISTS voce_tariffa_inail    text DEFAULT '0411';
 ALTER TABLE profili ADD COLUMN IF NOT EXISTS livello_ccnl          text;
 
--- Ricarica schema cache PostgREST (eseguire dopo le ALTER TABLE)
--- In alternativa: Supabase Dashboard → Settings → API → Reload schema
+-- Vincolo UNIQUE su codice_fiscale (necessario per upsert onConflict)
+-- Se fallisce ci sono CF duplicati: risolvere manualmente poi rieseguire
+ALTER TABLE profili ADD CONSTRAINT profili_codice_fiscale_unique UNIQUE (codice_fiscale);
+
+-- Ricarica schema cache PostgREST
 NOTIFY pgrst, 'reload schema';
