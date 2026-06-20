@@ -21,7 +21,7 @@ function renderParametriCcnl(rows) {
   const tbody = document.getElementById('ccnl-tbody')
   if (!tbody) return
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:24px;">Nessun parametro CCNL. Eseguire migrations_v19.sql su Supabase.</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:24px;">Nessun parametro CCNL. Eseguire migrations_v19.sql su Supabase.</td></tr>'
     return
   }
   tbody.innerHTML = rows.map(r => `
@@ -32,7 +32,8 @@ function renderParametriCcnl(rows) {
       <td><input class="ccnl-inp tbl-inp" type="number" step="0.01" name="contingenza" value="${r.contingenza ?? ''}" style="width:82px"></td>
       <td><input class="ccnl-inp tbl-inp" type="number" step="0.01" name="edr" value="${r.edr ?? ''}" style="width:68px"></td>
       <td><input class="ccnl-inp tbl-inp" type="number" name="divisore_orario" value="${r.divisore_orario ?? ''}" style="width:56px"></td>
-      <td><input class="ccnl-inp tbl-inp" type="number" step="0.00001" name="aliquota_inps_datore" value="${fmtPct(r.aliquota_inps_datore)}" data-is-pct="1" style="width:72px" title="Valore in %  (es. 28.5)"></td>
+      <td><input class="ccnl-inp tbl-inp" type="number" step="0.001" name="aliquota_inps_datore" value="${fmtPct(r.aliquota_inps_datore)}" data-is-pct="1" style="width:72px" title="INPS datore in % (es. 31.5)"></td>
+      <td><input class="ccnl-inp tbl-inp" type="number" step="0.001" name="percentuale_rateo_ferie_permessi" value="${fmtPct(r.percentuale_rateo_ferie_permessi)}" data-is-pct="1" style="width:72px" title="Ferie + permessi + ex-festività in % del lordo (es. 22.0)"></td>
       <td><input class="ccnl-inp tbl-inp" type="date" name="valido_da" value="${r.valido_da ?? ''}" style="width:122px"></td>
       <td style="white-space:nowrap">
         <button class="btn btn-primary btn-sm ccnl-save-btn">Salva</button>

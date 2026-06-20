@@ -106,16 +106,21 @@ function showCcnlHint(result, nOp) {
   if (!result) { hint.style.display = 'none'; return }
   const n = nOp || 1
   const fmt = v => v != null ? EUR(v) : '—'
+  const pct = v => v != null ? (v * 100).toFixed(1) + '%' : '—'
   const label = result._isMonthly
     ? `Costo CCNL stimato / operatore — <em>mese pieno (${result._oreRif}h)</em>`
     : `Costo CCNL stimato / operatore — <em>${result._oreRif}h</em>`
+  const ratei1314 = (result.ratei_13 || 0) + (result.ratei_14 || 0)
+  const inailPct  = result.tasso_inail != null ? ` (${pct(result.tasso_inail)})` : ''
   hint.innerHTML = `
     <span style="font-weight:700;color:#0d9488;">${label}</span>
     <span style="display:inline-flex;flex-wrap:wrap;gap:10px;margin-left:8px;font-size:11px;">
       <span>Lordo <b>${fmt(result.lordo)}</b></span>
-      <span>+INPS az. <b>${fmt(result.contributi_inps_datore)}</b></span>
-      <span>+INAIL <b>${fmt(result.inail)}</b></span>
-      <span>+Ratei 13ª/14ª <b>${fmt((result.ratei_13 || 0) + (result.ratei_14 || 0))}</b></span>
+      <span>+INPS az. <b>${fmt(result.contributi_inps_datore)}</b> <span style="color:#6b7280;">(${pct(result.aliquota_inps_datore)})</span></span>
+      <span>+INAIL <b>${fmt(result.inail)}</b><span style="color:#6b7280;">${inailPct}</span></span>
+      <span>+Ratei 13ª/14ª <b>${fmt(ratei1314)}</b></span>
+      <span>+Ferie/perm. <b>${fmt(result.ratei_ferie_permessi)}</b></span>
+      <span>+INPS su ratei <b>${fmt(result.contributi_su_ratei)}</b></span>
       <span>+TFR <b>${fmt(result.tfr)}</b></span>
       <span style="border-left:1px solid #0d9488;padding-left:10px;">= <b style="font-size:13px;">${fmt(result.costo_totale)} × ${n} op.</b>
         = <b style="font-size:13px;color:#0d9488;">${fmt(result.costo_totale * n)}/mese</b>
