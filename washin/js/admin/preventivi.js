@@ -65,13 +65,13 @@ async function loadMagItems() {
 // ── CCNL cost calculation (calls Supabase RPC) ────────────────────────────────
 
 async function populateOperatoriSelect(selectEl, selectedId = null) {
-  if (!_operatoriList.length) {
-    const { data } = await supabase.from('profili')
-      .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail')
-      .eq('attivo', true)
-      .order('cognome')
-    _operatoriList = data || []
-  }
+  // Ricarica sempre dal DB per avere livello_ccnl aggiornato
+  const { data } = await supabase.from('profili')
+    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail')
+    .neq('attivo', false)   // include NULL e true, esclude solo false
+    .order('cognome')
+  _operatoriList = data || []
+
   selectEl.innerHTML = '<option value="">— nessuno (inserimento manuale) —</option>'
   _operatoriList.forEach(op => {
     const o = document.createElement('option')
