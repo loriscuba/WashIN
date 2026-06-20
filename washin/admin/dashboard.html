@@ -2390,6 +2390,7 @@
       function setActiveSection(targetId) {
         sections.forEach(s => s.classList.toggle('hidden', s.id !== targetId))
         document.querySelectorAll('[data-target]').forEach(l => l.classList.toggle('active', l.dataset.target === targetId))
+        document.dispatchEvent(new CustomEvent('section:active', { detail: targetId }))
       }
 
       function closeSidebar() {

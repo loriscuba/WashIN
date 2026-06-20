@@ -1007,8 +1007,13 @@ export { extractTextFromFile, extractPageTextsFromPdf, parseDocumentText }
 
 export function initGestioneAnagrafica() {
   try {
-    // Initial load
+    // Initial load + reload ogni volta che la sezione diventa attiva
     loadOperatoriHR().then(ops => { _operatori = ops; renderTabellaHR(_operatori) })
+    document.addEventListener('section:active', e => {
+      if (e.detail === 'gestione-anagrafica') {
+        loadOperatoriHR().then(ops => { _operatori = ops; renderTabellaHR(_operatori) })
+      }
+    })
 
     // Search
     document.getElementById('hr-search')?.addEventListener('input', () => renderTabellaHR(_operatori))
