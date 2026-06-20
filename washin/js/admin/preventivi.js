@@ -48,6 +48,8 @@ async function loadAziendaGeo() {
 // ── Magazzino cache ───────────────────────────────────────────────────────────
 
 let _magItems = null
+let _opVoceInail = null
+let _operatoriList = []
 
 async function loadMagItems() {
   if (_magItems) return _magItems
@@ -62,16 +64,34 @@ async function loadMagItems() {
 
 // ── CCNL cost calculation (calls Supabase RPC) ────────────────────────────────
 
-async function calcolaCostoCcnl(livello, ore) {
+async function populateOperatoriSelect(selectEl, selectedId = null) {
+  if (!_operatoriList.length) {
+    const { data } = await supabase.from('profili')
+      .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail')
+      .eq('attivo', true)
+      .order('cognome')
+    _operatoriList = data || []
+  }
+  selectEl.innerHTML = '<option value="">— nessuno (inserimento manuale) —</option>'
+  _operatoriList.forEach(op => {
+    const o = document.createElement('option')
+    o.value = op.id
+    o.textContent = `${op.cognome || ''} ${op.nome || ''}`.trim()
+    o.dataset.livello = op.livello_ccnl || ''
+    o.dataset.voce = op.voce_tariffa_inail || ''
+    if (selectedId && op.id === selectedId) o.selected = true
+    selectEl.appendChild(o)
+  })
+}
+
+async function calcolaCostoCcnl(livello, ore, voce_tariffa = null) {
   if (!livello) return null
   // Se ore non compilate usa 173 (mese contrattuale pieno) come riferimento
   const oreRif = ore > 0 ? ore : 173
   try {
-    const { data, error } = await supabase.rpc('calcola_costo_operatore', {
-      p_livello: livello,
-      p_ore_ordinarie: oreRif,
-      p_include_ratei: true,
-    })
+    const params = { p_livello: livello, p_ore_ordinarie: oreRif, p_include_ratei: true }
+    if (voce_tariffa) params.p_voce_tariffa = voce_tariffa
+    const { data, error } = await supabase.rpc('calcola_costo_operatore', params)
     if (error) {
       console.error('[CCNL] RPC error (SQL migration eseguita?)', error.message)
       return null
@@ -294,8 +314,13 @@ export async function openModalPreventivo(id = null) {
     if (slider) slider.value = 30
     if (numEl)  numEl.value  = 30
 
+    _opVoceInail = null
     const clienteSelect = form.querySelector('[name="cliente_id"]')
-    await populateClientiSelect(clienteSelect)
+    const opSelect = document.getElementById('prev-operatore-select')
+    await Promise.all([
+      populateClientiSelect(clienteSelect),
+      opSelect ? populateOperatoriSelect(opSelect) : Promise.resolve(),
+    ])
 
     const [magItems] = await Promise.all([loadMagItems(), loadAziendaGeo()])
 
@@ -554,13 +579,26 @@ export function initPreventivi() {
         const ore     = parseFloat(form.querySelector('[name="ore_stimate"]')?.value) || 0
         const nOp     = parseInt(form.querySelector('[name="n_operatori"]')?.value) || 1
         if (!livello) { showCcnlHint(null); return }
-        const result = await calcolaCostoCcnl(livello, ore)
+        const result = await calcolaCostoCcnl(livello, ore, _opVoceInail)
         if (result?.costo_orario_effettivo) {
           const costoEl = form.querySelector('[name="costo_orario"]')
           if (costoEl) { costoEl.value = result.costo_orario_effettivo.toFixed(4); calcAll(form) }
         }
         showCcnlHint(result, nOp)
       }
+
+      // Operator select: auto-fills livello CCNL + stores voce INAIL
+      document.getElementById('prev-operatore-select')?.addEventListener('change', e => {
+        const opt = e.target.options[e.target.selectedIndex]
+        _opVoceInail = opt.dataset.voce || null
+        const lvl = opt.dataset.livello
+        if (lvl) {
+          const lvlEl = form.querySelector('[name="livello_ccnl"]')
+          if (lvlEl) lvlEl.value = lvl
+          aggiornaCostoCcnl()
+        }
+      })
+
       form.querySelector('[name="livello_ccnl"]')?.addEventListener('change', aggiornaCostoCcnl)
       form.querySelector('[name="ore_stimate"]')?.addEventListener('change', aggiornaCostoCcnl)
       form.querySelector('[name="n_operatori"]')?.addEventListener('change', () => {

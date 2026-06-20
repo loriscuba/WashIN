@@ -1416,6 +1416,12 @@
           <!-- Operatori -->
           <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
             <div style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Operatori</div>
+            <div class="form-group" style="margin:0 0 8px;">
+              <label style="font-size:11px;">Operatore <span style="font-weight:400;color:#9ca3af;">(compila livello CCNL e tariffa INAIL automaticamente)</span></label>
+              <select id="prev-operatore-select" style="font-size:12px;padding:5px 6px;border:1px solid #d1d5db;border-radius:6px;width:100%;">
+                <option value="">— nessuno (inserimento manuale) —</option>
+              </select>
+            </div>
             <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr;gap:10px;align-items:end;">
               <div class="form-group" style="margin:0;"><label style="font-size:11px;">N. operatori</label><input name="n_operatori" type="number" min="1" value="1" style="text-align:center;"></div>
               <div class="form-group" style="margin:0;">
@@ -1873,6 +1879,20 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
               <div class="form-group"><label>CCNL applicato</label><input name="ccnl" type="text" placeholder="Pulizie e Multiservizi"></div>
               <div class="form-group"><label>Categoria / Livello</label><input name="categoria_lavorativa" type="text" placeholder="es. 3° livello"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="form-group">
+                <label>Livello CCNL <span style="font-weight:400;color:var(--gray-400);font-size:11px;">(per calcolo preventivi)</span></label>
+                <select name="livello_ccnl">
+                  <option value="">— non specificato —</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Voce tariffa INAIL</label>
+                <select name="voce_tariffa_inail">
+                  <option value="">— non specificata —</option>
+                </select>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
               <div class="form-group"><label>Tipo contratto</label>

@@ -598,6 +598,57 @@ async function saveNuovoOperatore() {
   }
 }
 
+// ── Selects CCNL / INAIL per scheda retribuzione ─────────────────────────────
+
+let _ccnlOpts = null
+let _inailOpts = null
+
+async function loadCcnlOpts() {
+  if (_ccnlOpts) return _ccnlOpts
+  const { data } = await supabase.from('parametri_ccnl')
+    .select('livello,descrizione_livello').order('valido_da', { ascending: false }).order('livello')
+  const seen = new Set()
+  _ccnlOpts = (data || []).filter(r => { if (seen.has(r.livello)) return false; seen.add(r.livello); return true })
+  return _ccnlOpts
+}
+
+async function loadInailOpts() {
+  if (_inailOpts) return _inailOpts
+  const { data } = await supabase.from('tariffe_inail')
+    .select('voce_tariffa,descrizione,tasso_inail').order('valido_da', { ascending: false }).order('voce_tariffa')
+  const seen = new Set()
+  _inailOpts = (data || []).filter(r => { if (seen.has(r.voce_tariffa)) return false; seen.add(r.voce_tariffa); return true })
+  return _inailOpts
+}
+
+async function populateRetribSelects(currentLivello, currentVoce) {
+  const [ccnlOpts, inailOpts] = await Promise.all([loadCcnlOpts(), loadInailOpts()])
+
+  const lvlSel = document.querySelector('#hr-retrib-form [name="livello_ccnl"]')
+  if (lvlSel) {
+    lvlSel.innerHTML = '<option value="">— non specificato —</option>'
+    ccnlOpts.forEach(r => {
+      const o = document.createElement('option')
+      o.value = r.livello
+      o.textContent = `${r.livello} — ${r.descrizione_livello || r.livello}`
+      if (r.livello === currentLivello) o.selected = true
+      lvlSel.appendChild(o)
+    })
+  }
+
+  const voiceSel = document.querySelector('#hr-retrib-form [name="voce_tariffa_inail"]')
+  if (voiceSel) {
+    voiceSel.innerHTML = '<option value="">— non specificata —</option>'
+    inailOpts.forEach(r => {
+      const o = document.createElement('option')
+      o.value = r.voce_tariffa
+      o.textContent = `${r.voce_tariffa} — ${r.descrizione} (${(r.tasso_inail * 100).toFixed(2)}%)`
+      if (r.voce_tariffa === currentVoce) o.selected = true
+      voiceSel.appendChild(o)
+    })
+  }
+}
+
 // ── Data loading ─────────────────────────────────────────────────────────────
 
 async function loadOperatoriHR() {
@@ -696,6 +747,7 @@ async function openModalAnag(operatoreId) {
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
+      await populateRetribSelects(data.livello_ccnl, data.voce_tariffa_inail || '0411')
     }
 
     setTab('dati')
@@ -736,7 +788,7 @@ async function saveDatiPersonali() {
     }
     const retribForm = document.getElementById('hr-retrib-form')
     if (retribForm) {
-      ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto']
+      ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto','livello_ccnl','voce_tariffa_inail']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value || null })
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value ? parseFloat(el.value) : null })
