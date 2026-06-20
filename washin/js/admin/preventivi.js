@@ -60,6 +60,42 @@ async function loadMagItems() {
   return _magItems
 }
 
+// ── CCNL cost calculation (calls Supabase RPC) ────────────────────────────────
+
+async function calcolaCostoCcnl(livello, ore) {
+  if (!livello || !(ore > 0)) return null
+  try {
+    const { data, error } = await supabase.rpc('calcola_costo_operatore', {
+      p_livello: livello,
+      p_ore_ordinarie: ore,
+      p_include_ratei: true,
+    })
+    if (error || !data) return null
+    return data
+  } catch { return null }
+}
+
+function showCcnlHint(result, nOp) {
+  const hint = document.getElementById('prev-ccnl-hint')
+  if (!hint) return
+  if (!result) { hint.style.display = 'none'; return }
+  const n = nOp || 1
+  const fmt = v => v != null ? EUR(v) : '—'
+  hint.innerHTML = `
+    <span style="font-weight:700;color:#0d9488;">Costo CCNL stimato / operatore / mese</span>
+    <span style="display:inline-flex;flex-wrap:wrap;gap:10px;margin-left:8px;font-size:11px;">
+      <span>Lordo <b>${fmt(result.lordo)}</b></span>
+      <span>+INPS az. <b>${fmt(result.contributi_inps_datore)}</b></span>
+      <span>+INAIL <b>${fmt(result.inail)}</b></span>
+      <span>+Ratei 13ª/14ª <b>${fmt((result.ratei_13 || 0) + (result.ratei_14 || 0))}</b></span>
+      <span>+TFR <b>${fmt(result.tfr)}</b></span>
+      <span style="border-left:1px solid #0d9488;padding-left:10px;">= <b style="font-size:13px;">${fmt(result.costo_totale)} × ${n} op.</b>
+        = <b style="font-size:13px;color:#0d9488;">${fmt(result.costo_totale * n)}/mese</b>
+      </span>
+    </span>`
+  hint.style.display = 'block'
+}
+
 // ── Live calculation ──────────────────────────────────────────────────────────
 
 function calcAll(form) {
@@ -276,6 +312,16 @@ export async function openModalPreventivo(id = null) {
       const saved = Array.isArray(data.prodotti_json) ? data.prodotti_json : []
       saved.forEach(item => list?.appendChild(buildProdottoRow(form, magItems, item)))
 
+      // Restore livello CCNL + ricalcola breakdown
+      const lvlEl = form.querySelector('[name="livello_ccnl"]')
+      if (lvlEl && data.livello_ccnl) {
+        lvlEl.value = data.livello_ccnl
+        const ore = parseFloat(data.ore_stimate) || 0
+        calcolaCostoCcnl(data.livello_ccnl, ore).then(r =>
+          showCcnlHint(r, parseInt(data.n_operatori) || 1)
+        )
+      }
+
       await updateKmHint(form, data.cliente_id)
       calcAll(form)
     } else {
@@ -306,6 +352,7 @@ export async function savePreventivo(payload) {
       ore_stimate:       parseFloat(payload.ore_stimate) || 0,
       n_operatori:       parseInt(payload.n_operatori) || 1,
       costo_orario:      parseFloat(payload.costo_orario) || null,
+      livello_ccnl:      payload.livello_ccnl || null,
       n_interventi_mese: parseInt(payload.n_interventi_mese) || null,
       km_per_intervento: parseFloat(payload.km_per_intervento) || null,
       costo_km_perkm:    parseFloat(payload.costo_km_perkm) || 0.35,
@@ -493,6 +540,26 @@ export function initPreventivi() {
       const calcInputs = ['n_operatori','costo_orario','ore_stimate','km_per_intervento','n_interventi_mese','costo_km_perkm','altri_costi']
       calcInputs.forEach(name => form.querySelector(`[name="${name}"]`)?.addEventListener('input', () => calcAll(form)))
 
+      // CCNL auto-calc: when livello or ore change, compute costo_orario from RPC
+      async function aggiornaCostoCcnl() {
+        const livello = form.querySelector('[name="livello_ccnl"]')?.value
+        const ore     = parseFloat(form.querySelector('[name="ore_stimate"]')?.value) || 0
+        const nOp     = parseInt(form.querySelector('[name="n_operatori"]')?.value) || 1
+        if (!livello) { showCcnlHint(null); return }
+        const result = await calcolaCostoCcnl(livello, ore)
+        if (result?.costo_orario_effettivo) {
+          const costoEl = form.querySelector('[name="costo_orario"]')
+          if (costoEl) { costoEl.value = result.costo_orario_effettivo.toFixed(4); calcAll(form) }
+        }
+        showCcnlHint(result, nOp)
+      }
+      form.querySelector('[name="livello_ccnl"]')?.addEventListener('change', aggiornaCostoCcnl)
+      form.querySelector('[name="ore_stimate"]')?.addEventListener('change', aggiornaCostoCcnl)
+      form.querySelector('[name="n_operatori"]')?.addEventListener('change', () => {
+        const livello = form.querySelector('[name="livello_ccnl"]')?.value
+        if (livello) aggiornaCostoCcnl()
+      })
+
       // Add prodotto
       document.getElementById('prev-add-prodotto')?.addEventListener('click', async () => {
         const items = await loadMagItems()
@@ -536,6 +603,7 @@ export function initPreventivi() {
           ore_stimate:       fd.get('ore_stimate'),
           n_operatori:       fd.get('n_operatori'),
           costo_orario:      fd.get('costo_orario'),
+          livello_ccnl:      fd.get('livello_ccnl') || null,
           n_interventi_mese: fd.get('n_interventi_mese'),
           km_per_intervento: fd.get('km_per_intervento'),
           costo_km_perkm:    fd.get('costo_km_perkm'),

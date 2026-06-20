@@ -7,7 +7,8 @@ const ANAG_COLS = ['cognome','nome','codice_fiscale','email','telefono','matrico
                    'data_nascita','ccnl','categoria_lavorativa','iban_dipendente']
 const BUSTE_COLS = ['codice_fiscale','anno','mese','paga_base','superminimo',
                     'indennita_varie','altri_elementi','contributi_inps_dip','irpef',
-                    'addizionali','altre_ritenute','tfr_mese','totale_lordo','totale_netto']
+                    'addizionali','altre_ritenute','tfr_mese','totale_lordo','totale_netto',
+                    'imponibile_inps','contributi_inps_az','inail','costo_aziendale']
 
 let _anagData     = []
 let _busteData    = []
@@ -784,6 +785,15 @@ async function confirmBusteImport() {
     const anno = r._bp_anno || +r.anno
     if (!mese || !anno) return null
 
+    const lordo      = +(r._bp_lordo || r.totale_lordo || 0)
+    const imponInps  = +(r.imponibile_inps || lordo)
+    // Default aliquote: INPS datore 28.5%, INAIL pulizie civili 3.0%, TFR 1/13.5, ratei 13ª+14ª 2/12
+    const inpsAz     = Math.round(imponInps * 0.285 * 100) / 100
+    const inailAz    = Math.round(imponInps * 0.030 * 100) / 100
+    const tfrCalc    = Math.round(lordo / 13.5 * 100) / 100
+    const rateiCalc  = Math.round(lordo * (1 / 12 + 1 / 12) * 100) / 100
+    const costoAz    = Math.round((lordo + inpsAz + inailAz + tfrCalc + rateiCalc) * 100) / 100
+
     return {
       operatore_id,
       anno,
@@ -799,9 +809,14 @@ async function confirmBusteImport() {
       altre_ritenute:      +(r.altre_ritenute || 0),
       tfr_mese:            +(r.tfr_mese || 0),
       ore_lavorate:        +(r.ore_lavorate || 0),
-      totale_lordo:        +(r._bp_lordo || r.totale_lordo || 0),
+      totale_lordo:        lordo,
       totale_netto:        +(r._bp_netto || r.totale_netto || 0),
       totale_ritenute:     +((r.irpef||0) + (r.contributi_inps_dip||0) + (r.addizionali||0) + (r.altre_ritenute||0)),
+      imponibile_inps:     imponInps,
+      imponibile_inail:    imponInps,
+      contributi_inps_az:  inpsAz,
+      inail:               inailAz,
+      costo_aziendale:     costoAz,
     }
   }).filter(Boolean)
 
