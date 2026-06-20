@@ -13,6 +13,19 @@ const BUSTE_COLS = ['codice_fiscale','anno','mese','paga_base','superminimo',
 let _anagData     = []
 let _busteData    = []
 let _busteAnagData = []   // anagrafica estratta da cedolini INAIL
+
+// Estrae data di nascita dal codice fiscale italiano (molto più affidabile dell'OCR)
+function birthDateFromCF(cf) {
+  if (!cf || cf.length !== 16) return null
+  const MESE_CF = { A:1,B:2,C:3,D:4,E:5,H:6,L:7,M:8,P:9,R:10,S:11,T:12 }
+  const yy    = parseInt(cf.slice(6, 8))
+  const m     = MESE_CF[cf.charAt(8).toUpperCase()]
+  const dd    = parseInt(cf.slice(9, 11)) % 40   // donne: +40
+  if (!m || dd < 1 || dd > 31) return null
+  const curY2 = new Date().getFullYear() % 100
+  const year  = yy <= curY2 + 1 ? `20${String(yy).padStart(2,'0')}` : `19${String(yy).padStart(2,'0')}`
+  return `${year}-${String(m).padStart(2,'0')}-${String(dd).padStart(2,'0')}`
+}
 let _operatoriCache = null
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -153,23 +166,6 @@ function parseInailPayslip(text) {
     }
   }
 
-  // ── Data nascita ─────────────────────────────────────────────────────────────
-  // Don't rely on CF match (OCR corrupts CF). Instead pick the first DD/MM/YY
-  // date whose 2-digit year maps to a plausible birth year (1950–2010)
-  for (const dm of text.matchAll(/(\d{2})\/(\d{2})\/(\d{2})(?!\d)/g)) {
-    const yy = parseInt(dm[3])
-    const year = yy > 30 ? `19${dm[3]}` : `20${dm[3]}`
-    const candidate = `${year}-${dm[2]}-${dm[1]}`
-    const y4 = parseInt(year)
-    if (y4 >= 1950 && y4 <= 2010 && candidate !== anag.data_assunzione) {
-      // Validate month
-      if (parseInt(dm[2]) >= 1 && parseInt(dm[2]) <= 12) {
-        anag.data_nascita = candidate
-        break
-      }
-    }
-  }
-
   // ── Codice Fiscale ──────────────────────────────────────────────────────────
   // Standard 16-char CF (strict)
   const cfStrictM = text.match(/\b([A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z])\b/i)
@@ -181,6 +177,19 @@ function parseInailPayslip(text) {
     if (cfRelaxM) {
       const cf = cfRelaxM[1].toUpperCase().replace(/%$/, 'Z')
       if (cf.length === 16) anag.codice_fiscale = cf
+    }
+  }
+
+  // ── Data nascita — ricavata dal CF (molto più affidabile dei pattern testuali) ──
+  anag.data_nascita = birthDateFromCF(anag.codice_fiscale)
+  // Fallback: etichetta esplicita "DATA DI NASCITA" o "NASCITA" nel testo
+  if (!anag.data_nascita) {
+    const lblM = text.match(/(?:DATA\s+(?:DI\s+)?NASCITA|NASCITA)\s*[:\s]+(\d{2})\/(\d{2})\/(\d{2,4})/i)
+    if (lblM) {
+      const y = lblM[3].length === 2
+        ? (parseInt(lblM[3]) > (new Date().getFullYear() % 100) + 1 ? `19${lblM[3]}` : `20${lblM[3]}`)
+        : lblM[3]
+      anag.data_nascita = `${y}-${lblM[2]}-${lblM[1]}`
     }
   }
 
