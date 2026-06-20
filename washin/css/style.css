@@ -382,6 +382,13 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
 }
 
+.tbl-inp {
+  padding: 5px 7px;
+  font-size: 13px;
+  width: auto;
+  box-sizing: border-box;
+}
+
 .empty-state {
   text-align: center;
   padding: 48px;

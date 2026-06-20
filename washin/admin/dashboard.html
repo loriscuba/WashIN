@@ -443,6 +443,75 @@
               <strong>Tool Import</strong>
               <p>Import massivo anagrafiche e buste paga</p>
             </a>
+            <a href="#parametri-ccnl" data-target="parametri-ccnl" class="config-card">
+              <div class="config-card-icon">📊</div>
+              <strong>Parametri CCNL</strong>
+              <p>Tabella retributiva CCNL Multiservizi</p>
+            </a>
+            <a href="#tariffe-inail" data-target="tariffe-inail" class="config-card">
+              <div class="config-card-icon">🛡️</div>
+              <strong>Tariffe INAIL</strong>
+              <p>Voci e tassi INAIL per settore</p>
+            </a>
+          </div>
+        </section>
+
+        <!-- ── Parametri CCNL ───────────────────────── -->
+        <section id="parametri-ccnl" class="section hidden">
+          <div class="page-header">
+            <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+              <h1>Parametri CCNL</h1>
+              <p style="color:var(--gray-500);margin-top:8px;">Tabella retributiva CCNL Multiservizi / Servizi di Pulizia. I valori di aliquota INPS sono espressi in % (es. 28.5). Modifica e clicca Salva per aggiornare.</p>
+            </div>
+          </div>
+          <div style="overflow-x:auto;margin-top:16px;">
+            <table class="data-table" style="min-width:860px;width:100%;">
+              <thead>
+                <tr>
+                  <th style="width:60px">Livello</th>
+                  <th>Descrizione</th>
+                  <th style="width:100px">Paga base (€)</th>
+                  <th style="width:92px">Contingenza (€)</th>
+                  <th style="width:76px">EDR (€)</th>
+                  <th style="width:64px">Div. orario</th>
+                  <th style="width:82px">INPS datore (%)</th>
+                  <th style="width:130px">Valido dal</th>
+                  <th style="width:80px"></th>
+                </tr>
+              </thead>
+              <tbody id="ccnl-tbody">
+                <tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:24px;">Caricamento…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ── Tariffe INAIL ─────────────────────────── -->
+        <section id="tariffe-inail" class="section hidden">
+          <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+              <h1>Tariffe INAIL</h1>
+              <p style="color:var(--gray-500);margin-top:8px;">Voci di tariffa INAIL e aliquote (in %). Verificare le aliquote assegnate dalla propria sede INAIL.</p>
+            </div>
+            <button id="inail-add-btn" class="btn btn-primary">+ Nuova tariffa</button>
+          </div>
+          <div style="overflow-x:auto;margin-top:16px;">
+            <table class="data-table" style="width:100%;">
+              <thead>
+                <tr>
+                  <th style="width:80px">Voce tariffa</th>
+                  <th>Descrizione</th>
+                  <th style="width:110px">Tasso INAIL (%)</th>
+                  <th style="width:130px">Valido dal</th>
+                  <th style="width:140px"></th>
+                </tr>
+              </thead>
+              <tbody id="inail-tbody">
+                <tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px;">Caricamento…</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -2285,6 +2354,7 @@
       import { initFornitori } from '../js/admin/fornitori.js'
       import { initGestioneAnagrafica } from '../js/admin/gestione_anagrafica.js'
       import { initToolImport } from '../js/admin/tool_import.js'
+      import { initConfigurazioni } from '../js/admin/configurazioni.js'
 
       const sections = document.querySelectorAll('.section')
       const navLinks = document.querySelectorAll('.sidebar-nav a')
@@ -2443,6 +2513,7 @@
         initFornitori()
         initGestioneAnagrafica()
         initToolImport()
+        initConfigurazioni()
       })
     </script>
   </body>
