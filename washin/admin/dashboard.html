@@ -1416,33 +1416,19 @@
 
           <!-- Operatori -->
           <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-            <div style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Operatori</div>
-            <div class="form-group" style="margin:0 0 8px;">
-              <label style="font-size:11px;">Operatore <span style="font-weight:400;color:#9ca3af;">(compila livello CCNL e tariffa INAIL automaticamente)</span></label>
-              <select id="prev-operatore-select" style="font-size:12px;padding:5px 6px;border:1px solid #d1d5db;border-radius:6px;width:100%;">
-                <option value="">— nessuno (inserimento manuale) —</option>
-              </select>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;">Operatori</div>
+              <button type="button" id="prev-add-operatore" class="btn btn-sm btn-secondary" style="padding:3px 10px;font-size:11px;">+ Aggiungi</button>
             </div>
-            <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr;gap:10px;align-items:end;">
-              <div class="form-group" style="margin:0;"><label style="font-size:11px;">N. operatori</label><input name="n_operatori" type="number" min="1" value="1" style="text-align:center;"></div>
-              <div class="form-group" style="margin:0;">
-                <label style="font-size:11px;">Livello CCNL <span style="font-weight:400;color:#6b7280;">(auto)</span></label>
-                <select name="livello_ccnl" style="font-size:12px;padding:5px 6px;border:1px solid #d1d5db;border-radius:6px;width:100%;">
-                  <option value="">— manuale —</option>
-                  <option value="1^">1°^ Ingresso</option>
-                  <option value="1">1° Livello</option>
-                  <option value="2">2° Livello</option>
-                  <option value="3">3° Livello</option>
-                  <option value="4">4° Livello</option>
-                  <option value="5">5° Livello</option>
-                  <option value="6">6° Livello</option>
-                  <option value="7">7° Livello</option>
-                  <option value="8">8° Livello</option>
-                </select>
-              </div>
-              <div class="form-group" style="margin:0;"><label style="font-size:11px;">Costo orario (€/h)</label><input name="costo_orario" type="number" step="0.0001" min="0" placeholder="es. 20.50"></div>
-              <div class="form-group" style="margin:0;"><label style="font-size:11px;">Ore/mese totali</label><input name="ore_stimate" type="number" step="0.5" min="0" placeholder="es. 20"></div>
+            <div style="display:grid;grid-template-columns:1fr 95px 70px 82px 88px 28px;gap:6px;margin-bottom:4px;padding:0 2px;">
+              <span style="font-size:10px;color:#6b7280;font-weight:600;">Operatore</span>
+              <span style="font-size:10px;color:#6b7280;font-weight:600;">Livello</span>
+              <span style="font-size:10px;color:#6b7280;font-weight:600;text-align:center;">Ore/mese</span>
+              <span style="font-size:10px;color:#6b7280;font-weight:600;text-align:center;">€/h (CCNL)</span>
+              <span style="font-size:10px;color:#6b7280;font-weight:600;text-align:right;">Subtotale</span>
+              <span></span>
             </div>
+            <div id="prev-operatori-list"></div>
             <div id="prev-ccnl-hint" style="display:none;margin-top:8px;padding:7px 12px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;font-size:11px;color:#0f766e;line-height:1.7;"></div>
             <div style="text-align:right;margin-top:6px;font-size:12px;font-weight:600;color:var(--gray-600);">Costo operatori: <span id="prev-tot-op" style="color:#1e40af;font-size:14px;">€0,00</span></div>
           </div>

@@ -48,7 +48,6 @@ async function loadAziendaGeo() {
 // ── Magazzino cache ───────────────────────────────────────────────────────────
 
 let _magItems = null
-let _opVoceInail = null
 let _operatoriList = []
 
 async function loadMagItems() {
@@ -64,24 +63,81 @@ async function loadMagItems() {
 
 // ── CCNL cost calculation (calls Supabase RPC) ────────────────────────────────
 
-async function populateOperatoriSelect(selectEl, selectedId = null) {
-  // Ricarica sempre dal DB per avere livello_ccnl aggiornato
+const LIVELLI = [
+  { v: '1^', t: '1°^ Ingresso' }, { v: '1', t: '1° Livello' },
+  { v: '2',  t: '2° Livello' },   { v: '3', t: '3° Livello' },
+  { v: '4',  t: '4° Livello' },   { v: '5', t: '5° Livello' },
+  { v: '6',  t: '6° Livello' },   { v: '7', t: '7° Livello' },
+  { v: '8',  t: '8° Livello' },
+]
+
+async function loadOperatoriList() {
   const { data } = await supabase.from('profili')
     .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail')
-    .neq('attivo', false)   // include NULL e true, esclude solo false
+    .neq('attivo', false)
     .order('cognome')
   _operatoriList = data || []
+  return _operatoriList
+}
 
-  selectEl.innerHTML = '<option value="">— nessuno (inserimento manuale) —</option>'
-  _operatoriList.forEach(op => {
-    const o = document.createElement('option')
-    o.value = op.id
-    o.textContent = `${op.cognome || ''} ${op.nome || ''}`.trim()
-    o.dataset.livello = op.livello_ccnl || ''
-    o.dataset.voce = op.voce_tariffa_inail || ''
-    if (selectedId && op.id === selectedId) o.selected = true
-    selectEl.appendChild(o)
+function buildOperatoreRow(form, item = {}) {
+  const row = document.createElement('div')
+  row.className = 'prev-op-row'
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 95px 70px 82px 88px 28px;gap:6px;align-items:center;margin-bottom:6px;'
+
+  const opOpts = _operatoriList.map(op => {
+    const sel = item.operatore_id === op.id ? 'selected' : ''
+    const n = `${op.cognome || ''} ${op.nome || ''}`.trim()
+    return `<option value="${op.id}" data-livello="${op.livello_ccnl || ''}" data-voce="${op.voce_tariffa_inail || ''}" ${sel}>${n}</option>`
+  }).join('')
+
+  const livOpts = LIVELLI.map(l =>
+    `<option value="${l.v}" ${item.livello_ccnl === l.v ? 'selected' : ''}>${l.t}</option>`
+  ).join('')
+
+  row.innerHTML = `
+    <select class="prev-op-select" style="font-size:12px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;width:100%;">
+      <option value="">— manuale —</option>${opOpts}
+    </select>
+    <select class="prev-op-livello" style="font-size:12px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;width:100%;">
+      <option value="">— liv. —</option>${livOpts}
+    </select>
+    <input class="prev-op-ore" type="number" step="0.5" min="0" value="${item.ore_stimate || ''}" placeholder="ore"
+      style="font-size:12px;padding:4px 6px;text-align:center;border:1px solid #d1d5db;border-radius:6px;width:100%;">
+    <input class="prev-op-cu" type="number" step="0.0001" min="0" value="${item.costo_orario || ''}" placeholder="€/h"
+      style="font-size:12px;padding:4px 6px;text-align:center;border:1px solid #d1d5db;border-radius:6px;width:100%;">
+    <span class="prev-op-sub" style="font-size:12px;font-weight:600;text-align:right;color:#1e40af;padding-right:4px;">${EUR((item.ore_stimate || 0) * (item.costo_orario || 0))}</span>
+    <button type="button" class="prev-rm-op" style="padding:2px 6px;font-size:13px;background:#fee2e2;border:none;border-radius:5px;color:#dc2626;cursor:pointer;line-height:1;">✕</button>
+  `
+
+  const opSel  = row.querySelector('.prev-op-select')
+  const livSel = row.querySelector('.prev-op-livello')
+  const oreEl  = row.querySelector('.prev-op-ore')
+  const cuEl   = row.querySelector('.prev-op-cu')
+
+  async function aggiornaCostoRiga() {
+    const livello = livSel.value
+    if (!livello) return
+    const voce = opSel.options[opSel.selectedIndex]?.dataset?.voce || null
+    const result = await calcolaCostoCcnl(livello, 0, voce)
+    if (result?.costo_orario_effettivo != null) {
+      cuEl.value = result.costo_orario_effettivo.toFixed(4)
+    }
+    showCcnlHint(result, 1)
+    calcAll(form)
+  }
+
+  opSel.addEventListener('change', () => {
+    const opt = opSel.options[opSel.selectedIndex]
+    if (opt?.dataset?.livello) livSel.value = opt.dataset.livello
+    aggiornaCostoRiga()
   })
+  livSel.addEventListener('change', aggiornaCostoRiga)
+  oreEl.addEventListener('input', () => calcAll(form))
+  cuEl.addEventListener('input',  () => calcAll(form))
+  row.querySelector('.prev-rm-op').addEventListener('click', () => { row.remove(); calcAll(form) })
+
+  return row
 }
 
 async function calcolaCostoCcnl(livello, ore, voce_tariffa = null) {
@@ -134,7 +190,15 @@ function showCcnlHint(result, nOp) {
 function calcAll(form) {
   const v = name => parseFloat(form.querySelector(`[name="${name}"]`)?.value) || 0
 
-  const totOp = (v('n_operatori') || 1) * v('costo_orario') * v('ore_stimate')
+  let totOp = 0
+  form.querySelectorAll('.prev-op-row').forEach(row => {
+    const ore = parseFloat(row.querySelector('.prev-op-ore')?.value) || 0
+    const cu  = parseFloat(row.querySelector('.prev-op-cu')?.value)  || 0
+    const sub = ore * cu
+    totOp += sub
+    const subEl = row.querySelector('.prev-op-sub')
+    if (subEl) subEl.textContent = EUR(sub)
+  })
 
   let totProd = 0
   form.querySelectorAll('.prev-prod-row').forEach(row => {
@@ -303,6 +367,7 @@ export async function openModalPreventivo(id = null) {
     // Reset
     form.reset()
     form.querySelectorAll('.prev-prod-row').forEach(r => r.remove())
+    form.querySelectorAll('.prev-op-row').forEach(r => r.remove())
     delete form.dataset.preventivoId
     const hint = document.getElementById('prev-km-hint')
     if (hint) hint.style.display = 'none'
@@ -319,12 +384,10 @@ export async function openModalPreventivo(id = null) {
     if (slider) slider.value = 30
     if (numEl)  numEl.value  = 30
 
-    _opVoceInail = null
     const clienteSelect = form.querySelector('[name="cliente_id"]')
-    const opSelect = document.getElementById('prev-operatore-select')
     await Promise.all([
       populateClientiSelect(clienteSelect),
-      opSelect ? populateOperatoriSelect(opSelect) : Promise.resolve(),
+      loadOperatoriList(),
     ])
 
     const [magItems] = await Promise.all([loadMagItems(), loadAziendaGeo()])
@@ -350,14 +413,18 @@ export async function openModalPreventivo(id = null) {
       const saved = Array.isArray(data.prodotti_json) ? data.prodotti_json : []
       saved.forEach(item => list?.appendChild(buildProdottoRow(form, magItems, item)))
 
-      // Restore livello CCNL + ricalcola breakdown
-      const lvlEl = form.querySelector('[name="livello_ccnl"]')
-      if (lvlEl && data.livello_ccnl) {
-        lvlEl.value = data.livello_ccnl
-        const ore = parseFloat(data.ore_stimate) || 0
-        calcolaCostoCcnl(data.livello_ccnl, ore).then(r =>
-          showCcnlHint(r, parseInt(data.n_operatori) || 1)
-        )
+      // Restore operatori (da operatori_json, o da campi legacy)
+      const opList = document.getElementById('prev-operatori-list')
+      const savedOps = Array.isArray(data.operatori_json) && data.operatori_json.length
+        ? data.operatori_json
+        : data.livello_ccnl
+          ? [{ livello_ccnl: data.livello_ccnl, ore_stimate: data.ore_stimate, costo_orario: data.costo_orario }]
+          : []
+      savedOps.forEach(op => opList?.appendChild(buildOperatoreRow(form, op)))
+      const firstOp = savedOps.find(o => o.livello_ccnl)
+      if (firstOp) {
+        calcolaCostoCcnl(firstOp.livello_ccnl, 0, firstOp.voce_tariffa_inail || null)
+          .then(r => showCcnlHint(r, 1))
       }
 
       await updateKmHint(form, data.cliente_id)
@@ -366,6 +433,7 @@ export async function openModalPreventivo(id = null) {
       modal.querySelector('h2').textContent = 'Nuovo Preventivo'
       const emissEl = form.querySelector('[name="data_emissione"]')
       if (emissEl) emissEl.value = new Date().toISOString().slice(0, 10)
+      document.getElementById('prev-operatori-list')?.appendChild(buildOperatoreRow(form))
     }
 
     modal.classList.add('active')
@@ -398,6 +466,7 @@ export async function savePreventivo(payload) {
       altri_costi_nota:  payload.altri_costi_nota || null,
       margine_pct:       parseFloat(payload.margine_pct) || null,
       prodotti_json:     payload.prodotti_json || [],
+      operatori_json:    payload.operatori_json || [],
       stato:             payload.stato || 'bozza',
       note:              payload.note || null,
     }
@@ -574,41 +643,13 @@ export function initPreventivi() {
         }
       })
 
-      // Calc triggers
-      const calcInputs = ['n_operatori','costo_orario','ore_stimate','km_per_intervento','n_interventi_mese','costo_km_perkm','altri_costi']
+      // Calc triggers (operator costs handled per-row in buildOperatoreRow)
+      const calcInputs = ['km_per_intervento','n_interventi_mese','costo_km_perkm','altri_costi']
       calcInputs.forEach(name => form.querySelector(`[name="${name}"]`)?.addEventListener('input', () => calcAll(form)))
 
-      // CCNL auto-calc: when livello or ore change, compute costo_orario from RPC
-      async function aggiornaCostoCcnl() {
-        const livello = form.querySelector('[name="livello_ccnl"]')?.value
-        const ore     = parseFloat(form.querySelector('[name="ore_stimate"]')?.value) || 0
-        const nOp     = parseInt(form.querySelector('[name="n_operatori"]')?.value) || 1
-        if (!livello) { showCcnlHint(null); return }
-        const result = await calcolaCostoCcnl(livello, ore, _opVoceInail)
-        if (result?.costo_orario_effettivo) {
-          const costoEl = form.querySelector('[name="costo_orario"]')
-          if (costoEl) { costoEl.value = result.costo_orario_effettivo.toFixed(4); calcAll(form) }
-        }
-        showCcnlHint(result, nOp)
-      }
-
-      // Operator select: auto-fills livello CCNL + stores voce INAIL
-      document.getElementById('prev-operatore-select')?.addEventListener('change', e => {
-        const opt = e.target.options[e.target.selectedIndex]
-        _opVoceInail = opt.dataset.voce || null
-        const lvl = opt.dataset.livello
-        if (lvl) {
-          const lvlEl = form.querySelector('[name="livello_ccnl"]')
-          if (lvlEl) lvlEl.value = lvl
-          aggiornaCostoCcnl()
-        }
-      })
-
-      form.querySelector('[name="livello_ccnl"]')?.addEventListener('change', aggiornaCostoCcnl)
-      form.querySelector('[name="ore_stimate"]')?.addEventListener('change', aggiornaCostoCcnl)
-      form.querySelector('[name="n_operatori"]')?.addEventListener('change', () => {
-        const livello = form.querySelector('[name="livello_ccnl"]')?.value
-        if (livello) aggiornaCostoCcnl()
+      // Add operator row
+      document.getElementById('prev-add-operatore')?.addEventListener('click', () => {
+        document.getElementById('prev-operatori-list')?.appendChild(buildOperatoreRow(form))
       })
 
       // Add prodotto
@@ -626,6 +667,30 @@ export function initPreventivi() {
       form.addEventListener('submit', async e => {
         e.preventDefault()
         const fd = new FormData(form)
+
+        // Collect operatori
+        const operatori = []
+        form.querySelectorAll('.prev-op-row').forEach(row => {
+          const opSel  = row.querySelector('.prev-op-select')
+          const livSel = row.querySelector('.prev-op-livello')
+          const ore    = parseFloat(row.querySelector('.prev-op-ore')?.value) || 0
+          const cu     = parseFloat(row.querySelector('.prev-op-cu')?.value)  || 0
+          const opt    = opSel?.options[opSel.selectedIndex]
+          if (ore > 0 || livSel?.value) {
+            operatori.push({
+              operatore_id:       opSel?.value || null,
+              nome:               opSel?.value ? (opt?.textContent?.trim() || '') : '',
+              livello_ccnl:       livSel?.value || null,
+              voce_tariffa_inail: opt?.dataset?.voce || null,
+              ore_stimate:        ore,
+              costo_orario:       cu,
+              costo_totale:       Math.round(ore * cu * 100) / 100,
+            })
+          }
+        })
+        const oreStimate = operatori.reduce((s, o) => s + (o.ore_stimate || 0), 0)
+        const totOpCosto = operatori.reduce((s, o) => s + (o.costo_totale || 0), 0)
+        const costoMedio = oreStimate > 0 ? totOpCosto / oreStimate : null
 
         // Collect prodotti
         const prodotti = []
@@ -651,10 +716,11 @@ export function initPreventivi() {
           tipo_servizio:     fd.get('tipo_servizio'),
           frequenza:         fd.get('frequenza'),
           importo:           document.getElementById('prev-importo-finale')?.value || fd.get('importo'),
-          ore_stimate:       fd.get('ore_stimate'),
-          n_operatori:       fd.get('n_operatori'),
-          costo_orario:      fd.get('costo_orario'),
-          livello_ccnl:      fd.get('livello_ccnl') || null,
+          ore_stimate:       oreStimate,
+          n_operatori:       operatori.length || 1,
+          costo_orario:      costoMedio != null ? parseFloat(costoMedio.toFixed(4)) : null,
+          livello_ccnl:      operatori[0]?.livello_ccnl || null,
+          operatori_json:    operatori,
           n_interventi_mese: fd.get('n_interventi_mese'),
           km_per_intervento: fd.get('km_per_intervento'),
           costo_km_perkm:    fd.get('costo_km_perkm'),
