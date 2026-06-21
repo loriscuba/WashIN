@@ -300,6 +300,10 @@ export function initUtenti() {
       })
 
       loadUtenti().then(renderTabellaUtenti)
+
+      document.addEventListener('section:active', e => {
+        if (e.detail === 'utenti') loadUtenti().then(renderTabellaUtenti)
+      })
     } catch (err) {
       showToast('Errore inizializzazione utenti', 'error')
       console.error(err)

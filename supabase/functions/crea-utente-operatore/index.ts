@@ -81,13 +81,14 @@ Deno.serve(async (req: Request) => {
       // 2. Il trigger ha già creato un profili row per newUserId:
       //    lo aggiorniamo con tutti i dati del profilo importato
       const { id: _id, created_at: _ca, ...profileData } = oldProfile
-      await supabaseAdmin.from('profili').upsert({
+      const { error: upsertErr } = await supabaseAdmin.from('profili').upsert({
+        ...profileData,
         id:     newUserId,
         email:  email.trim(),
         attivo: true,
         ruolo:  profileData.ruolo || 'operatore',
-        ...profileData,
       })
+      if (upsertErr) throw new Error('Migrazione profilo fallita: ' + upsertErr.message)
 
       // 3. Elimina il vecchio profilo importato (non ha auth user collegato)
       await supabaseAdmin.from('profili').delete().eq('id', profilo_id)
