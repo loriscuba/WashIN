@@ -252,6 +252,62 @@ function parseDocumentText(text, docType) {
         }
       }
     }
+
+    // CED Teamsystem: LIVELLO + ORE MENSILI + part-time
+    // Riga qualifica: "... REPARTO LIVELLO COD_LIV [%PTIME ORE_CCNL] GG_CCNL"
+    // Pattern: 3-digit cod_costo, livello (1-8), stesso livello ripetuto, [%ptime], ore_mensili, gg_ccnl
+    const livelloM = text.match(/\b(\d{3})\s+([1-8])\s+\2\s+((?:\d{1,2},\d{2}\s+)?(\d{2,3},\d{2}))\s+\d{2}\b/)
+    if (livelloM) {
+      r.livello_ccnl = livelloM[2]
+      r.ore_mensili_contratto = pd(livelloM[4])
+      const seg = livelloM[3].trim()
+      if (/\s/.test(seg)) {
+        const ptPct = pd(seg.split(/\s+/)[0])
+        if (ptPct >= 1 && ptPct < 100) r._is_part_time = true
+      }
+    }
+
+    // QUALIFICA: parola/e maiuscole prima del cod_costo + livello
+    if (!r.qualifica) {
+      const qualM = text.match(/\b([A-Z][A-Z\s.]{2,30}?)\s+\d{1,2}\s+\d{3}\s+([1-8])\s+\2[\s,]/)
+      if (qualM) r.qualifica = qualM[1].trim().replace(/\s+/g, ' ')
+    }
+
+    // PAGA BASE da CED (fallback se non trovata sopra)
+    if (!r.paga_base) {
+      const pbCedM = text.match(/PAGA\s+BASE\s+CONTINGEN[^\n]+\n([\d.]+,\d{2})\s/)
+      if (pbCedM) r.paga_base = pd(pbCedM[1])
+    }
+
+    // SCATTI ANZIANITÀ: 4° valore della riga dati sotto header "SCATTI ANZ"
+    const scPos = text.search(/SCATTI\s+ANZ/)
+    if (scPos >= 0) {
+      const scRow = text.substring(scPos).match(/[\r\n]+([\d.]+,\d+)\s+([\d.]+,\d+)\s+([\d.]+,\d+)\s+([\d.]+,\d+)/)
+      if (scRow) {
+        const rawSc = pd(scRow[4])
+        if (rawSc >= 1) {
+          r.scatti_anzianita = rawSc
+        } else if (rawSc > 0 && r.ore_mensili_contratto) {
+          r.scatti_anzianita = Math.round(rawSc * r.ore_mensili_contratto * 100) / 100
+        }
+      }
+    }
+
+    // DATA ASSUNZIONE: ultima data DD/MM/YY nella riga del CF
+    if (!r.data_assunzione) {
+      const cfRowM = text.match(/[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z][^\n]+/)
+      if (cfRowM) {
+        const allDates = [...cfRowM[0].matchAll(/\b(\d{2})\/(\d{2})\/(\d{2})\b/g)].filter(m => +m[2] >= 1 && +m[2] <= 12)
+        if (allDates.length >= 2) {
+          const [, dd, mm, yy] = allDates[allDates.length - 1]
+          r.data_assunzione = `${+yy <= 30 ? 2000 + +yy : 1900 + +yy}-${mm}-${dd}`
+        }
+      }
+    }
+
+    // CCNL + categoria lavorativa
+    if (!r.ccnl && /pulizie|multiservizi/i.test(text)) r.ccnl = 'Pulizie e Multiservizi'
+    if (r.livello_ccnl && !r.categoria_lavorativa) r.categoria_lavorativa = `${r.livello_ccnl}° livello`
   }
 
   if (docType === 'carta_identita') {
@@ -384,6 +440,9 @@ async function handleNuovoFileChange(file) {
     set('iban_dipendente', parsed.iban_dipendente)
     set('matricola', parsed.matricola)
     set('paga_base', parsed.paga_base)
+    set('qualifica', parsed.qualifica)
+    set('data_assunzione', parsed.data_assunzione)
+    if (parsed._is_part_time) set('tipo_contratto', 'part_time')
     // Memorizza dati busta per salvataggio
     form.dataset.bpMese = parsed._bp_mese || ''
     form.dataset.bpAnno = parsed._bp_anno || ''
@@ -521,6 +580,20 @@ async function handleBustaFileChange(file) {
     const inail  = parseFloat(form.querySelector('[name="inail"]')?.value || 0)
     const caEl   = form.querySelector('[name="costo_aziendale"]')
     if (caEl) caEl.value = (lordoPdf + inpsAz + inail + tfr).toFixed(2)
+  }
+
+  // Campi retribuzione da CED (livello, CCNL, ore, part-time, scatti)
+  const parsedRetrib = parseDocumentText(text, 'busta_paga')
+  set('scatti_anzianita', parsedRetrib.scatti_anzianita)
+  const retribForm = document.getElementById('hr-retrib-form')
+  if (retribForm) {
+    const setR = (name, val) => { if (val != null && val !== '') { const el = retribForm.querySelector(`[name="${name}"]`); if (el) el.value = val } }
+    setR('ccnl', parsedRetrib.ccnl)
+    setR('livello_ccnl', parsedRetrib.livello_ccnl)
+    setR('categoria_lavorativa', parsedRetrib.categoria_lavorativa)
+    if (parsedRetrib.ore_mensili_contratto) setR('ore_mensili_contratto', parsedRetrib.ore_mensili_contratto.toFixed(2))
+    if (parsedRetrib.scatti_anzianita)      setR('scatti_anzianita',      parsedRetrib.scatti_anzianita.toFixed(2))
+    if (parsedRetrib._is_part_time)         setR('tipo_contratto',        'part_time')
   }
 }
 
