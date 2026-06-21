@@ -656,7 +656,7 @@ async function loadOperatoriHR() {
     const { data, error } = await supabase
       .from('profili')
       .select(`
-        id, nome, cognome, qualifica, attivo, matricola,
+        id, nome, cognome, qualifica, attivo, matricola, email,
         tipo_contratto, paga_base, costo_mensile,
         buste_paga(id, anno, mese, totale_netto, totale_lordo, stato)
       `)
