@@ -449,6 +449,12 @@ async function handleNuovoFileChange(file) {
     form.dataset.bpLordo = parsed._bp_lordo || ''
     form.dataset.bpNetto = parsed._bp_netto || ''
     form.dataset.dataNascita = parsed.data_nascita || ''
+    // Memorizza dati retribuzione per salvataggio (non sono in hr-nuovo-form)
+    form.dataset.retribLivello   = parsed.livello_ccnl || ''
+    form.dataset.retribCcnl      = parsed.ccnl || ''
+    form.dataset.retribCategoria = parsed.categoria_lavorativa || ''
+    form.dataset.retribOre       = parsed.ore_mensili_contratto != null ? parsed.ore_mensili_contratto : ''
+    form.dataset.retribScatti    = parsed.scatti_anzianita != null ? parsed.scatti_anzianita : ''
   }
 
   if (estratoDiv) {
@@ -585,6 +591,14 @@ async function handleBustaFileChange(file) {
   // Campi retribuzione da CED (livello, CCNL, ore, part-time, scatti)
   const parsedRetrib = parseDocumentText(text, 'busta_paga')
   set('scatti_anzianita', parsedRetrib.scatti_anzianita)
+  // Memorizza in dataset così saveBustaPaga può aggiornare profili in automatico
+  form.dataset.retribLivello   = parsedRetrib.livello_ccnl || ''
+  form.dataset.retribCcnl      = parsedRetrib.ccnl || ''
+  form.dataset.retribCategoria = parsedRetrib.categoria_lavorativa || ''
+  form.dataset.retribOre       = parsedRetrib.ore_mensili_contratto != null ? parsedRetrib.ore_mensili_contratto : ''
+  form.dataset.retribScatti    = parsedRetrib.scatti_anzianita != null ? parsedRetrib.scatti_anzianita : ''
+  form.dataset.retribPartTime  = parsedRetrib._is_part_time ? '1' : ''
+  // Precompila anche hr-retrib-form (se aperto) per feedback visivo immediato
   const retribForm = document.getElementById('hr-retrib-form')
   if (retribForm) {
     const setR = (name, val) => { if (val != null && val !== '') { const el = retribForm.querySelector(`[name="${name}"]`); if (el) el.value = val } }
@@ -618,10 +632,14 @@ async function saveNuovoOperatore() {
     qualifica: g('qualifica'),
     data_assunzione: g('data_assunzione') || null,
     tipo_contratto: g('tipo_contratto') || null,
-    ccnl: g('ccnl') || null,
+    ccnl: g('ccnl') || form.dataset.retribCcnl || null,
     paga_base: g('paga_base') ? parseFloat(g('paga_base')) : null,
     ruolo: 'operatore',
     attivo: true,
+    livello_ccnl:          form.dataset.retribLivello || null,
+    categoria_lavorativa:  form.dataset.retribCategoria || null,
+    ore_mensili_contratto: form.dataset.retribOre ? parseFloat(form.dataset.retribOre) : null,
+    scatti_anzianita:      form.dataset.retribScatti ? parseFloat(form.dataset.retribScatti) : null,
   }
 
   try {
@@ -1060,6 +1078,17 @@ async function saveBustaPaga() {
       ;({ error } = await supabase.from('buste_paga').insert(payload))
     }
     if (error) throw error
+    // Aggiorna profili con dati retribuzione estratti dal PDF (se presenti)
+    const retribUpdate = {}
+    if (form.dataset.retribLivello)   retribUpdate.livello_ccnl          = form.dataset.retribLivello
+    if (form.dataset.retribCcnl)      retribUpdate.ccnl                  = form.dataset.retribCcnl
+    if (form.dataset.retribCategoria) retribUpdate.categoria_lavorativa  = form.dataset.retribCategoria
+    if (form.dataset.retribOre)       retribUpdate.ore_mensili_contratto = parseFloat(form.dataset.retribOre)
+    if (form.dataset.retribScatti)    retribUpdate.scatti_anzianita       = parseFloat(form.dataset.retribScatti)
+    if (form.dataset.retribPartTime)  retribUpdate.tipo_contratto         = 'part_time'
+    if (Object.keys(retribUpdate).length) {
+      await supabase.from('profili').update(retribUpdate).eq('id', _currentOpId)
+    }
     showToast('Busta paga salvata', 'success')
     modal.classList.remove('active')
     loadBustePagaTab(_currentOpId)
