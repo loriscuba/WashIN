@@ -1,9 +1,6 @@
 // Edge Function: crea-utente-operatore
-// Crea un auth.user Supabase partendo da un profilo esistente (es. importato da INAIL).
-// Richiede service_role key → può girare solo lato server (Edge Function).
-//
-// Deploy:
-//   supabase functions deploy crea-utente-operatore --project-ref <REF>
+// Crea un auth.user e lo collega al profilo esistente tramite user_id.
+// Il profilo NON viene migrato: mantiene il suo UUID originale.
 //
 // Body: { email: string, password: string, profilo_id: uuid }
 // Risposta OK:  { success: true, user_id: uuid }
@@ -36,7 +33,7 @@ Deno.serve(async (req: Request) => {
     if (!caller) throw new Error('Non autorizzato')
 
     const { data: callerProfile } = await supabaseAdmin
-      .from('profili').select('ruolo').eq('id', caller.id).single()
+      .from('profili').select('ruolo').eq('user_id', caller.id).single()
     if (callerProfile?.ruolo !== 'admin') throw new Error('Accesso riservato agli amministratori')
 
     // ── Dati richiesta ─────────────────────────────────────────────────────────
@@ -45,16 +42,13 @@ Deno.serve(async (req: Request) => {
     if (password.length < 6)         throw new Error('Password: minimo 6 caratteri')
     if (!profilo_id)                  throw new Error('profilo_id mancante')
 
-    // ── Controlla se il profilo ha già un auth user ────────────────────────────
-    const { data: { user: existingAuthUser } } = await supabaseAdmin.auth.admin.getUserById(profilo_id)
-    if (existingAuthUser) throw new Error('Questo operatore ha già un account attivo')
+    // ── Verifica che il profilo esista e non abbia già un account ──────────────
+    const { data: profilo, error: profileErr } = await supabaseAdmin
+      .from('profili').select('id, user_id').eq('id', profilo_id).single()
+    if (profileErr || !profilo) throw new Error('Profilo non trovato (id: ' + profilo_id + ')')
+    if (profilo.user_id)        throw new Error('Questo operatore ha già un account attivo')
 
-    // ── Legge il profilo esistente (importato) ─────────────────────────────────
-    const { data: oldProfile, error: profileErr } = await supabaseAdmin
-      .from('profili').select('*').eq('id', profilo_id).single()
-    if (profileErr || !oldProfile) throw new Error('Profilo non trovato (id: ' + profilo_id + ')')
-
-    // ── Crea l'utente auth (nessuna conferma email necessaria) ─────────────────
+    // ── Crea l'utente auth ─────────────────────────────────────────────────────
     const { data: { user: newUser }, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email: email.trim(),
       password,
@@ -70,35 +64,15 @@ Deno.serve(async (req: Request) => {
 
     const newUserId = newUser!.id
 
-    // ── Migra dati dal profilo importato al nuovo profilo (creato dal trigger) ──
-    if (oldProfile.id !== newUserId) {
-      // 1. Sposta i riferimenti buste_paga al nuovo id
-      await supabaseAdmin
-        .from('buste_paga')
-        .update({ operatore_id: newUserId })
-        .eq('operatore_id', profilo_id)
+    // ── Il trigger ha creato un profilo vuoto per newUserId: eliminalo ─────────
+    await supabaseAdmin.from('profili').delete().eq('id', newUserId)
 
-      // 2. Il trigger ha già creato un profili row per newUserId:
-      //    lo aggiorniamo con tutti i dati del profilo importato
-      const { id: _id, created_at: _ca, ...profileData } = oldProfile
-      const { error: upsertErr } = await supabaseAdmin.from('profili').upsert({
-        ...profileData,
-        id:     newUserId,
-        email:  email.trim(),
-        attivo: true,
-        ruolo:  profileData.ruolo || 'operatore',
-      })
-      if (upsertErr) throw new Error('Migrazione profilo fallita: ' + upsertErr.message)
-
-      // 3. Elimina il vecchio profilo importato (non ha auth user collegato)
-      await supabaseAdmin.from('profili').delete().eq('id', profilo_id)
-    } else {
-      // Caso raro: id già corretto, solo aggiorna email e attivo
-      await supabaseAdmin
-        .from('profili')
-        .update({ email: email.trim(), attivo: true })
-        .eq('id', newUserId)
-    }
+    // ── Collega il profilo originale al nuovo auth user ────────────────────────
+    const { error: linkErr } = await supabaseAdmin
+      .from('profili')
+      .update({ user_id: newUserId, email: email.trim(), attivo: true })
+      .eq('id', profilo_id)
+    if (linkErr) throw new Error('Collegamento profilo fallito: ' + linkErr.message)
 
     return new Response(
       JSON.stringify({ success: true, user_id: newUserId }),
