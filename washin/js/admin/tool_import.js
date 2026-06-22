@@ -626,6 +626,7 @@ const MESI_NOMI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
 async function handleBustePdf(files) {
   _busteData     = []
   _busteAnagData = []
+  _operatoriCache = null  // forza reload fresco per evitare ID stale
   const progress = document.getElementById('ti-buste-pdf-progress')
   let totalPages = 0
 
@@ -729,6 +730,7 @@ async function handleBusteCsv(file) {
   const rows = parseCsv(text)
   _busteData     = rows.filter(r => r.anno && r.mese)
   _busteAnagData = []
+  _operatoriCache = null  // forza reload fresco
   const ops = await loadOperatori()
   renderBusteAnagPreview()
   renderBustePreview(ops)
@@ -886,6 +888,16 @@ async function confirmBusteImport() {
   }).filter(Boolean)
 
   if (!rows.length) { showToast('Nessuna busta abbinata a un operatore', 'error'); return }
+
+  // Valida operatore_id contro profili attuali prima dell'upsert
+  const { data: validProfiles } = await supabase.from('profili').select('id')
+  const validIds = new Set((validProfiles || []).map(p => p.id))
+  const invalidRows = rows.filter(r => !validIds.has(r.operatore_id))
+  if (invalidRows.length) {
+    console.error('[import] operatore_id non trovati in profili:', invalidRows.map(r => r.operatore_id))
+    showToast(`${invalidRows.length} buste con operatore non trovato — ricarica la pagina e riprova`, 'error')
+    return
+  }
 
   const { error } = await supabase.from('buste_paga').upsert(rows, { onConflict: 'operatore_id,anno,mese' })
   if (error) { showToast('Errore import buste: ' + error.message, 'error'); return }
