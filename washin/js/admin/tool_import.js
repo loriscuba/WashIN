@@ -644,16 +644,20 @@ async function handleBustePdf(files) {
       const fmt = detectPayslipFormat(text)
       if (fmt === 'inail') {
         const { anag, busta } = parseInailPayslip(text)
-        busta._filename = label
-        busta._format   = 'inail'
-        anag._filename  = label
+        busta._filename   = label
+        busta._format     = 'inail'
+        busta._sourceFile = file
+        busta._pageIndex  = p
+        anag._filename    = label
         _busteData.push(busta)
         _busteAnagData.push(anag)
       } else {
         const { anag, busta } = parseCedolino(text)
-        busta._filename = label
-        busta._format   = fmt   // 'ced' or 'generic'
-        anag._filename  = label
+        busta._filename   = label
+        busta._format     = fmt
+        busta._sourceFile = file
+        busta._pageIndex  = p
+        anag._filename    = label
         _busteData.push(busta)
         _busteAnagData.push(anag)
       }
@@ -798,6 +802,84 @@ function renderBustePreview(operatori) {
   if (preview) preview.style.display = _busteData.length ? 'block' : 'none'
 }
 
+// ── pdf-lib: split PDF multi-cedolino in pagine singole ──────────────────────
+
+let _pdflibPromise = null
+function ensurePdfLib() {
+  if (window.PDFLib) return Promise.resolve(window.PDFLib)
+  if (_pdflibPromise) return _pdflibPromise
+  _pdflibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src     = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js'
+    s.onload  = () => resolve(window.PDFLib)
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return _pdflibPromise
+}
+
+async function uploadBustePagaPdfs(rowsMeta) {
+  const metas = rowsMeta.filter(m => m.sourceFile && m.pageIndex !== undefined)
+  if (!metas.length) return 0
+
+  const progress = document.getElementById('ti-buste-pdf-progress')
+  if (progress) progress.textContent = 'Caricamento pdf-lib…'
+
+  let PDFLib
+  try { PDFLib = await ensurePdfLib() }
+  catch { showToast('pdf-lib non disponibile — PDF non salvati', 'warning'); return 0 }
+
+  // Raggruppa per file sorgente per caricare ogni PDF una sola volta
+  const byFile = new Map()
+  metas.forEach(m => {
+    if (!byFile.has(m.sourceFile)) byFile.set(m.sourceFile, [])
+    byFile.get(m.sourceFile).push(m)
+  })
+
+  let uploaded = 0
+  const total = metas.length
+
+  for (const [file, fileMetas] of byFile) {
+    let srcPdf
+    try {
+      srcPdf = await PDFLib.PDFDocument.load(await file.arrayBuffer())
+    } catch (e) {
+      console.error('[PDF split] apertura fallita:', file.name, e)
+      continue
+    }
+
+    for (const meta of fileMetas) {
+      try {
+        const newPdf = await PDFLib.PDFDocument.create()
+        const [page] = await newPdf.copyPagesFrom(srcPdf, [meta.pageIndex])
+        newPdf.addPage(page)
+        const pdfBytes = await newPdf.save()
+
+        const mese2 = String(meta.mese).padStart(2, '0')
+        const path  = `${meta.operatore_id}/${meta.anno}-${mese2}.pdf`
+
+        await supabase.storage.from('buste-paga').upload(path, pdfBytes, {
+          contentType: 'application/pdf',
+          upsert: true,
+        })
+        await supabase.from('buste_paga')
+          .update({ file_path: path })
+          .eq('operatore_id', meta.operatore_id)
+          .eq('anno', meta.anno)
+          .eq('mese', meta.mese)
+
+        uploaded++
+        if (progress) progress.textContent = `PDF salvati: ${uploaded}/${total}…`
+      } catch (e) {
+        console.error('[PDF split] upload fallito:', meta, e)
+      }
+    }
+  }
+
+  if (progress) progress.textContent = ''
+  return uploaded
+}
+
 async function confirmBusteImport() {
   if (!_busteData.length) return
   const selects = document.getElementById('ti-buste-tbody')?.querySelectorAll('.ti-buste-op')
@@ -832,33 +914,35 @@ async function confirmBusteImport() {
   const ops = _operatoriCache || await loadOperatori()
 
   // 2. Build buste paga rows
-  const rows = _busteData.map((r, i) => {
+  const rows     = []
+  const rowsMeta = []   // per upload PDF dopo il salvataggio
+
+  _busteData.forEach((r, i) => {
     let operatore_id = selects?.[i]?.value
 
     // If not manually set, try to match from freshly loaded profiles
     if (!operatore_id) {
-      const cf = r.codice_fiscale || _busteAnagData[i]?.codice_fiscale
-      const cogn = r.cognome || _busteAnagData[i]?.cognome
+      const cf   = r.codice_fiscale || _busteAnagData[i]?.codice_fiscale
+      const cogn = r.cognome        || _busteAnagData[i]?.cognome
       if (cf && upsertedProfiles[cf]) operatore_id = upsertedProfiles[cf]
-      else if (cf) operatore_id = ops.find(o => o.codice_fiscale === cf)?.id || ''
+      else if (cf)   operatore_id = ops.find(o => o.codice_fiscale === cf)?.id || ''
       else if (cogn) operatore_id = ops.find(o => o.cognome?.toLowerCase() === cogn?.toLowerCase())?.id || ''
     }
 
-    if (!operatore_id) return null
+    if (!operatore_id) return
     const mese = r._bp_mese || +r.mese
     const anno = r._bp_anno || +r.anno
-    if (!mese || !anno) return null
+    if (!mese || !anno) return
 
     const lordo      = +(r._bp_lordo || r.totale_lordo || 0)
     const imponInps  = +(r.imponibile_inps || lordo)
-    // Default aliquote: INPS datore 28.5%, INAIL pulizie civili 3.0%, TFR 1/13.5, ratei 13ª+14ª 2/12
     const inpsAz     = Math.round(imponInps * 0.285 * 100) / 100
     const inailAz    = Math.round(imponInps * 0.030 * 100) / 100
     const tfrCalc    = Math.round(lordo / 13.5 * 100) / 100
     const rateiCalc  = Math.round(lordo * (1 / 12 + 1 / 12) * 100) / 100
     const costoAz    = Math.round((lordo + inpsAz + inailAz + tfrCalc + rateiCalc) * 100) / 100
 
-    return {
+    rows.push({
       operatore_id,
       anno,
       mese,
@@ -884,8 +968,9 @@ async function confirmBusteImport() {
       contributi_inps_az:  inpsAz,
       inail:               inailAz,
       costo_aziendale:     costoAz,
-    }
-  }).filter(Boolean)
+    })
+    rowsMeta.push({ operatore_id, anno, mese, sourceFile: r._sourceFile, pageIndex: r._pageIndex })
+  })
 
   if (!rows.length) { showToast('Nessuna busta abbinata a un operatore', 'error'); return }
 
@@ -915,7 +1000,11 @@ async function confirmBusteImport() {
   )
 
   const nAnag = _busteAnagData.length
-  showToast(`${rows.length} buste importate${nAnag ? ` + ${nAnag} profili aggiornati` : ''}`, 'success')
+  showToast(`${rows.length} buste importate${nAnag ? ` + ${nAnag} profili aggiornati` : ''} — salvataggio PDF in corso…`, 'success')
+
+  const nPdf = await uploadBustePagaPdfs(rowsMeta)
+  if (nPdf > 0) showToast(`${nPdf} PDF salvati nello storage`, 'success')
+
   _busteData     = []
   _busteAnagData = []
   renderBusteAnagPreview()
