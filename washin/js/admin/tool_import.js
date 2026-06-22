@@ -4,7 +4,8 @@ import { extractTextFromFile, extractPageTextsFromPdf, parseDocumentText } from 
 
 const ANAG_COLS = ['cognome','nome','codice_fiscale','email','telefono','matricola',
                    'qualifica','tipo_contratto','paga_base','data_assunzione',
-                   'data_nascita','ccnl','categoria_lavorativa','iban_dipendente']
+                   'data_nascita','ccnl','categoria_lavorativa','iban_dipendente',
+                   'livello_ccnl','ore_mensili_contratto']
 const BUSTE_COLS = ['codice_fiscale','anno','mese','paga_base','superminimo',
                     'indennita_varie','altri_elementi','contributi_inps_dip','irpef',
                     'addizionali','altre_ritenute','tfr_mese','totale_lordo','totale_netto',
@@ -344,14 +345,22 @@ function parseCedolino(text) {
       anag.data_assunzione = `${year}-${mo}-${d}`
     }
 
-    // Livello: single digit between the two dates
-    if (cfDates.length >= 2) {
-      const between = afterCf.substring(
-        afterCf.indexOf(cfDates[0][0]) + cfDates[0][0].length,
-        afterCf.indexOf(cfDates[1][0])
-      )
-      const livM = between.match(/\b(\d{1,2})\b/)
-      if (livM && parseInt(livM[1]) <= 20) anag.categoria_lavorativa = `${livM[1]}° livello`
+    // Nota: il numero tra le due date è NR_SCATTI (scatti anzianità), NON il livello CCNL.
+    // Il livello CCNL viene estratto dalla riga qualifica qui sotto.
+  }
+
+  // ── Livello CCNL dalla riga qualifica CED ────────────────────────────────────
+  // Formato: QUALIFICA C_COSTO(1-2 digit) COD_COSTO(3 digit) LIVELLO LIVELLO [%ptime] ORE_CCNL GG_CCNL
+  // Il livello si riconosce perché appare DUE VOLTE di seguito (LIVELLO = COD_LIV)
+  const livelloM = text.match(/\b\d{3}\s+([1-8])\s+\1\s+((?:\d{1,2},\d{2}\s+)?(\d{2,3},\d{2}))\s+\d{2}\b/)
+  if (livelloM) {
+    anag.livello_ccnl = livelloM[1]
+    anag.categoria_lavorativa = `${livelloM[1]}° livello`
+    anag.ore_mensili_contratto = parseFloat(livelloM[3].replace(',', '.'))
+    const seg = livelloM[2].trim()
+    if (/\s/.test(seg)) {
+      const ptPct = parseFloat(seg.split(/\s+/)[0].replace(',', '.'))
+      if (ptPct >= 1 && ptPct < 100) anag.tipo_contratto = 'part_time'
     }
   }
 
