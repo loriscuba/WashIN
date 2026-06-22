@@ -324,7 +324,19 @@ function parseDocumentText(text, docType) {
     // CCNL + categoria lavorativa
     if (!r.ccnl && /pulizie|multiservizi/i.test(text)) r.ccnl = 'Pulizie e Multiservizi'
     if (r.livello_ccnl && !r.categoria_lavorativa) r.categoria_lavorativa = `${r.livello_ccnl}° livello`
-  }
+
+    // TIPO CONTRATTO da DATA CESSAZIONE (CED: presente ma vuoto = indeterminato; con data = determinato)
+    if (/DATA\s+CESSAZIONE/.test(text)) {
+      const cessM = text.match(/DATA\s+CESSAZIONE\s*(\d{2}\/\d{2}\/\d{2,4})/)
+      if (cessM) {
+        r.tipo_contratto = 'determinato'
+        const [, dd, mm, yy] = cessM[1].match(/(\d{2})\/(\d{2})\/(\d{2,4})/)
+        const year = yy.length === 2 ? (+yy <= 30 ? 2000 + +yy : 1900 + +yy) : +yy
+        r.data_scadenza_contratto = `${year}-${mm}-${dd}`
+      } else {
+        r.tipo_contratto = r._is_part_time ? 'part_time' : 'indeterminato'
+      }
+    }
 
   if (docType === 'carta_identita') {
     const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)
@@ -458,7 +470,8 @@ async function handleNuovoFileChange(file) {
     set('paga_base', parsed.paga_base)
     set('qualifica', parsed.qualifica)
     set('data_assunzione', parsed.data_assunzione)
-    if (parsed._is_part_time) set('tipo_contratto', 'part_time')
+    if (parsed.tipo_contratto) set('tipo_contratto', parsed.tipo_contratto)
+    if (parsed.data_scadenza_contratto) set('data_scadenza_contratto', parsed.data_scadenza_contratto)
     // Memorizza dati busta per salvataggio
     form.dataset.bpMese = parsed._bp_mese || ''
     form.dataset.bpAnno = parsed._bp_anno || ''
@@ -618,7 +631,8 @@ async function handleBustaFileChange(file) {
   form.dataset.retribCategoria = parsedRetrib.categoria_lavorativa || ''
   form.dataset.retribOre       = parsedRetrib.ore_mensili_contratto != null ? parsedRetrib.ore_mensili_contratto : ''
   form.dataset.retribScatti    = parsedRetrib.scatti_anzianita != null ? parsedRetrib.scatti_anzianita : ''
-  form.dataset.retribPartTime  = parsedRetrib._is_part_time ? '1' : ''
+  form.dataset.retribTipoContratto = parsedRetrib.tipo_contratto || ''
+  form.dataset.retribScadenza      = parsedRetrib.data_scadenza_contratto || ''
   // Precompila anche hr-retrib-form (se aperto) per feedback visivo immediato
   const retribForm = document.getElementById('hr-retrib-form')
   if (retribForm) {
@@ -626,6 +640,8 @@ async function handleBustaFileChange(file) {
     setR('ccnl', parsedRetrib.ccnl)
     setR('livello_ccnl', parsedRetrib.livello_ccnl)
     setR('categoria_lavorativa', parsedRetrib.categoria_lavorativa)
+    if (parsedRetrib.tipo_contratto)         setR('tipo_contratto',          parsedRetrib.tipo_contratto)
+    if (parsedRetrib.data_scadenza_contratto) setR('data_scadenza_contratto', parsedRetrib.data_scadenza_contratto)
     if (parsedRetrib.ore_mensili_contratto) setR('ore_mensili_contratto', parsedRetrib.ore_mensili_contratto.toFixed(2))
     if (parsedRetrib.scatti_anzianita)      setR('scatti_anzianita',      parsedRetrib.scatti_anzianita.toFixed(2))
     if (parsedRetrib._is_part_time)         setR('tipo_contratto',        'part_time')
@@ -1136,7 +1152,8 @@ async function saveBustaPaga() {
     if (form.dataset.retribCategoria)    retribUpdate.categoria_lavorativa  = form.dataset.retribCategoria
     if (form.dataset.retribOre)          retribUpdate.ore_mensili_contratto = parseFloat(form.dataset.retribOre)
     if (form.dataset.retribScatti)       retribUpdate.scatti_anzianita       = parseFloat(form.dataset.retribScatti)
-    if (form.dataset.retribPartTime)     retribUpdate.tipo_contratto         = 'part_time'
+    if (form.dataset.retribTipoContratto)  retribUpdate.tipo_contratto          = form.dataset.retribTipoContratto
+    if (form.dataset.retribScadenza)       retribUpdate.data_scadenza_contratto = form.dataset.retribScadenza
     // Prefer actual costo_aziendale from this busta over theoretical RPC value
     if (payload.costo_aziendale > 0) retribUpdate.costo_mensile = payload.costo_aziendale
     else if (form.dataset.retribCostoMensile) retribUpdate.costo_mensile = parseFloat(form.dataset.retribCostoMensile)

@@ -5,7 +5,8 @@ import { extractTextFromFile, extractPageTextsFromPdf, parseDocumentText } from 
 const ANAG_COLS = ['cognome','nome','codice_fiscale','email','telefono','matricola',
                    'qualifica','tipo_contratto','paga_base','data_assunzione',
                    'data_nascita','ccnl','categoria_lavorativa','iban_dipendente',
-                   'livello_ccnl','ore_mensili_contratto','scatti_anzianita','costo_mensile']
+                   'livello_ccnl','ore_mensili_contratto','scatti_anzianita','costo_mensile',
+                   'data_scadenza_contratto']
 const BUSTE_COLS = ['codice_fiscale','anno','mese','paga_base','contingenza','edr','superminimo',
                     'scatti_anzianita','indennita_varie','altri_elementi','contributi_inps_dip','irpef',
                     'addizionali','altre_ritenute','tfr_mese','totale_lordo','totale_netto',
@@ -412,6 +413,19 @@ function parseCedolino(text) {
   // Superminimo
   const supM = text.match(/SUPERMIN[^0-9\n]*([\d.]+,\d{2})/i)
   if (supM) { const v = pd(supM[1]); if (v > 0) busta.superminimo = v }
+
+  // TIPO CONTRATTO da DATA CESSAZIONE (vuoto = indeterminato, con data = determinato)
+  if (/DATA\s+CESSAZIONE/.test(text)) {
+    const cessM = text.match(/DATA\s+CESSAZIONE\s*(\d{2}\/\d{2}\/\d{2,4})/)
+    if (cessM) {
+      anag.tipo_contratto = 'determinato'
+      const [, dd, mm, yy] = cessM[1].match(/(\d{2})\/(\d{2})\/(\d{2,4})/)
+      const year = yy.length === 2 ? (+yy <= 30 ? 2000 + +yy : 1900 + +yy) : +yy
+      anag.data_scadenza_contratto = `${year}-${mm}-${dd}`
+    } else {
+      anag.tipo_contratto = anag.tipo_contratto || 'indeterminato'
+    }
+  }
 
   // ── IBAN ─────────────────────────────────────────────────────────────────────
   const ibanM = text.match(/\b(IT\d{2}[A-Z0-9]{23})\b/i)
