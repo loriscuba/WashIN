@@ -603,6 +603,15 @@ export async function printPreventivo(id) {
     const costoTot = costoOp + costoProd + costoKm + costoAltri
     const margine = costoTot > 0 ? ((p.importo - costoTot) / p.importo * 100).toFixed(1) : '-'
 
+    const operatoriJson = Array.isArray(p.operatori_json) ? p.operatori_json : []
+    const operatoriRows = operatoriJson.length
+      ? operatoriJson.map(op => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#f0fdf4;border-radius:6px;margin-bottom:6px;">
+          <span style="color:#16a34a;font-weight:600;">${op.nome || '—'}</span>
+          <span style="color:#374151;font-size:12px;">${op.ore_stimate || 0} h/mese &times; ${fmt(op.costo_orario || 0)}/h = <strong>${fmt(op.costo_totale || 0)}</strong></span>
+        </div>`).join('')
+      : '<div style="color:#6b7280;font-size:12px;">Nessun operatore registrato</div>'
+
     const html = `<!DOCTYPE html>
 <html lang="it"><head><meta charset="utf-8">
 <title>Preventivo ${p.numero_preventivo || ''} — WashIN</title>
@@ -658,6 +667,22 @@ export async function printPreventivo(id) {
   </tbody>
 </table>
 ${p.note ? `<div style="margin-top:16px;padding:14px 18px;background:#fffbeb;border-left:4px solid #f59e0b;border-radius:4px;"><strong style="font-size:11px;text-transform:uppercase;color:#92400e;">Note</strong><p style="margin-top:6px;">${p.note.replace(/\n/g,'<br>')}</p></div>` : ''}
+
+<div style="margin-top:32px;padding-top:24px;border-top:2px dashed #d1d5db;">
+  <div style="font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;">Composizione costi — uso interno</div>
+  <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">Operatori</div>
+  ${operatoriRows}
+  <div class="cost-box" style="margin-top:14px;">
+    <div class="cost-row"><span>Costo operatori/mese</span><span>${fmt(costoOp)}</span></div>
+    ${costoProd > 0 ? `<div class="cost-row"><span>Prodotti</span><span>${fmt(costoProd)}</span></div>` : ''}
+    ${costoKm > 0 ? `<div class="cost-row"><span>Trasferte (${p.km_per_intervento} km × ${p.n_interventi_mese} interventi)</span><span>${fmt(costoKm)}</span></div>` : ''}
+    ${costoAltri > 0 ? `<div class="cost-row"><span>Altri costi${p.altri_costi_nota ? ' — ' + p.altri_costi_nota : ''}</span><span>${fmt(costoAltri)}</span></div>` : ''}
+    <div class="cost-row" style="border-top:1px solid #d1d5db;margin-top:4px;padding-top:8px;"><span>Totale costi</span><span>${fmt(costoTot)}</span></div>
+    <div class="cost-row"><span>Margine applicato</span><span>${margine}%</span></div>
+    <div class="cost-row"><span style="color:#0D9488;font-weight:700;">Prezzo offerto</span><span style="color:#0D9488;">${fmt(p.importo)}</span></div>
+  </div>
+</div>
+
 <div class="footer">
   <div style="font-size:11px;color:#6b7280;">
     <p>Preventivo valido fino al <strong>${fmtDate(p.data_validita)}</strong>.</p>
