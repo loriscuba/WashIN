@@ -138,25 +138,14 @@ function buildOperatoreRow(form, item = {}) {
 
   async function aggiornaCostoRiga() {
     const opId = opSel.value
-    if (!opId) { showRischioHint(null, null); return }
+    const op   = opId ? _operatoriList.find(o => o.id === opId) : null
 
-    const op = _operatoriList.find(o => o.id === opId)
-    if (!op) return
-
-    if (!op.costo_mensile || op.costo_mensile <= 0) {
-      showRischioHint(null, op)
-      return
+    if (op && op.costo_mensile > 0) {
+      const oreMensili = op.ore_mensili_contratto || 173
+      cuEl.value = ((op.costo_mensile * getCoeff(form)) / oreMensili).toFixed(4)
     }
 
-    const coeff       = getCoeff(form)
-    const tipoSel     = form.querySelector('[name="tipo_appalto"]')
-    const tipoDesc    = tipoSel?.options[tipoSel.selectedIndex]?.textContent || ''
-    const oreMensili  = op.ore_mensili_contratto || 173
-    const costoMese   = op.costo_mensile * coeff
-    const costoOra    = costoMese / oreMensili
-
-    cuEl.value = costoOra.toFixed(4)
-    showRischioHint({ nome: `${op.cognome || ''} ${op.nome || ''}`.trim(), costoBase: op.costo_mensile, coeff, tipoDesc, costoMese, costoOra })
+    refreshRischioHint(form)
     calcAll(form)
   }
   row._aggiornaCosto = aggiornaCostoRiga
@@ -169,7 +158,7 @@ function buildOperatoreRow(form, item = {}) {
   livSel.addEventListener('change', aggiornaCostoRiga)
   oreEl.addEventListener('input', () => calcAll(form))
   cuEl.addEventListener('input',  () => calcAll(form))
-  row.querySelector('.prev-rm-op').addEventListener('click', () => { row.remove(); calcAll(form) })
+  row.querySelector('.prev-rm-op').addEventListener('click', () => { row.remove(); refreshRischioHint(form); calcAll(form) })
 
   return row
 }
@@ -219,21 +208,35 @@ function showCcnlHint(result, nOp) {
   hint.style.display = 'block'
 }
 
-function showRischioHint(data, missingOp) {
+function refreshRischioHint(form) {
   const hint = document.getElementById('prev-ccnl-hint')
   if (!hint) return
-  if (!data) {
-    if (!missingOp) { hint.style.display = 'none'; return }
-    const nome = `${missingOp.cognome || ''} ${missingOp.nome || ''}`.trim() || 'Operatore'
-    hint.innerHTML = `<span style="color:#dc2626;font-weight:700;">⚠ ${nome} non ha il costo mensile impostato.</span>
-      <span style="color:#dc2626;"> Vai in Anagrafica → carica una busta paga per calcolarlo automaticamente (oppure impostalo manualmente nel tab Retribuzione).</span>`
-    hint.style.display = 'block'
-    return
-  }
-  const tipoLabel = data.tipoDesc ? `<span style="color:#6b7280;">(${data.tipoDesc})</span>` : ''
-  hint.innerHTML = `<span style="font-weight:700;color:#0d9488;">${data.nome}</span> —
-    base: <b>${EUR(data.costoBase)}</b> × <b>${data.coeff.toFixed(3)}</b> ${tipoLabel}
-    = <b>${EUR(data.costoMese)}</b>/mese → <b style="font-size:13px;">${EUR(data.costoOra)}</b>/h`
+
+  const coeff     = getCoeff(form)
+  const tipoSel   = form.querySelector('[name="tipo_appalto"]')
+  const tipoLabel = tipoSel?.options[tipoSel.selectedIndex]?.value
+    ? `<span style="color:#6b7280;">(${tipoSel.options[tipoSel.selectedIndex].textContent})</span>` : ''
+
+  const parts = []
+  form.querySelectorAll('.prev-op-row').forEach(row => {
+    const opId = row.querySelector('.prev-op-select')?.value
+    if (!opId) return
+    const op = _operatoriList.find(o => o.id === opId)
+    if (!op) return
+    const nome = `${op.cognome || ''} ${op.nome || ''}`.trim() || 'Operatore'
+    if (!op.costo_mensile || op.costo_mensile <= 0) {
+      parts.push(`<div><span style="color:#dc2626;font-weight:700;">⚠ ${nome}: costo mensile non impostato.</span>
+        <span style="color:#dc2626;"> Vai in Anagrafica → carica una busta paga.</span></div>`)
+      return
+    }
+    const oreMensili = op.ore_mensili_contratto || 173
+    const costoMese  = op.costo_mensile * coeff
+    const costoOra   = costoMese / oreMensili
+    parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — base: <b>${EUR(op.costo_mensile)}</b> × <b>${coeff.toFixed(3)}</b> ${tipoLabel} = <b>${EUR(costoMese)}</b>/mese → <b style="font-size:13px;">${EUR(costoOra)}</b>/h</div>`)
+  })
+
+  if (!parts.length) { hint.style.display = 'none'; return }
+  hint.innerHTML = parts.join('')
   hint.style.display = 'block'
 }
 
