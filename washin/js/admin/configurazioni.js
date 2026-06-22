@@ -165,6 +165,82 @@ async function refreshInail() {
   renderTariffeInail(rows)
 }
 
+// ── Coefficienti rischio appalto ──────────────────────────────────────────────
+
+async function loadCoefficientiRischio() {
+  const { data, error } = await supabase.from('coefficienti_rischio').select('*').order('ordine')
+  if (error) { console.error(error); return [] }
+  return data || []
+}
+
+function renderCoefficientiRischio(rows) {
+  const tbody = document.getElementById('coeff-tbody')
+  if (!tbody) return
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px;">Nessun coefficiente. Eseguire migrations_v23.sql su Supabase.</td></tr>'
+    return
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr data-id="${r.id}">
+      <td><input class="coeff-inp tbl-inp" name="codice" value="${r.codice ?? ''}" style="width:110px"></td>
+      <td><input class="coeff-inp tbl-inp" name="descrizione" value="${r.descrizione ?? ''}" style="width:100%;min-width:200px"></td>
+      <td><input class="coeff-inp tbl-inp" type="number" step="0.001" name="coefficiente" value="${r.coefficiente ?? ''}" style="width:88px" title="es. 1.100"></td>
+      <td><input class="coeff-inp tbl-inp" type="number" step="1" name="ordine" value="${r.ordine ?? 0}" style="width:60px"></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-primary btn-sm coeff-save-btn">Salva</button>
+        <button class="btn btn-danger btn-sm coeff-del-btn" style="margin-left:6px">Elimina</button>
+      </td>
+    </tr>
+  `).join('')
+}
+
+async function saveCoefficientiRow(tr) {
+  const id = tr.dataset.id
+  const fields = {}
+  tr.querySelectorAll('.coeff-inp').forEach(inp => {
+    fields[inp.name] = inp.type === 'number' ? +inp.value : inp.value
+  })
+  let error
+  if (id === 'new') {
+    ;({ error } = await supabase.from('coefficienti_rischio').insert(fields))
+  } else {
+    ;({ error } = await supabase.from('coefficienti_rischio').update(fields).eq('id', id))
+  }
+  if (error) { showToast('Errore salvataggio: ' + error.message, 'error') }
+  else { showToast('Coefficiente salvato', 'success'); await refreshCoefficienti() }
+}
+
+async function deleteCoefficientiRow(id) {
+  if (!confirm('Eliminare questo coefficiente?')) return
+  const { error } = await supabase.from('coefficienti_rischio').delete().eq('id', id)
+  if (error) { showToast('Errore eliminazione: ' + error.message, 'error') }
+  else { showToast('Coefficiente eliminato', 'success'); await refreshCoefficienti() }
+}
+
+function addNewCoefficientiRow() {
+  const tbody = document.getElementById('coeff-tbody')
+  if (!tbody || tbody.querySelector('[data-id="new"]')) return
+  const tr = document.createElement('tr')
+  tr.dataset.id = 'new'
+  tr.innerHTML = `
+    <td><input class="coeff-inp tbl-inp" name="codice" placeholder="es. speciale" style="width:110px"></td>
+    <td><input class="coeff-inp tbl-inp" name="descrizione" placeholder="Descrizione tipo appalto" style="width:100%;min-width:200px"></td>
+    <td><input class="coeff-inp tbl-inp" type="number" step="0.001" name="coefficiente" value="1.100" style="width:88px"></td>
+    <td><input class="coeff-inp tbl-inp" type="number" step="1" name="ordine" value="4" style="width:60px"></td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-primary btn-sm coeff-save-btn">Salva</button>
+      <button class="btn btn-secondary btn-sm coeff-cancel-btn" style="margin-left:6px">Annulla</button>
+    </td>
+  `
+  tbody.prepend(tr)
+  tr.querySelector('.coeff-inp').focus()
+  tr.querySelector('.coeff-cancel-btn')?.addEventListener('click', () => tr.remove())
+}
+
+async function refreshCoefficienti() {
+  renderCoefficientiRischio(await loadCoefficientiRischio())
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initConfigurazioni() {
@@ -190,11 +266,25 @@ export function initConfigurazioni() {
 
   document.getElementById('inail-add-btn')?.addEventListener('click', addNewInailRow)
 
+  // Delegated click handler for coefficienti section
+  document.getElementById('coefficienti-rischio')?.addEventListener('click', async e => {
+    if (e.target.classList.contains('coeff-save-btn')) {
+      const tr = e.target.closest('tr[data-id]')
+      if (tr) await saveCoefficientiRow(tr)
+    }
+    if (e.target.classList.contains('coeff-del-btn')) {
+      const tr = e.target.closest('tr[data-id]')
+      if (tr) await deleteCoefficientiRow(tr.dataset.id)
+    }
+  })
+  document.getElementById('coeff-add-btn')?.addEventListener('click', addNewCoefficientiRow)
+
   // Load data when navigating to each config sub-section
   document.getElementById('main-content')?.addEventListener('click', e => {
     const link = e.target.closest('a[data-target]')
     if (!link) return
-    if (link.dataset.target === 'parametri-ccnl') refreshCcnl()
-    if (link.dataset.target === 'tariffe-inail') refreshInail()
+    if (link.dataset.target === 'parametri-ccnl')     refreshCcnl()
+    if (link.dataset.target === 'tariffe-inail')      refreshInail()
+    if (link.dataset.target === 'coefficienti-rischio') refreshCoefficienti()
   })
 }

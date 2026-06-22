@@ -49,6 +49,27 @@ async function loadAziendaGeo() {
 
 let _magItems = null
 let _operatoriList = []
+let _coefficienti   = []
+
+async function loadCoefficienti() {
+  const { data } = await supabase.from('coefficienti_rischio').select('*').order('ordine')
+  _coefficienti = data || []
+  return _coefficienti
+}
+
+function populateTipoAppaltoSelect(form, savedTipo = null) {
+  const sel = form.querySelector('[name="tipo_appalto"]')
+  if (!sel) return
+  const opts = _coefficienti.map(c =>
+    `<option value="${c.codice}" data-coeff="${c.coefficiente}" ${savedTipo === c.codice ? 'selected' : ''}>${c.descrizione} (×${Number(c.coefficiente).toFixed(3)})</option>`
+  ).join('')
+  sel.innerHTML = '<option value="">— seleziona tipo appalto —</option>' + opts
+}
+
+function getCoeff(form) {
+  const sel = form.querySelector('[name="tipo_appalto"]')
+  return parseFloat(sel?.options[sel.selectedIndex]?.dataset?.coeff || '1') || 1
+}
 
 async function loadMagItems() {
   if (_magItems) return _magItems
@@ -73,7 +94,7 @@ const LIVELLI = [
 
 async function loadOperatoriList() {
   const { data } = await supabase.from('profili')
-    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail')
+    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto')
     .neq('attivo', false)
     .order('cognome')
   _operatoriList = data || []
@@ -116,16 +137,29 @@ function buildOperatoreRow(form, item = {}) {
   const cuEl   = row.querySelector('.prev-op-cu')
 
   async function aggiornaCostoRiga() {
-    const livello = livSel.value
-    if (!livello) return
-    const voce = opSel.options[opSel.selectedIndex]?.dataset?.voce || null
-    const result = await calcolaCostoCcnl(livello, 0, voce)
-    if (result?.costo_orario_effettivo != null) {
-      cuEl.value = result.costo_orario_effettivo.toFixed(4)
+    const opId = opSel.value
+    if (!opId) { showRischioHint(null, null); return }
+
+    const op = _operatoriList.find(o => o.id === opId)
+    if (!op) return
+
+    if (!op.costo_mensile || op.costo_mensile <= 0) {
+      showRischioHint(null, op)
+      return
     }
-    showCcnlHint(result, 1)
+
+    const coeff       = getCoeff(form)
+    const tipoSel     = form.querySelector('[name="tipo_appalto"]')
+    const tipoDesc    = tipoSel?.options[tipoSel.selectedIndex]?.textContent || ''
+    const oreMensili  = op.ore_mensili_contratto || 173
+    const costoMese   = op.costo_mensile * coeff
+    const costoOra    = costoMese / oreMensili
+
+    cuEl.value = costoOra.toFixed(4)
+    showRischioHint({ nome: `${op.cognome || ''} ${op.nome || ''}`.trim(), costoBase: op.costo_mensile, coeff, tipoDesc, costoMese, costoOra })
     calcAll(form)
   }
+  row._aggiornaCosto = aggiornaCostoRiga
 
   opSel.addEventListener('change', () => {
     const opt = opSel.options[opSel.selectedIndex]
@@ -182,6 +216,24 @@ function showCcnlHint(result, nOp) {
         = <b style="font-size:13px;color:#0d9488;">${fmt(result.costo_totale * n)}/mese</b>
       </span>
     </span>`
+  hint.style.display = 'block'
+}
+
+function showRischioHint(data, missingOp) {
+  const hint = document.getElementById('prev-ccnl-hint')
+  if (!hint) return
+  if (!data) {
+    if (!missingOp) { hint.style.display = 'none'; return }
+    const nome = `${missingOp.cognome || ''} ${missingOp.nome || ''}`.trim() || 'Operatore'
+    hint.innerHTML = `<span style="color:#dc2626;font-weight:700;">⚠ ${nome} non ha il costo mensile impostato.</span>
+      <span style="color:#dc2626;"> Vai in Anagrafica → carica una busta paga per calcolarlo automaticamente (oppure impostalo manualmente nel tab Retribuzione).</span>`
+    hint.style.display = 'block'
+    return
+  }
+  const tipoLabel = data.tipoDesc ? `<span style="color:#6b7280;">(${data.tipoDesc})</span>` : ''
+  hint.innerHTML = `<span style="font-weight:700;color:#0d9488;">${data.nome}</span> —
+    base: <b>${EUR(data.costoBase)}</b> × <b>${data.coeff.toFixed(3)}</b> ${tipoLabel}
+    = <b>${EUR(data.costoMese)}</b>/mese → <b style="font-size:13px;">${EUR(data.costoOra)}</b>/h`
   hint.style.display = 'block'
 }
 
@@ -388,14 +440,23 @@ export async function openModalPreventivo(id = null) {
     await Promise.all([
       populateClientiSelect(clienteSelect),
       loadOperatoriList(),
+      loadCoefficienti(),
     ])
+    populateTipoAppaltoSelect(form)
+
+    // Ricalcola tutti gli operatori quando cambia il tipo appalto
+    form.querySelector('[name="tipo_appalto"]')?.addEventListener('change', () => {
+      form.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
+    })
 
     const [magItems] = await Promise.all([loadMagItems(), loadAziendaGeo()])
 
     if (id) {
       const { data, error } = await supabase.from('preventivi').select('*').eq('id', id).single()
       if (error) throw error
+      populateTipoAppaltoSelect(form, data.tipo_appalto)
       Object.entries(data).forEach(([k, v]) => {
+        if (k === 'tipo_appalto') return  // già gestito sopra
         const el = form.querySelector(`[name="${k}"]`)
         if (el && v != null) el.value = v
       })
@@ -421,11 +482,6 @@ export async function openModalPreventivo(id = null) {
           ? [{ livello_ccnl: data.livello_ccnl, ore_stimate: data.ore_stimate, costo_orario: data.costo_orario }]
           : []
       savedOps.forEach(op => opList?.appendChild(buildOperatoreRow(form, op)))
-      const firstOp = savedOps.find(o => o.livello_ccnl)
-      if (firstOp) {
-        calcolaCostoCcnl(firstOp.livello_ccnl, 0, firstOp.voce_tariffa_inail || null)
-          .then(r => showCcnlHint(r, 1))
-      }
 
       await updateKmHint(form, data.cliente_id)
       calcAll(form)
@@ -730,6 +786,8 @@ export function initPreventivi() {
           prodotti_json:     prodotti,
           stato:             fd.get('stato'),
           note:              fd.get('note'),
+          tipo_appalto:      fd.get('tipo_appalto') || null,
+          coefficiente_rischio: getCoeff(form),
         }
         await savePreventivo(payload)
         modal.classList.remove('active')
