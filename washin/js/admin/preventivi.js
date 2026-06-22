@@ -525,6 +525,8 @@ export async function savePreventivo(payload) {
       operatori_json:    payload.operatori_json || [],
       stato:             payload.stato || 'bozza',
       note:              payload.note || null,
+      tipo_appalto:      payload.tipo_appalto || null,
+      coefficiente_rischio: payload.coefficiente_rischio || null,
     }
     let error
     if (payload.id) {
