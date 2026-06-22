@@ -490,6 +490,14 @@ export async function openModalPreventivo(id = null) {
       const emissEl = form.querySelector('[name="data_emissione"]')
       if (emissEl) emissEl.value = new Date().toISOString().slice(0, 10)
       document.getElementById('prev-operatori-list')?.appendChild(buildOperatoreRow(form))
+
+      // Auto-genera numero preventivo al cambio cliente
+      const numEl2 = form.querySelector('[name="numero_preventivo"]')
+      clienteSelect?.addEventListener('change', async () => {
+        const opt = clienteSelect.options[clienteSelect.selectedIndex]
+        if (!opt?.value || numEl2?.value) return
+        numEl2.value = await generateNumeroPreventivo(opt.textContent.trim())
+      })
     }
 
     modal.classList.add('active')
@@ -497,6 +505,31 @@ export async function openModalPreventivo(id = null) {
     showToast('Errore apertura modal preventivo', 'error')
     console.error(err)
   }
+}
+
+// ── Numero preventivo auto-generato ──────────────────────────────────────────
+
+async function generateNumeroPreventivo(ragioneSociale) {
+  const prefix3 = ragioneSociale.replace(/\s+/g, '').substring(0, 3).toUpperCase()
+  const today   = new Date()
+  const dd      = String(today.getDate()).padStart(2, '0')
+  const mm      = String(today.getMonth() + 1).padStart(2, '0')
+  const yyyy    = today.getFullYear()
+  const dateStr = `${dd}${mm}${yyyy}`
+  const base    = `${prefix3}_${dateStr}_V`
+
+  const { data } = await supabase
+    .from('preventivi')
+    .select('numero_preventivo')
+    .like('numero_preventivo', `${base}%`)
+
+  let maxV = 0
+  ;(data || []).forEach(r => {
+    const m = r.numero_preventivo?.match(/_V(\d+)$/)
+    if (m) maxV = Math.max(maxV, parseInt(m[1]))
+  })
+
+  return `${base}${maxV + 1}`
 }
 
 // ── Save ──────────────────────────────────────────────────────────────────────
