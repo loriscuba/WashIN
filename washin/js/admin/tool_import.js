@@ -6,8 +6,8 @@ const ANAG_COLS = ['cognome','nome','codice_fiscale','email','telefono','matrico
                    'qualifica','tipo_contratto','paga_base','data_assunzione',
                    'data_nascita','ccnl','categoria_lavorativa','iban_dipendente',
                    'livello_ccnl','ore_mensili_contratto','scatti_anzianita','costo_mensile']
-const BUSTE_COLS = ['codice_fiscale','anno','mese','paga_base','superminimo',
-                    'indennita_varie','altri_elementi','contributi_inps_dip','irpef',
+const BUSTE_COLS = ['codice_fiscale','anno','mese','paga_base','contingenza','edr','superminimo',
+                    'scatti_anzianita','indennita_varie','altri_elementi','contributi_inps_dip','irpef',
                     'addizionali','altre_ritenute','tfr_mese','totale_lordo','totale_netto',
                     'imponibile_inps','contributi_inps_az','inail','costo_aziendale']
 
@@ -384,11 +384,15 @@ function parseCedolino(text) {
     if (pb > 100) {
       // Lavoratore mensile: paga_base = solo componente base
       anag.paga_base        = pb
+      busta.contingenza     = pd(pagaRow[2])
+      busta.edr             = pd(pagaRow[3])
       anag.scatti_anzianita = sc
     } else if (pb > 0) {
       // Lavoratore orario: moltiplica tariffa per ore CCNL
       const refH = anag.ore_mensili_contratto || 173
       anag.paga_base        = Math.round((pb + pd(pagaRow[2]) + pd(pagaRow[3]) + sc) * refH * 100) / 100
+      busta.contingenza     = Math.round(pd(pagaRow[2]) * refH * 100) / 100
+      busta.edr             = Math.round(pd(pagaRow[3]) * refH * 100) / 100
       if (sc > 0) anag.scatti_anzianita = Math.round(sc * refH * 100) / 100
     }
   }
@@ -843,7 +847,10 @@ async function confirmBusteImport() {
       anno,
       mese,
       paga_base:           +(r.paga_base || 0),
+      contingenza:         +(r.contingenza || 0),
+      edr:                 +(r.edr || 0),
       superminimo:         +(r.superminimo || 0),
+      scatti_anzianita:    +(r.scatti_anzianita || 0),
       straordinari_imp:    +(r.straordinari_imp || 0),
       indennita_varie:     +(r.indennita_varie || 0),
       altri_elementi:      +(r.altri_elementi || 0),

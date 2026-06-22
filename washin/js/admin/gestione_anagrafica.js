@@ -286,11 +286,14 @@ function parseDocumentText(text, docType) {
       if (pbCedM) r.paga_base = pd(pbCedM[1])
     }
 
-    // SCATTI ANZIANITÀ: 4° valore della riga dati sotto header "SCATTI ANZ"
+    // PAGA BASE + CONTINGENZA + EDR + SCATTI ANZ: 4 valori sulla riga dopo l'header
     const scPos = text.search(/SCATTI\s+ANZ/)
     if (scPos >= 0) {
       const scRow = text.substring(scPos).match(/[\r\n]+([\d.]+,\d+)\s+([\d.]+,\d+)\s+([\d.]+,\d+)\s+([\d.]+,\d+)/)
       if (scRow) {
+        if (!r.paga_base) r.paga_base = pd(scRow[1])
+        r.contingenza = pd(scRow[2])
+        r.edr         = pd(scRow[3])
         const rawSc = pd(scRow[4])
         if (rawSc >= 1) {
           r.scatti_anzianita = rawSc
@@ -298,6 +301,12 @@ function parseDocumentText(text, docType) {
           r.scatti_anzianita = Math.round(rawSc * r.ore_mensili_contratto * 100) / 100
         }
       }
+    }
+
+    // SUPERMINIMO
+    if (!r.superminimo) {
+      const supM = text.match(/SUPERMIN[^0-9\n]*([\d.]+,\d{2})/i)
+      if (supM) { const v = pd(supM[1]); if (v > 0) r.superminimo = v }
     }
 
     // DATA ASSUNZIONE: ultima data DD/MM/YY nella riga del CF
@@ -595,9 +604,14 @@ async function handleBustaFileChange(file) {
     if (caEl) caEl.value = (lordoPdf + inpsAz + inail + tfr).toFixed(2)
   }
 
-  // Campi retribuzione da CED (livello, CCNL, ore, part-time, scatti)
+  // Campi retribuzione da CED (livello, CCNL, ore, part-time, scatti + componenti paga)
   const parsedRetrib = parseDocumentText(text, 'busta_paga')
   set('scatti_anzianita', parsedRetrib.scatti_anzianita)
+  if (parsedRetrib.paga_base   && !parseFloat(form.querySelector('[name="paga_base"]')?.value))
+    set('paga_base',   parsedRetrib.paga_base.toFixed(2))
+  if (parsedRetrib.contingenza) set('contingenza', parsedRetrib.contingenza.toFixed(2))
+  if (parsedRetrib.edr)         set('edr',         parsedRetrib.edr.toFixed(2))
+  if (parsedRetrib.superminimo) set('superminimo',  parsedRetrib.superminimo.toFixed(2))
   // Memorizza in dataset così saveBustaPaga può aggiornare profili in automatico
   form.dataset.retribLivello   = parsedRetrib.livello_ccnl || ''
   form.dataset.retribCcnl      = parsedRetrib.ccnl || ''
