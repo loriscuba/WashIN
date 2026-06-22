@@ -18,3 +18,9 @@ ON CONFLICT (codice) DO NOTHING;
 ALTER TABLE preventivi
   ADD COLUMN IF NOT EXISTS tipo_appalto       text,
   ADD COLUMN IF NOT EXISTS coefficiente_rischio numeric(5,3);
+
+-- RLS
+ALTER TABLE coefficienti_rischio ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "auth_users_all" ON coefficienti_rischio
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
