@@ -356,11 +356,18 @@ function parseCedolino(text) {
   if (livelloM) {
     anag.livello_ccnl = livelloM[1]
     anag.categoria_lavorativa = `${livelloM[1]}° livello`
-    anag.ore_mensili_contratto = parseFloat(livelloM[3].replace(',', '.'))
+    const oreCcnl = parseFloat(livelloM[3].replace(',', '.'))
     const seg = livelloM[2].trim()
     if (/\s/.test(seg)) {
       const ptPct = parseFloat(seg.split(/\s+/)[0].replace(',', '.'))
-      if (ptPct >= 1 && ptPct < 100) anag.tipo_contratto = 'part_time'
+      if (ptPct >= 1 && ptPct < 100) {
+        anag.tipo_contratto = 'part_time'
+        anag.ore_mensili_contratto = Math.round(oreCcnl * ptPct / 100 * 100) / 100
+      } else {
+        anag.ore_mensili_contratto = oreCcnl
+      }
+    } else {
+      anag.ore_mensili_contratto = oreCcnl
     }
   }
 

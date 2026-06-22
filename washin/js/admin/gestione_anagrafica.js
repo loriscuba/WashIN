@@ -259,11 +259,18 @@ function parseDocumentText(text, docType) {
     const livelloM = text.match(/\b(\d{3})\s+([1-8])\s+\2\s+((?:\d{1,2},\d{2}\s+)?(\d{2,3},\d{2}))\s+\d{2}\b/)
     if (livelloM) {
       r.livello_ccnl = livelloM[2]
-      r.ore_mensili_contratto = pd(livelloM[4])
+      const oreCcnl = pd(livelloM[4])
       const seg = livelloM[3].trim()
       if (/\s/.test(seg)) {
         const ptPct = pd(seg.split(/\s+/)[0])
-        if (ptPct >= 1 && ptPct < 100) r._is_part_time = true
+        if (ptPct >= 1 && ptPct < 100) {
+          r._is_part_time = true
+          r.ore_mensili_contratto = Math.round(oreCcnl * ptPct / 100 * 100) / 100
+        } else {
+          r.ore_mensili_contratto = oreCcnl
+        }
+      } else {
+        r.ore_mensili_contratto = oreCcnl
       }
     }
 
