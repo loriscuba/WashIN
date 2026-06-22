@@ -337,6 +337,7 @@ function parseDocumentText(text, docType) {
         r.tipo_contratto = r._is_part_time ? 'part_time' : 'indeterminato'
       }
     }
+  }
 
   if (docType === 'carta_identita') {
     const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)
