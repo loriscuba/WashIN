@@ -869,6 +869,18 @@ async function confirmBusteImport() {
   const { error } = await supabase.from('buste_paga').upsert(rows, { onConflict: 'operatore_id,anno,mese' })
   if (error) { showToast('Errore import buste: ' + error.message, 'error'); return }
 
+  // Aggiorna profili.costo_mensile con il costo_aziendale effettivo dell'ultimo mese importato
+  const latestByOp = {}
+  rows.forEach(r => {
+    const ex = latestByOp[r.operatore_id]
+    if (!ex || r.anno > ex.anno || (r.anno === ex.anno && r.mese > ex.mese)) latestByOp[r.operatore_id] = r
+  })
+  await Promise.all(
+    Object.values(latestByOp).map(r =>
+      supabase.from('profili').update({ costo_mensile: r.costo_aziendale }).eq('id', r.operatore_id)
+    )
+  )
+
   const nAnag = _busteAnagData.length
   showToast(`${rows.length} buste importate${nAnag ? ` + ${nAnag} profili aggiornati` : ''}`, 'success')
   _busteData     = []

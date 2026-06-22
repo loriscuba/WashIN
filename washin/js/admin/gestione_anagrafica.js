@@ -1123,7 +1123,9 @@ async function saveBustaPaga() {
     if (form.dataset.retribOre)          retribUpdate.ore_mensili_contratto = parseFloat(form.dataset.retribOre)
     if (form.dataset.retribScatti)       retribUpdate.scatti_anzianita       = parseFloat(form.dataset.retribScatti)
     if (form.dataset.retribPartTime)     retribUpdate.tipo_contratto         = 'part_time'
-    if (form.dataset.retribCostoMensile) retribUpdate.costo_mensile          = parseFloat(form.dataset.retribCostoMensile)
+    // Prefer actual costo_aziendale from this busta over theoretical RPC value
+    if (payload.costo_aziendale > 0) retribUpdate.costo_mensile = payload.costo_aziendale
+    else if (form.dataset.retribCostoMensile) retribUpdate.costo_mensile = parseFloat(form.dataset.retribCostoMensile)
     if (Object.keys(retribUpdate).length) {
       await supabase.from('profili').update(retribUpdate).eq('id', _currentOpId)
     }
