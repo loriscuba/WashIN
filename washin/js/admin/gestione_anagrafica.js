@@ -608,6 +608,22 @@ async function handleBustaFileChange(file) {
     if (parsedRetrib.ore_mensili_contratto) setR('ore_mensili_contratto', parsedRetrib.ore_mensili_contratto.toFixed(2))
     if (parsedRetrib.scatti_anzianita)      setR('scatti_anzianita',      parsedRetrib.scatti_anzianita.toFixed(2))
     if (parsedRetrib._is_part_time)         setR('tipo_contratto',        'part_time')
+
+    // Calcola costo mensile tramite RPC preventivi
+    if (parsedRetrib.livello_ccnl) {
+      try {
+        const ore = parsedRetrib.ore_mensili_contratto || 173
+        const { data } = await supabase.rpc('calcola_costo_operatore', {
+          p_livello: parsedRetrib.livello_ccnl,
+          p_ore_ordinarie: ore,
+          p_include_ratei: true,
+        })
+        if (data?.costo_totale) {
+          setR('costo_mensile', data.costo_totale.toFixed(2))
+          form.dataset.retribCostoMensile = data.costo_totale.toFixed(2)
+        }
+      } catch { /* RPC non disponibile */ }
+    }
   }
 }
 
@@ -640,6 +656,20 @@ async function saveNuovoOperatore() {
     categoria_lavorativa:  form.dataset.retribCategoria || null,
     ore_mensili_contratto: form.dataset.retribOre ? parseFloat(form.dataset.retribOre) : null,
     scatti_anzianita:      form.dataset.retribScatti ? parseFloat(form.dataset.retribScatti) : null,
+    costo_mensile:         form.dataset.retribCostoMensile ? parseFloat(form.dataset.retribCostoMensile) : null,
+  }
+
+  // Calcola costo_mensile se non già impostato
+  if (!fields.costo_mensile && fields.livello_ccnl) {
+    try {
+      const ore = fields.ore_mensili_contratto || 173
+      const { data: rpc } = await supabase.rpc('calcola_costo_operatore', {
+        p_livello: fields.livello_ccnl,
+        p_ore_ordinarie: ore,
+        p_include_ratei: true,
+      })
+      if (rpc?.costo_totale) fields.costo_mensile = Math.round(rpc.costo_totale * 100) / 100
+    } catch { /* RPC non disponibile */ }
   }
 
   try {
@@ -1080,12 +1110,13 @@ async function saveBustaPaga() {
     if (error) throw error
     // Aggiorna profili con dati retribuzione estratti dal PDF (se presenti)
     const retribUpdate = {}
-    if (form.dataset.retribLivello)   retribUpdate.livello_ccnl          = form.dataset.retribLivello
-    if (form.dataset.retribCcnl)      retribUpdate.ccnl                  = form.dataset.retribCcnl
-    if (form.dataset.retribCategoria) retribUpdate.categoria_lavorativa  = form.dataset.retribCategoria
-    if (form.dataset.retribOre)       retribUpdate.ore_mensili_contratto = parseFloat(form.dataset.retribOre)
-    if (form.dataset.retribScatti)    retribUpdate.scatti_anzianita       = parseFloat(form.dataset.retribScatti)
-    if (form.dataset.retribPartTime)  retribUpdate.tipo_contratto         = 'part_time'
+    if (form.dataset.retribLivello)      retribUpdate.livello_ccnl          = form.dataset.retribLivello
+    if (form.dataset.retribCcnl)         retribUpdate.ccnl                  = form.dataset.retribCcnl
+    if (form.dataset.retribCategoria)    retribUpdate.categoria_lavorativa  = form.dataset.retribCategoria
+    if (form.dataset.retribOre)          retribUpdate.ore_mensili_contratto = parseFloat(form.dataset.retribOre)
+    if (form.dataset.retribScatti)       retribUpdate.scatti_anzianita       = parseFloat(form.dataset.retribScatti)
+    if (form.dataset.retribPartTime)     retribUpdate.tipo_contratto         = 'part_time'
+    if (form.dataset.retribCostoMensile) retribUpdate.costo_mensile          = parseFloat(form.dataset.retribCostoMensile)
     if (Object.keys(retribUpdate).length) {
       await supabase.from('profili').update(retribUpdate).eq('id', _currentOpId)
     }

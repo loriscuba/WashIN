@@ -5,7 +5,7 @@ import { extractTextFromFile, extractPageTextsFromPdf, parseDocumentText } from 
 const ANAG_COLS = ['cognome','nome','codice_fiscale','email','telefono','matricola',
                    'qualifica','tipo_contratto','paga_base','data_assunzione',
                    'data_nascita','ccnl','categoria_lavorativa','iban_dipendente',
-                   'livello_ccnl','ore_mensili_contratto']
+                   'livello_ccnl','ore_mensili_contratto','scatti_anzianita','costo_mensile']
 const BUSTE_COLS = ['codice_fiscale','anno','mese','paga_base','superminimo',
                     'indennita_varie','altri_elementi','contributi_inps_dip','irpef',
                     'addizionali','altre_ritenute','tfr_mese','totale_lordo','totale_netto',
@@ -368,16 +368,21 @@ function parseCedolino(text) {
   const qualM = text.match(/\b(OPERAI[AO]|IMPIEGAT[AO]|QUADRO|DIRIGENTE|APPRENDISTA|FUNZIONARIO|ADDETT[AO]\s+ALLE?\s+PULIZ\w*|ADDETT[AO]|AMMINISTRATORE)\b/i)
   if (qualM) anag.qualifica = qualM[1].trim().charAt(0).toUpperCase() + qualM[1].trim().slice(1).toLowerCase()
 
-  // ── Paga base: "PAGA BASE  CONTINGEN.  E.D.R.  SCATTI ANZ" + values line ───
-  // Hourly employees use 5 decimal places (e.g. 5,79827); monthly use 2 (e.g. 1.575,18)
-  const pagaBlockM = text.match(/PAGA\s+BASE[\s\S]{0,80}?CONTINGEN[\s\S]{0,80}?E\.?D\.?R[\s\S]{0,80}?SCATTI\s+ANZ\s*\n\s*([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})/i)
-  if (pagaBlockM) {
-    const retribMensile = pd(pagaBlockM[1]) + pd(pagaBlockM[2]) + pd(pagaBlockM[3]) + pd(pagaBlockM[4])
-    if (retribMensile > 100) {
-      anag.paga_base = Math.round(retribMensile * 100) / 100
-    } else if (retribMensile > 0) {
-      // Hourly rate — convert to monthly using standard CCNL 173h reference
-      anag.paga_base = Math.round(retribMensile * 173 * 100) / 100
+  // ── Paga base + Scatti ANZ: header e valori possono essere sulla stessa riga ──
+  // pdfjs spesso non inserisce \n tra header e valori nelle tabelle CED.
+  // Formato mensile: valori > 100 € (e.g. 1.575,18); orario: valori < 30 (tariffa/ora)
+  const pagaRow = text.match(/PAGA\s+BASE[\s\S]{0,120}?SCATTI\s+ANZ[^0-9,]*([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})\s+([\d.]+,\d{2,5})/i)
+  if (pagaRow) {
+    const pb = pd(pagaRow[1]), sc = pd(pagaRow[4])
+    if (pb > 100) {
+      // Lavoratore mensile: paga_base = solo componente base
+      anag.paga_base        = pb
+      anag.scatti_anzianita = sc
+    } else if (pb > 0) {
+      // Lavoratore orario: moltiplica tariffa per ore CCNL
+      const refH = anag.ore_mensili_contratto || 173
+      anag.paga_base        = Math.round((pb + pd(pagaRow[2]) + pd(pagaRow[3]) + sc) * refH * 100) / 100
+      if (sc > 0) anag.scatti_anzianita = Math.round(sc * refH * 100) / 100
     }
   }
   if (!anag.paga_base) {
@@ -670,6 +675,20 @@ async function confirmBusteAnagOnly() {
     return row
   })
   if (!rows.length) { showToast('Nessun profilo valido da salvare', 'error'); return }
+
+  // Calcola costo_mensile tramite RPC preventivi per ogni operatore con livello CCNL
+  await Promise.all(rows.map(async row => {
+    if (!row.livello_ccnl) return
+    try {
+      const ore = row.ore_mensili_contratto || 173
+      const { data } = await supabase.rpc('calcola_costo_operatore', {
+        p_livello: row.livello_ccnl,
+        p_ore_ordinarie: ore,
+        p_include_ratei: true,
+      })
+      if (data?.costo_totale) row.costo_mensile = Math.round(data.costo_totale * 100) / 100
+    } catch { /* RPC non disponibile: salta */ }
+  }))
 
   const { error } = await supabase.from('profili').upsert(rows, { onConflict: 'codice_fiscale' })
   if (error) { showToast('Errore salvataggio anagrafica: ' + error.message, 'error'); return }
