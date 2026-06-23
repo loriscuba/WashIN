@@ -272,8 +272,19 @@ export async function openModalIntervento(id = null){
         select.appendChild(opt)
       })
     }
-    buildOpOptions(form.querySelector('[name="operatore_id"]'))
-    buildOpOptions(form.querySelector('[name="operatore2_id"]'))
+    const sel1 = form.querySelector('[name="operatore_id"]')
+    const sel2 = form.querySelector('[name="operatore2_id"]')
+    buildOpOptions(sel1)
+    buildOpOptions(sel2)
+
+    // Impedisce selezione dello stesso operatore in entrambi i campi
+    const syncDuplicates = () => {
+      const v1 = sel1?.value, v2 = sel2?.value
+      sel2?.querySelectorAll('option').forEach(o => { o.disabled = o.value && o.value === v1 })
+      sel1?.querySelectorAll('option').forEach(o => { o.disabled = o.value && o.value === v2 })
+    }
+    sel1?.addEventListener('change', () => { if (sel2?.value === sel1.value) sel2.value = ''; syncDuplicates() })
+    sel2?.addEventListener('change', () => { if (sel1?.value === sel2.value) sel2.value = ''; syncDuplicates() })
 
     // carica contratti attivi (con nome cliente)
     const { data: contratti, error: errContr } = await supabase
