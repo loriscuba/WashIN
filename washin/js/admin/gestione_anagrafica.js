@@ -1210,6 +1210,11 @@ export function initGestioneAnagrafica() {
       if (!btn) return
       if (btn.dataset.action === 'hr-open' && btn.dataset.id) await openModalAnag(btn.dataset.id)
       if (btn.dataset.action === 'hr-attiva') {
+        if (!btn.dataset.email) {
+          showToast('Configura prima l\'email nell\'anagrafica dell\'operatore', 'error')
+          await openModalAnag(btn.dataset.id)
+          return
+        }
         document.getElementById('attiva-account-nome').textContent = btn.dataset.nome?.trim() || ''
         const form = document.getElementById('attiva-account-form')
         form.querySelector('[name="profilo_id"]').value = btn.dataset.id
@@ -1248,6 +1253,7 @@ export function initGestioneAnagrafica() {
         document.getElementById('attiva-account-modal').classList.remove('active')
         _operatori = await loadOperatoriHR()
         renderTabellaHR(_operatori)
+        await openModalAnag(pid)
       } catch (err) {
         showToast('Errore: ' + err.message, 'error')
       } finally {
