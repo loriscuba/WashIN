@@ -1,5 +1,6 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
+import { validaCF, validaEmail, validaIBAN, validaPW, primoErrore } from '../validate.js'
 
 const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
@@ -709,6 +710,12 @@ async function saveNuovoOperatore() {
     showToast('Inserisci almeno nome o cognome', 'error')
     return
   }
+  const errNuovo = primoErrore([
+    [validaCF(g('codice_fiscale')),    'Codice fiscale non valido (deve essere 16 caratteri nel formato corretto)'],
+    [validaEmail(g('email')),          'Email non valida (verifica che contenga @ e un dominio)'],
+    [validaIBAN(g('iban_dipendente')), 'IBAN non valido (deve iniziare con IT seguito da 25 caratteri)'],
+  ])
+  if (errNuovo) { showToast(errNuovo, 'error'); return }
 
   const fields = {
     nome: g('nome'),
@@ -989,6 +996,13 @@ async function saveDatiPersonali() {
     const fields = {}
     const datiForm = document.getElementById('hr-dati-form')
     if (datiForm) {
+      const gd = n => datiForm.querySelector(`[name="${n}"]`)?.value?.trim() || null
+      const errDati = primoErrore([
+        [validaCF(gd('codice_fiscale')),    'Codice fiscale non valido (deve essere 16 caratteri nel formato corretto)'],
+        [validaEmail(gd('email')),          'Email non valida (verifica che contenga @ e un dominio)'],
+        [validaIBAN(gd('iban_dipendente')), 'IBAN non valido (deve iniziare con IT seguito da 25 caratteri)'],
+      ])
+      if (errDati) { showToast(errDati, 'error'); return }
       ;['nome','cognome','email','codice_fiscale','telefono','data_assunzione','matricola','iban_dipendente','note_hr']
         .forEach(f => { const el = datiForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value || null })
     }
@@ -1278,8 +1292,9 @@ export function initGestioneAnagrafica() {
       const conf   = form.querySelector('[name="conferma"]').value
       const pid    = form.querySelector('[name="profilo_id"]').value
 
+      if (!validaEmail(email)) { showToast('Email non valida (verifica che contenga @ e un dominio)', 'error'); return }
       if (pw !== conf) { showToast('Le password non coincidono', 'error'); return }
-      if (pw.length < 6) { showToast('Password: minimo 6 caratteri', 'error'); return }
+      if (!validaPW(pw)) { showToast('Password: minimo 8 caratteri', 'error'); return }
 
       const submitBtn = document.getElementById('attiva-account-submit')
       submitBtn.disabled = true

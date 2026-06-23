@@ -1,4 +1,5 @@
 import supabase, { getUserProfile } from '../supabase.js'
+import { validaPW } from '../validate.js'
 import { checkAuth, logout } from '../auth.js'
 import { initAgenda, loadInterventiPassati, renderInterventiPassati, refreshAgenda } from './agenda.js'
 import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
@@ -137,6 +138,7 @@ function initProfilo(profile) {
     const pw = e.target.querySelector('[name="new_password"]').value
     const pw2 = e.target.querySelector('[name="confirm_password"]').value
     if (pw !== pw2) { alert('Le password non coincidono.'); return }
+    if (!validaPW(pw)) { alert('Password: minimo 8 caratteri.'); return }
     const { error } = await supabase.auth.updateUser({ password: pw })
     if (error) {
       alert('Errore: ' + error.message)

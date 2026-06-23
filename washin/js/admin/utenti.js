@@ -1,5 +1,6 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
+import { validaEmail, validaPW, primoErrore } from '../validate.js'
 
 async function getCurrentRole() {
   const { data } = await supabase.auth.getSession()
@@ -202,7 +203,7 @@ export function initUtenti() {
         const pw = fd.get('new_password')
         const pw2 = fd.get('confirm_password')
         if (pw !== pw2) { showToast('Le password non coincidono', 'warning'); return }
-        if (pw.length < 6) { showToast('Password minimo 6 caratteri', 'warning'); return }
+        if (!validaPW(pw)) { showToast('Password: minimo 8 caratteri', 'warning'); return }
         const targetId = resetPwModal.dataset.targetId
         const { error } = await supabase.rpc('admin_set_user_password', {
           target_user_id: targetId,
@@ -227,11 +228,13 @@ export function initUtenti() {
       form?.addEventListener('submit', async e => {
         e.preventDefault()
         const fd = new FormData(form)
+        const emailMod = fd.get('email')?.trim()
+        if (!validaEmail(emailMod)) { showToast('Email non valida (verifica che contenga @ e un dominio)', 'error'); return }
         await saveUtente({
           id: form.dataset.utenteId,
           nome: fd.get('nome'),
           cognome: fd.get('cognome'),
-          email: fd.get('email'),
+          email: emailMod,
           telefono: fd.get('telefono'),
           qualifica: fd.get('qualifica'),
           ruolo: fd.get('ruolo'),
@@ -249,10 +252,15 @@ export function initUtenti() {
         const fd = new FormData(nuovoForm)
         const pw = fd.get('password')
         const pw2 = fd.get('confirm_password')
-        if (pw !== pw2) { showToast('Le password non coincidono', 'warning'); return }
-        if (pw.length < 6) { showToast('Password minimo 6 caratteri', 'warning'); return }
+        const emailNuovo = fd.get('email')?.trim()
+        const errNuovoU = primoErrore([
+          [validaEmail(emailNuovo), 'Email non valida (verifica che contenga @ e un dominio)'],
+          [pw === pw2,              'Le password non coincidono'],
+          [validaPW(pw),           'Password: minimo 8 caratteri'],
+        ])
+        if (errNuovoU) { showToast(errNuovoU, 'warning'); return }
         const ok = await createNuovoUtente({
-          email: fd.get('email'),
+          email: emailNuovo,
           password: pw,
           nome: fd.get('nome'),
           cognome: fd.get('cognome'),
