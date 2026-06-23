@@ -1843,6 +1843,17 @@
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                 <div class="form-group"><label>Qualifica</label><input name="qualifica" type="text" placeholder="es. Addetta pulizie"></div>
+                <div class="form-group"><label>Tipologia</label>
+                  <select name="tipologia">
+                    <option value="">-- Seleziona --</option>
+                    <option value="addetto_pulizie">Addetto pulizie</option>
+                    <option value="operaio">Operaio</option>
+                    <option value="impiegato">Impiegato</option>
+                    <option value="amministratore">Amministratore</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                 <div class="form-group"><label>Tipo contratto</label>
                   <select name="tipo_contratto">
                     <option value="">-- Seleziona --</option>
@@ -1853,10 +1864,11 @@
                     <option value="apprendistato">Apprendistato</option>
                   </select>
                 </div>
+                <div class="form-group"><label>CCNL applicato</label><input name="ccnl" type="text" placeholder="Pulizie e Multiservizi"></div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div class="form-group"><label>CCNL applicato</label><input name="ccnl" type="text" placeholder="Pulizie e Multiservizi"></div>
                 <div class="form-group"><label>Paga base (€)</label><input name="paga_base" type="number" step="0.01" min="0"></div>
+                <div class="form-group"><label>Reparto</label><input name="reparto" type="text" placeholder="es. 101"></div>
               </div>
             </form>
           </div>
@@ -1924,6 +1936,29 @@
                   <option value="">— non specificata —</option>
                 </select>
               </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Tipologia</label>
+                <select name="tipologia">
+                  <option value="">— non specificata —</option>
+                  <option value="addetto_pulizie">Addetto pulizie</option>
+                  <option value="operaio">Operaio</option>
+                  <option value="impiegato">Impiegato</option>
+                  <option value="amministratore">Amministratore</option>
+                </select>
+              </div>
+              <div class="form-group"><label>Tipo retribuzione</label>
+                <select name="tipo_retribuzione">
+                  <option value="">— non specificato —</option>
+                  <option value="oraria">Oraria</option>
+                  <option value="giornaliera">Giornaliera</option>
+                  <option value="mensile_fisso">Mensile fisso</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Reparto</label><input name="reparto" type="text" placeholder="es. 101"></div>
+              <div class="form-group"><label>Posizione INAIL</label><input name="posizione_inail" type="text" placeholder="es. 95179913"></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
               <div class="form-group"><label>Tipo contratto</label>

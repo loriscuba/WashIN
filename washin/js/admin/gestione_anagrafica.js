@@ -258,6 +258,7 @@ function parseDocumentText(text, docType) {
     // Pattern: 3-digit cod_costo, livello (1-8), stesso livello ripetuto, [%ptime], ore_mensili, gg_ccnl
     const livelloM = text.match(/\b(\d{3})\s+([1-8])\s+\2\s+((?:\d{1,2},\d{2}\s+)?(\d{2,3},\d{2}))\s+\d{2}\b/)
     if (livelloM) {
+      r.reparto      = livelloM[1]
       r.livello_ccnl = livelloM[2]
       const oreCcnl = pd(livelloM[4])
       const seg = livelloM[3].trim()
@@ -324,6 +325,34 @@ function parseDocumentText(text, docType) {
     // CCNL + categoria lavorativa
     if (!r.ccnl && /pulizie|multiservizi/i.test(text)) r.ccnl = 'Pulizie e Multiservizi'
     if (r.livello_ccnl && !r.categoria_lavorativa) r.categoria_lavorativa = `${r.livello_ccnl}° livello`
+
+    // TIPOLOGIA da qualifica testo
+    if (r.qualifica && !r.tipologia) {
+      const q = r.qualifica.toLowerCase()
+      if (/amministrat/i.test(q)) r.tipologia = 'amministratore'
+      else if (/impiegat/i.test(q)) r.tipologia = 'impiegato'
+      else if (/operai/i.test(q)) r.tipologia = 'operaio'
+      else if (/addett|puliz/i.test(q)) r.tipologia = 'addetto_pulizie'
+    }
+    // Fallback tipologia da testo cedolino
+    if (!r.tipologia) {
+      if (/\bAMMINISTRATORE\b/i.test(text)) r.tipologia = 'amministratore'
+      else if (/\bIMPIEGAT[AO]\b/i.test(text)) r.tipologia = 'impiegato'
+      else if (/\bOPERAI[AO]\b/i.test(text)) r.tipologia = 'operaio'
+      else if (/\bADDETT[AO]\b/i.test(text)) r.tipologia = 'addetto_pulizie'
+    }
+    // TIPO RETRIBUZIONE in base a tipologia
+    if (!r.tipo_retribuzione) {
+      if (r.tipologia === 'amministratore') r.tipo_retribuzione = 'mensile_fisso'
+      else if (r.tipologia === 'impiegato') r.tipo_retribuzione = 'giornaliera'
+      else r.tipo_retribuzione = 'oraria'
+    }
+
+    // REPARTO fallback da etichetta esplicita (già estratto da livelloM[1] sopra)
+    if (!r.reparto) {
+      const repartoM = text.match(/\bREPARTO\s+(\d{2,4})/i)
+      if (repartoM) r.reparto = repartoM[1]
+    }
 
     // TIPO CONTRATTO da DATA CESSAZIONE (CED: presente ma vuoto = indeterminato; con data = determinato)
     if (/DATA\s+CESSAZIONE/.test(text)) {
@@ -480,11 +509,17 @@ async function handleNuovoFileChange(file) {
     form.dataset.bpNetto = parsed._bp_netto || ''
     form.dataset.dataNascita = parsed.data_nascita || ''
     // Memorizza dati retribuzione per salvataggio (non sono in hr-nuovo-form)
-    form.dataset.retribLivello   = parsed.livello_ccnl || ''
-    form.dataset.retribCcnl      = parsed.ccnl || ''
-    form.dataset.retribCategoria = parsed.categoria_lavorativa || ''
-    form.dataset.retribOre       = parsed.ore_mensili_contratto != null ? parsed.ore_mensili_contratto : ''
-    form.dataset.retribScatti    = parsed.scatti_anzianita != null ? parsed.scatti_anzianita : ''
+    form.dataset.retribLivello       = parsed.livello_ccnl || ''
+    form.dataset.retribCcnl          = parsed.ccnl || ''
+    form.dataset.retribCategoria     = parsed.categoria_lavorativa || ''
+    form.dataset.retribOre           = parsed.ore_mensili_contratto != null ? parsed.ore_mensili_contratto : ''
+    form.dataset.retribScatti        = parsed.scatti_anzianita != null ? parsed.scatti_anzianita : ''
+    form.dataset.retribTipologia     = parsed.tipologia || ''
+    form.dataset.retribTipoRetrib    = parsed.tipo_retribuzione || ''
+    form.dataset.retribReparto       = parsed.reparto || ''
+    // Aggiorna campo tipologia nel form nuovo se presente
+    if (parsed.tipologia) { const el = form.querySelector('[name="tipologia"]'); if (el) el.value = parsed.tipologia }
+    if (parsed.reparto)   { const el = form.querySelector('[name="reparto"]');   if (el) el.value = parsed.reparto }
   }
 
   if (estratoDiv) {
@@ -695,6 +730,9 @@ async function saveNuovoOperatore() {
     ore_mensili_contratto: form.dataset.retribOre ? parseFloat(form.dataset.retribOre) : null,
     scatti_anzianita:      form.dataset.retribScatti ? parseFloat(form.dataset.retribScatti) : null,
     costo_mensile:         form.dataset.retribCostoMensile ? parseFloat(form.dataset.retribCostoMensile) : null,
+    tipologia:             g('tipologia') || form.dataset.retribTipologia || null,
+    tipo_retribuzione:     form.dataset.retribTipoRetrib || null,
+    reparto:               g('reparto') || form.dataset.retribReparto || null,
   }
 
   // Calcola costo_mensile se non già impostato
@@ -910,7 +948,8 @@ async function openModalAnag(operatoreId) {
 
     const retribForm = document.getElementById('hr-retrib-form')
     if (retribForm) {
-      ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto']
+      ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto',
+        'tipologia','tipo_retribuzione','reparto','posizione_inail']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
@@ -955,7 +994,8 @@ async function saveDatiPersonali() {
     }
     const retribForm = document.getElementById('hr-retrib-form')
     if (retribForm) {
-      ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto','livello_ccnl','voce_tariffa_inail']
+      ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto','livello_ccnl','voce_tariffa_inail',
+        'tipologia','tipo_retribuzione','reparto','posizione_inail']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value || null })
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value ? parseFloat(el.value) : null })

@@ -3,10 +3,10 @@ import { showToast } from './clienti.js'
 import { extractTextFromFile, extractPageTextsFromPdf, parseDocumentText } from './gestione_anagrafica.js'
 
 const ANAG_COLS = ['cognome','nome','codice_fiscale','email','telefono','matricola',
-                   'qualifica','tipo_contratto','paga_base','data_assunzione',
+                   'qualifica','tipologia','tipo_contratto','paga_base','data_assunzione',
                    'data_nascita','ccnl','categoria_lavorativa','iban_dipendente',
                    'livello_ccnl','ore_mensili_contratto','scatti_anzianita','costo_mensile',
-                   'data_scadenza_contratto']
+                   'data_scadenza_contratto','tipo_retribuzione','reparto','posizione_inail']
 const BUSTE_COLS = ['codice_fiscale','anno','mese','paga_base','contingenza','edr','superminimo',
                     'scatti_anzianita','indennita_varie','altri_elementi','contributi_inps_dip','irpef',
                     'addizionali','altre_ritenute','tfr_mese','totale_lordo','totale_netto',
@@ -195,9 +195,16 @@ function parseInailPayslip(text) {
     }
   }
 
-  // ── Qualifica ───────────────────────────────────────────────────────────────
-  const qualM = text.match(/\b(OPERAIO|IMPIEGATO|QUADRO|DIRIGENTE|APPRENDISTA|FUNZIONARIO)\b/i)
-  if (qualM) anag.qualifica = qualM[1].charAt(0).toUpperCase() + qualM[1].slice(1).toLowerCase()
+  // ── Qualifica + Tipologia ───────────────────────────────────────────────────
+  const qualM = text.match(/\b(OPERAI[AO]|IMPIEGAT[AO]|QUADRO|DIRIGENTE|APPRENDISTA|FUNZIONARIO|ADDETT[AO]|AMMINISTRATORE)\b/i)
+  if (qualM) {
+    anag.qualifica = qualM[1].charAt(0).toUpperCase() + qualM[1].slice(1).toLowerCase()
+    const q = qualM[1].toUpperCase()
+    if (/AMMINISTRAT/.test(q)) { anag.tipologia = 'amministratore'; anag.tipo_retribuzione = 'mensile_fisso' }
+    else if (/IMPIEGAT/.test(q)) { anag.tipologia = 'impiegato'; anag.tipo_retribuzione = 'giornaliera' }
+    else if (/OPERAI/.test(q)) { anag.tipologia = 'operaio'; anag.tipo_retribuzione = 'oraria' }
+    else { anag.tipologia = 'addetto_pulizie'; anag.tipo_retribuzione = 'oraria' }
+  }
 
   // ── Livello ─────────────────────────────────────────────────────────────────
   const livM = text.match(/LIVELLO\s+(\d+)/i)
@@ -350,15 +357,16 @@ function parseCedolino(text) {
     // Il livello CCNL viene estratto dalla riga qualifica qui sotto.
   }
 
-  // ── Livello CCNL dalla riga qualifica CED ────────────────────────────────────
+  // ── Livello CCNL + Reparto dalla riga qualifica CED ─────────────────────────
   // Formato: QUALIFICA C_COSTO(1-2 digit) COD_COSTO(3 digit) LIVELLO LIVELLO [%ptime] ORE_CCNL GG_CCNL
   // Il livello si riconosce perché appare DUE VOLTE di seguito (LIVELLO = COD_LIV)
-  const livelloM = text.match(/\b\d{3}\s+([1-8])\s+\1\s+((?:\d{1,2},\d{2}\s+)?(\d{2,3},\d{2}))\s+\d{2}\b/)
+  const livelloM = text.match(/\b(\d{3})\s+([1-8])\s+\2\s+((?:\d{1,2},\d{2}\s+)?(\d{2,3},\d{2}))\s+\d{2}\b/)
   if (livelloM) {
-    anag.livello_ccnl = livelloM[1]
-    anag.categoria_lavorativa = `${livelloM[1]}° livello`
-    const oreCcnl = parseFloat(livelloM[3].replace(',', '.'))
-    const seg = livelloM[2].trim()
+    anag.reparto = livelloM[1]          // 3-digit cod_costo = reparto
+    anag.livello_ccnl = livelloM[2]
+    anag.categoria_lavorativa = `${livelloM[2]}° livello`
+    const oreCcnl = parseFloat(livelloM[4].replace(',', '.'))
+    const seg = livelloM[3].trim()
     if (/\s/.test(seg)) {
       const ptPct = parseFloat(seg.split(/\s+/)[0].replace(',', '.'))
       if (ptPct >= 1 && ptPct < 100) {
@@ -372,9 +380,22 @@ function parseCedolino(text) {
     }
   }
 
-  // ── Qualifica ───────────────────────────────────────────────────────────────
+  // ── Qualifica + Tipologia ───────────────────────────────────────────────────
   const qualM = text.match(/\b(OPERAI[AO]|IMPIEGAT[AO]|QUADRO|DIRIGENTE|APPRENDISTA|FUNZIONARIO|ADDETT[AO]\s+ALLE?\s+PULIZ\w*|ADDETT[AO]|AMMINISTRATORE)\b/i)
-  if (qualM) anag.qualifica = qualM[1].trim().charAt(0).toUpperCase() + qualM[1].trim().slice(1).toLowerCase()
+  if (qualM) {
+    anag.qualifica = qualM[1].trim().charAt(0).toUpperCase() + qualM[1].trim().slice(1).toLowerCase()
+    const q = qualM[1].toUpperCase()
+    if (/AMMINISTRAT/.test(q)) anag.tipologia = 'amministratore'
+    else if (/IMPIEGAT/.test(q)) anag.tipologia = 'impiegato'
+    else if (/OPERAI/.test(q)) anag.tipologia = 'operaio'
+    else anag.tipologia = 'addetto_pulizie'
+  }
+  // Tipo retribuzione iniziale da tipologia (raffinato dopo lettura paga_base)
+  if (!anag.tipo_retribuzione) {
+    if (anag.tipologia === 'amministratore') anag.tipo_retribuzione = 'mensile_fisso'
+    else if (anag.tipologia === 'impiegato') anag.tipo_retribuzione = 'giornaliera'
+    else anag.tipo_retribuzione = 'oraria'
+  }
 
   // ── Paga base + Scatti ANZ: header e valori possono essere sulla stessa riga ──
   // pdfjs spesso non inserisce \n tra header e valori nelle tabelle CED.
@@ -388,6 +409,10 @@ function parseCedolino(text) {
       busta.contingenza     = pd(pagaRow[2])
       busta.edr             = pd(pagaRow[3])
       anag.scatti_anzianita = sc
+      // Raffina tipo_retribuzione: impiegato → giornaliera, altri → mensile_fisso
+      if (!anag.tipo_retribuzione || anag.tipo_retribuzione === 'oraria') {
+        anag.tipo_retribuzione = anag.tipologia === 'impiegato' ? 'giornaliera' : 'mensile_fisso'
+      }
     } else if (pb > 0) {
       // Lavoratore orario: moltiplica tariffa per ore CCNL
       const refH = anag.ore_mensili_contratto || 173
@@ -395,6 +420,7 @@ function parseCedolino(text) {
       busta.contingenza     = Math.round(pd(pagaRow[2]) * refH * 100) / 100
       busta.edr             = Math.round(pd(pagaRow[3]) * refH * 100) / 100
       if (sc > 0) anag.scatti_anzianita = Math.round(sc * refH * 100) / 100
+      anag.tipo_retribuzione = 'oraria'
     }
   }
   if (!anag.paga_base) {
