@@ -3,7 +3,6 @@
 -- Eseguire su Supabase → SQL Editor
 
 -- ── 0. VERIFICA PRIMA DI PROCEDERE ───────────────────────────────────────────
--- Controlla cosa verrà eliminato:
 
 SELECT
   p.id,
@@ -17,27 +16,27 @@ FROM profili p
 LEFT JOIN auth.users u ON p.user_id = u.id
 ORDER BY u.email NULLS LAST, p.cognome;
 
--- (se il risultato è quello atteso, prosegui con la sezione 1)
+-- (se il risultato è quello atteso, prosegui)
 
--- ── 1. ELIMINA OPERATORI (profili non admin) ──────────────────────────────────
--- CASCADE su: buste_paga, checklist_compilate, presenze (se hanno FK con CASCADE)
+-- ── 1. ELIMINA PRIMA LE TABELLE CHE REFERENZIANO PROFILI (no CASCADE) ─────────
+
+DELETE FROM interventi;
+DELETE FROM presenze;
+
+-- ── 2. ELIMINA OPERATORI (profili non admin) ──────────────────────────────────
+-- CASCADE elimina automaticamente: buste_paga
 
 DELETE FROM profili
-WHERE user_id IS NULL                                            -- profili importati senza account
+WHERE user_id IS NULL
    OR user_id NOT IN (
         SELECT id FROM auth.users WHERE email = 'loriscuba@gmail.com'
       );
 
--- ── 2. ELIMINA UTENTI AUTH (eccetto admin) ────────────────────────────────────
--- ON DELETE SET NULL su profili.user_id → il profilo admin non viene toccato
+-- ── 3. ELIMINA UTENTI AUTH (eccetto admin) ────────────────────────────────────
+-- ON DELETE SET NULL su profili.user_id → il profilo admin rimane intatto
 
 DELETE FROM auth.users
 WHERE email != 'loriscuba@gmail.com';
-
--- ── 3. PULISCE INTERVENTI E PRESENZE ─────────────────────────────────────────
-
-DELETE FROM interventi;
-DELETE FROM presenze;
 
 -- ── 4. VERIFICA FINALE ────────────────────────────────────────────────────────
 
