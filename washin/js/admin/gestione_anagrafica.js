@@ -1248,7 +1248,12 @@ export function initGestioneAnagrafica() {
         const { data, error } = await supabase.functions.invoke('crea-utente-operatore', {
           body: { email, password: pw, profilo_id: pid }
         })
-        if (error || data?.error) throw new Error(data?.error || error?.message || 'Errore sconosciuto')
+        if (error) {
+          let msg = error.message || 'Errore sconosciuto'
+          try { const body = await error.context?.json?.(); if (body?.error) msg = body.error } catch {}
+          throw new Error(msg)
+        }
+        if (data?.error) throw new Error(data.error)
         showToast('Account creato. L\'operatore può ora accedere.', 'success')
         document.getElementById('attiva-account-modal').classList.remove('active')
         _operatori = await loadOperatoriHR()
