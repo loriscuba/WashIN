@@ -851,7 +851,7 @@ async function uploadBustePagaPdfs(rowsMeta) {
     for (const meta of fileMetas) {
       try {
         const newPdf = await PDFLib.PDFDocument.create()
-        const [page] = await newPdf.copyPagesFrom(srcPdf, [meta.pageIndex])
+        const [page] = await newPdf.copyPages(srcPdf, [meta.pageIndex])
         newPdf.addPage(page)
         const pdfBytes = await newPdf.save()
 
