@@ -1984,6 +1984,7 @@
             </div>
             <div class="form-group"><label>Anno</label><input name="anno" type="number" min="2020" max="2099" step="1"></div>
             <div class="form-group"><label>Allegato busta paga (PDF / JPG / PNG)</label><input name="file" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
+          <input type="hidden" name="file_path">
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div class="form-group"><label>Ore lavorate</label><input name="ore_lavorate" type="number" step="0.5" min="0"></div>
@@ -2036,8 +2037,9 @@
           <div class="form-group"><label>Note</label><textarea name="note" rows="2"></textarea></div>
         </form>
 
-        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+        <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap;">
           <button type="button" class="btn btn-secondary btn-sm" id="hr-busta-close">Annulla</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="hr-busta-pdf" style="display:none;">📄 Visualizza PDF</button>
           <button type="button" class="btn btn-primary btn-sm" id="hr-busta-save">Salva busta paga</button>
         </div>
       </div>

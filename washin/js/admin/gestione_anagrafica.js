@@ -1058,11 +1058,15 @@ async function openModalBusta(bustaId = null) {
       })
       form.dataset.bustaId = bustaId
       document.getElementById('hr-busta-title').textContent = `Busta paga — ${MESI[data.mese - 1]} ${data.anno}`
+      const pdfBtn = document.getElementById('hr-busta-pdf')
+      if (pdfBtn) pdfBtn.style.display = data.file_path ? '' : 'none'
     } catch (err) {
       showToast('Errore caricamento busta', 'error')
       return
     }
   } else {
+    const pdfBtn = document.getElementById('hr-busta-pdf')
+    if (pdfBtn) pdfBtn.style.display = 'none'
     const now = new Date()
     const meseEl = form.querySelector('[name="mese"]')
     const annoEl = form.querySelector('[name="anno"]')
@@ -1108,7 +1112,7 @@ async function saveBustaPaga() {
   const bustaId = form.dataset.bustaId
 
   // Upload file
-  let filePath = bustaId ? (form.querySelector('[name="file_path_current"]')?.value || null) : null
+  let filePath = bustaId ? (form.querySelector('[name="file_path"]')?.value || null) : null
   const fileInput = form.querySelector('[name="file"]')
   const file = fileInput?.files?.[0]
   if (file) {
@@ -1280,6 +1284,13 @@ export function initGestioneAnagrafica() {
 
     // Busta modal save
     document.getElementById('hr-busta-save')?.addEventListener('click', saveBustaPaga)
+
+    // Busta modal visualizza PDF
+    document.getElementById('hr-busta-pdf')?.addEventListener('click', () => {
+      const form = document.getElementById('hr-busta-form')
+      const fp = form?.querySelector('[name="file_path"]')?.value
+      if (fp) downloadBusta(fp)
+    })
 
     // Auto-calcolo totali nel form busta
     const bustaForm = document.getElementById('hr-busta-form')
