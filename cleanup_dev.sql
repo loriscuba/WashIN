@@ -18,8 +18,9 @@ ORDER BY u.email NULLS LAST, p.cognome;
 
 -- (se il risultato è quello atteso, prosegui)
 
--- ── 1. ELIMINA PRIMA LE TABELLE CHE REFERENZIANO PROFILI (no CASCADE) ─────────
+-- ── 1. ELIMINA IN ORDINE TOPOLOGICO (figlie prima dei genitori) ───────────────
 
+DELETE FROM checklist_compilate;   -- referenzia interventi
 DELETE FROM interventi;
 DELETE FROM presenze;
 
@@ -40,12 +41,14 @@ WHERE email != 'loriscuba@gmail.com';
 
 -- ── 4. VERIFICA FINALE ────────────────────────────────────────────────────────
 
-SELECT 'profili'    AS tabella, count(*) AS righe FROM profili
+SELECT 'profili'              AS tabella, count(*) AS righe FROM profili
 UNION ALL
-SELECT 'auth.users',             count(*)          FROM auth.users
+SELECT 'auth.users',                       count(*)          FROM auth.users
 UNION ALL
-SELECT 'buste_paga',             count(*)          FROM buste_paga
+SELECT 'buste_paga',                       count(*)          FROM buste_paga
 UNION ALL
-SELECT 'interventi',             count(*)          FROM interventi
+SELECT 'interventi',                       count(*)          FROM interventi
 UNION ALL
-SELECT 'presenze',               count(*)          FROM presenze;
+SELECT 'presenze',                         count(*)          FROM presenze
+UNION ALL
+SELECT 'checklist_compilate',              count(*)          FROM checklist_compilate;
