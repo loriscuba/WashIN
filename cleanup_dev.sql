@@ -34,9 +34,10 @@ WHERE user_id IS NULL                                            -- profili impo
 DELETE FROM auth.users
 WHERE email != 'loriscuba@gmail.com';
 
--- ── 3. PULISCE INTERVENTI ─────────────────────────────────────────────────────
+-- ── 3. PULISCE INTERVENTI E PRESENZE ─────────────────────────────────────────
 
 DELETE FROM interventi;
+DELETE FROM presenze;
 
 -- ── 4. VERIFICA FINALE ────────────────────────────────────────────────────────
 
@@ -46,4 +47,6 @@ SELECT 'auth.users',             count(*)          FROM auth.users
 UNION ALL
 SELECT 'buste_paga',             count(*)          FROM buste_paga
 UNION ALL
-SELECT 'interventi',             count(*)          FROM interventi;
+SELECT 'interventi',             count(*)          FROM interventi
+UNION ALL
+SELECT 'presenze',               count(*)          FROM presenze;
