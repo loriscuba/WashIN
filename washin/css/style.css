@@ -314,6 +314,7 @@ textarea {
   border-radius: var(--radius);
   padding: 20px;
   box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--teal);
 }
 
 .kpi-card .value {
