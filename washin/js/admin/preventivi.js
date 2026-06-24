@@ -110,7 +110,7 @@ const LIVELLI = [
 
 async function loadOperatoriList() {
   const { data } = await supabase.from('profili')
-    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale')
+    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base')
     .neq('attivo', false)
     .order('cognome')
   _operatoriList = data || []
@@ -162,11 +162,16 @@ function buildOperatoreRow(form, item = {}) {
     if (op && op.costo_mensile > 0) {
       const oreMensili = op.ore_mensili_contratto || 173
       cuEl.value = ((op.costo_mensile * getCoeff(form)) / oreMensili).toFixed(4)
-    } else if (op && op.fir_personale != null && op.livello_ccnl) {
+    } else if (op && op.fir_personale != null) {
       const oreMensili = op.ore_mensili_contratto || 173
-      const ccnl = await calcolaCostoCcnl(op.livello_ccnl, 0, op.voce_tariffa_inail)
-      if (ccnl?.lordo) {
-        cuEl.value = ((ccnl.lordo * (1 + op.fir_personale / 100) * getCoeff(form)) / oreMensili).toFixed(4)
+      let lordo = 0
+      if (op.livello_ccnl) {
+        const ccnl = await calcolaCostoCcnl(op.livello_ccnl, 0, op.voce_tariffa_inail)
+        lordo = ccnl?.lordo || 0
+      }
+      if (!lordo && op.paga_base > 0) lordo = op.paga_base
+      if (lordo > 0) {
+        cuEl.value = ((lordo * (1 + op.fir_personale / 100) * getCoeff(form)) / oreMensili).toFixed(4)
         cuEl.dataset.firStima = String(op.fir_personale)
       } else {
         cuEl.value = ''
