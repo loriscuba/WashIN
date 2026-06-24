@@ -476,6 +476,11 @@
               <strong>Coefficienti Appalto</strong>
               <p>Moltiplicatori di rischio per i preventivi</p>
             </a>
+            <a href="#incidenza-reale" data-target="incidenza-reale" class="config-card group-fin">
+              <div class="config-card-icon"><span><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></span></div>
+              <strong>Incidenza Personale</strong>
+              <p>Fattore di carico reale sui costi (FIR)</p>
+            </a>
           </div>
         </section>
 
@@ -576,6 +581,60 @@
                 <tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px;">Caricamento…</td></tr>
               </tbody>
             </table>
+          </div>
+        </section>
+
+        <!-- ── Incidenza Reale Personale ────────────────── -->
+        <section id="incidenza-reale" class="section hidden">
+          <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+              <h1>Incidenza Reale Personale</h1>
+              <p style="color:var(--gray-500);margin-top:8px;">
+                Fattore di carico reale (FIR) sul lordo, calibrato dai consuntivi della commercialista.<br>
+                <strong>Costo totale = Lordo × (1 + FIR%)</strong> — usato come stima nei preventivi senza busta paga.
+              </p>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;flex-wrap:wrap;" class="fir-grid">
+            <div class="card">
+              <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--gray-900);">Fattore FIR configurabile</h3>
+              <p style="font-size:12px;color:var(--gray-500);margin-bottom:14px;">
+                Percentuale accessori sul lordo totale del personale (include straordinari tipici).
+              </p>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <input type="number" id="fir-input" step="0.1" min="50" max="200" value="80"
+                  style="width:80px;padding:7px 10px;border:1.5px solid var(--gray-300);border-radius:8px;font-size:14px;">
+                <span style="font-size:16px;font-weight:700;color:var(--gray-500);">%</span>
+                <button id="fir-save-btn" class="btn btn-primary btn-sm" style="padding:7px 16px;">Salva</button>
+              </div>
+              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:11px;color:#92400e;">
+                <strong>Composizione FIR teorico CCNL (no straordinari): ~94%</strong><br>
+                INPS datore 31,5% · INAIL ~4% · Ratei 13ª+14ª 16,7% · Ferie/ROL 22% · INPS su ratei 12,2% · TFR 8,1%
+              </div>
+            </div>
+
+            <div class="card">
+              <h3 style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--gray-900);">Calibrazione dai consuntivi</h3>
+              <p style="font-size:11px;color:var(--gray-500);margin-bottom:10px;">Fonte: Costo Consuntivo del Periodo — Sanna SRL (Mar–Mag 2026)</p>
+              <table class="data-table" style="font-size:12px;">
+                <thead>
+                  <tr><th>Mese</th><th>Lordo tot.</th><th>Costo tot.</th><th style="color:#d97706;">Incidenza</th><th>€/h</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Mar 2026</td><td>€ 95.860</td><td>€ 171.295</td><td style="font-weight:700;color:#d97706;">+78,7%</td><td>17,04</td></tr>
+                  <tr><td>Apr 2026</td><td>€ 87.369</td><td>€ 155.602</td><td style="font-weight:700;color:#d97706;">+78,1%</td><td>18,78</td></tr>
+                  <tr><td>Mag 2026</td><td>€ 82.080</td><td>€ 151.551</td><td style="font-weight:700;color:#d97706;">+84,6%</td><td>18,40</td></tr>
+                  <tr style="font-weight:700;background:#fffbeb;">
+                    <td>Media</td><td>€ 88.436</td><td>€ 159.483</td><td style="color:#d97706;">+80,5%</td><td>18,07</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p style="font-size:11px;color:var(--gray-500);margin-top:8px;">
+                Sul solo lordo ordinario (no straordinari): incidenza media <strong>+102%</strong>.
+              </p>
+            </div>
           </div>
         </section>
 

@@ -261,6 +261,28 @@ async function saveImpostUseCoeff(val) {
   showToast(val ? 'Coefficiente abilitato nei preventivi' : 'Coefficiente disabilitato nei preventivi', 'success')
 }
 
+// ── Fattore di Incidenza Reale (FIR) ─────────────────────────────────────────
+
+async function loadFir() {
+  const { data } = await supabase.from('impostazioni')
+    .select('valore').eq('chiave', 'fir_personale').maybeSingle()
+  const val = data?.valore != null ? parseFloat(data.valore) : 80
+  const el = document.getElementById('fir-input')
+  if (el) el.value = val
+  return val
+}
+
+async function saveFir() {
+  const el = document.getElementById('fir-input')
+  const val = parseFloat(el?.value)
+  if (isNaN(val) || val < 50 || val > 200) { showToast('FIR deve essere tra 50 e 200', 'error'); return }
+  const { error } = await supabase.from('impostazioni')
+    .upsert({ chiave: 'fir_personale', valore: String(val), aggiornato_a: new Date().toISOString() })
+  if (error) { showToast('Errore salvataggio FIR', 'error'); return }
+  window.dispatchEvent(new CustomEvent('impostazioni:changed', { detail: { fir_personale: val } }))
+  showToast(`FIR salvato: ${val}%`, 'success')
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initConfigurazioni() {
@@ -300,12 +322,15 @@ export function initConfigurazioni() {
   document.getElementById('coeff-add-btn')?.addEventListener('click', addNewCoefficientiRow)
   document.getElementById('impost-usa-coeff')?.addEventListener('change', e => saveImpostUseCoeff(e.target.checked))
 
+  document.getElementById('fir-save-btn')?.addEventListener('click', saveFir)
+
   // Load data when navigating to each config sub-section
   document.getElementById('main-content')?.addEventListener('click', e => {
     const link = e.target.closest('a[data-target]')
     if (!link) return
-    if (link.dataset.target === 'parametri-ccnl')     refreshCcnl()
-    if (link.dataset.target === 'tariffe-inail')      refreshInail()
+    if (link.dataset.target === 'parametri-ccnl')       refreshCcnl()
+    if (link.dataset.target === 'tariffe-inail')        refreshInail()
     if (link.dataset.target === 'coefficienti-rischio') refreshCoefficienti()
+    if (link.dataset.target === 'incidenza-reale')      loadFir()
   })
 }

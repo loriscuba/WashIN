@@ -51,13 +51,17 @@ let _magItems = null
 let _operatoriList = []
 let _coefficienti   = []
 let _usaCoefficienti = true
+let _fir             = 80
 let _impostLoaded    = false
 
 async function loadImpostazioni() {
   if (_impostLoaded) return
-  const { data } = await supabase.from('impostazioni')
-    .select('valore').eq('chiave', 'preventivi_usa_coefficiente').maybeSingle()
-  _usaCoefficienti = data?.valore !== 'false'
+  const [coeff, fir] = await Promise.all([
+    supabase.from('impostazioni').select('valore').eq('chiave', 'preventivi_usa_coefficiente').maybeSingle(),
+    supabase.from('impostazioni').select('valore').eq('chiave', 'fir_personale').maybeSingle(),
+  ])
+  _usaCoefficienti = coeff.data?.valore !== 'false'
+  _fir = fir.data?.valore != null ? parseFloat(fir.data.valore) : 80
   _impostLoaded = true
 }
 
@@ -159,6 +163,14 @@ function buildOperatoreRow(form, item = {}) {
     if (op && op.costo_mensile > 0) {
       const oreMensili = op.ore_mensili_contratto || 173
       cuEl.value = ((op.costo_mensile * getCoeff(form)) / oreMensili).toFixed(4)
+      delete cuEl.dataset.firStima
+    } else if (op && op.livello_ccnl && _fir > 0) {
+      const oreMensili = op.ore_mensili_contratto || 173
+      const ccnl = await calcolaCostoCcnl(op.livello_ccnl, 0, op.voce_tariffa_inail)
+      if (ccnl?.lordo) {
+        cuEl.value = ((ccnl.lordo * (1 + _fir / 100) * getCoeff(form)) / oreMensili).toFixed(4)
+        cuEl.dataset.firStima = 'true'
+      }
     }
 
     refreshRischioHint(form)
@@ -241,8 +253,15 @@ function refreshRischioHint(form) {
     if (!op) return
     const nome = `${op.cognome || ''} ${op.nome || ''}`.trim() || 'Operatore'
     if (!op.costo_mensile || op.costo_mensile <= 0) {
-      parts.push(`<div><span style="color:#dc2626;font-weight:700;">⚠ ${nome}: costo mensile non impostato.</span>
-        <span style="color:#dc2626;"> Vai in Anagrafica → carica una busta paga.</span></div>`)
+      const cuElR = row.querySelector('.prev-op-cu')
+      const firStima = cuElR?.dataset?.firStima === 'true'
+      const cuVal = parseFloat(cuElR?.value)
+      if (firStima && cuVal > 0) {
+        parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — stima FIR <b>${_fir}%</b>: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
+      } else {
+        parts.push(`<div><span style="color:#dc2626;font-weight:700;">⚠ ${nome}: costo mensile non impostato.</span>
+          <span style="color:#dc2626;"> Vai in Anagrafica → carica una busta paga.</span></div>`)
+      }
       return
     }
     const oreMensili = op.ore_mensili_contratto || 173
@@ -750,6 +769,13 @@ export function initPreventivi() {
           syncTipoAppaltoVisibility(f)
           f.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
           refreshRischioHint(f)
+        }
+      }
+      if ('fir_personale' in e.detail) {
+        _fir = e.detail.fir_personale
+        const f = document.getElementById('preventivo-form')
+        if (f && modal?.classList.contains('active')) {
+          f.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
         }
       }
     })
