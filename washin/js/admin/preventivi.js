@@ -82,6 +82,11 @@ function getCoeff(form) {
   return parseFloat(sel?.options[sel.selectedIndex]?.dataset?.coeff || '1') || 1
 }
 
+function syncTipoAppaltoVisibility(form) {
+  const wrap = form?.querySelector('#prev-tipo-appalto-wrap')
+  if (wrap) wrap.style.display = _usaCoefficienti ? '' : 'none'
+}
+
 async function loadMagItems() {
   if (_magItems) return _magItems
   const { data } = await supabase
@@ -461,6 +466,7 @@ export async function openModalPreventivo(id = null) {
       loadImpostazioni(),
     ])
     populateTipoAppaltoSelect(form)
+    syncTipoAppaltoVisibility(form)
 
     // Ricalcola tutti gli operatori quando cambia il tipo appalto
     form.querySelector('[name="tipo_appalto"]')?.addEventListener('change', () => {
@@ -741,6 +747,7 @@ export function initPreventivi() {
         _impostLoaded = true
         const f = document.getElementById('preventivo-form')
         if (f && modal?.classList.contains('active')) {
+          syncTipoAppaltoVisibility(f)
           f.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
           refreshRischioHint(f)
         }
