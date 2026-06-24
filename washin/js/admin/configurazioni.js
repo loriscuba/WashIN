@@ -263,6 +263,117 @@ async function saveImpostUseCoeff(val) {
 
 // ── Fattore di Incidenza Reale (FIR) ─────────────────────────────────────────
 
+const EUR_FIR = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n || 0)
+
+async function loadFirPersonale() {
+  const { data } = await supabase.from('profili')
+    .select('id,nome,cognome,livello_ccnl,ore_mensili_contratto,costo_mensile,fir_personale')
+    .neq('attivo', false)
+    .order('cognome')
+
+  const tbody = document.getElementById('fir-tbody')
+  if (!tbody) return
+
+  if (!data?.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray-500);">Nessun dipendente trovato</td></tr>'
+    return
+  }
+
+  tbody.innerHTML = data.map(op => {
+    const nome = `${op.cognome || ''} ${op.nome || ''}`.trim()
+    const fir  = op.fir_personale != null ? op.fir_personale : ''
+    const ore  = op.ore_mensili_contratto || 160
+    const costoOra = (op.costo_mensile > 0 && fir !== '')
+      ? (op.costo_mensile / ore).toFixed(4)
+      : (op.costo_mensile > 0 ? (op.costo_mensile / ore).toFixed(4) : '—')
+    const costoRealeFmt = op.costo_mensile > 0
+      ? `<span style="color:#065f46;font-weight:600;">${EUR_FIR(op.costo_mensile)}</span>`
+      : `<span style="color:#dc2626;">—</span>`
+    return `
+      <tr data-id="${op.id}">
+        <td style="font-weight:600;">${nome}</td>
+        <td>${op.livello_ccnl || '<span style="color:var(--gray-500);">—</span>'}</td>
+        <td style="text-align:center;">${ore}</td>
+        <td>${costoRealeFmt}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <input class="fir-op-inp tbl-inp" type="number" step="0.1" min="50" max="200"
+              value="${fir}" placeholder="—" style="width:68px;">
+            <span style="font-size:11px;color:var(--gray-500);">%</span>
+          </div>
+        </td>
+        <td style="font-size:12px;color:#1e40af;text-align:center;" class="fir-op-preview">${costoOra !== '—' ? EUR_FIR(costoOra) + '/h' : '—'}</td>
+        <td><button class="btn btn-primary btn-sm fir-op-save-btn" style="white-space:nowrap;">Salva</button></td>
+      </tr>
+    `
+  }).join('')
+
+  // live preview: update €/h when FIR or costo_mensile change
+  tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+    const op = data.find(o => o.id === tr.dataset.id)
+    if (!op) return
+    const inp = tr.querySelector('.fir-op-inp')
+    const preview = tr.querySelector('.fir-op-preview')
+    inp?.addEventListener('input', () => {
+      const fv = parseFloat(inp.value)
+      const ore = op.ore_mensili_contratto || 160
+      if (!isNaN(fv) && op.costo_mensile > 0) {
+        preview.textContent = EUR_FIR(op.costo_mensile / ore) + '/h'
+      } else if (!isNaN(fv) && fv >= 50) {
+        preview.textContent = '(stima CCNL)'
+      } else {
+        preview.textContent = '—'
+      }
+    })
+  })
+}
+
+async function saveFirOperatore(tr) {
+  const id  = tr.dataset.id
+  const inp = tr.querySelector('.fir-op-inp')
+  const raw = inp?.value
+  if (raw === '' || raw == null) {
+    const { error } = await supabase.from('profili').update({ fir_personale: null }).eq('id', id)
+    if (error) { showToast('Errore salvataggio FIR', 'error'); return }
+    showToast('FIR rimosso (userebbe il globale)', 'success')
+    return
+  }
+  const val = parseFloat(raw)
+  if (isNaN(val) || val < 50 || val > 200) { showToast('FIR deve essere tra 50 e 200', 'error'); return }
+  const { error } = await supabase.from('profili').update({ fir_personale: val }).eq('id', id)
+  if (error) { showToast('Errore salvataggio FIR: ' + error.message, 'error'); return }
+  window.dispatchEvent(new CustomEvent('impostazioni:changed', { detail: { fir_operatore: { id, fir_personale: val } } }))
+  showToast(`FIR ${val}% salvato`, 'success')
+}
+
+async function ricalcolaFirDaCcnl() {
+  const tbody = document.getElementById('fir-tbody')
+  if (!tbody) return
+  const { data: ops } = await supabase.from('profili')
+    .select('id,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto')
+    .neq('attivo', false)
+  if (!ops?.length) return
+
+  let aggiornati = 0
+  for (const op of ops) {
+    if (!op.livello_ccnl || !op.costo_mensile || op.costo_mensile <= 0) continue
+    const params = { p_livello: op.livello_ccnl, p_ore_ordinarie: op.ore_mensili_contratto || 160, p_include_ratei: true }
+    if (op.voce_tariffa_inail) params.p_voce_tariffa = op.voce_tariffa_inail
+    const { data } = await supabase.rpc('calcola_costo_operatore', params)
+    if (!data?.lordo || data.lordo <= 0) continue
+    const firCalc = Math.round(((op.costo_mensile / data.lordo) - 1) * 1000) / 10
+    if (firCalc < 50 || firCalc > 200) continue
+    const tr = tbody.querySelector(`tr[data-id="${op.id}"]`)
+    if (tr) {
+      const inp = tr.querySelector('.fir-op-inp')
+      if (inp) { inp.value = firCalc; inp.dispatchEvent(new Event('input')) }
+      aggiornati++
+    }
+  }
+  showToast(`FIR calcolato per ${aggiornati} operatori — premi Salva per confermare`, 'info')
+}
+
+// FIR globale fallback (impostazioni table)
 async function loadFir() {
   const { data } = await supabase.from('impostazioni')
     .select('valore').eq('chiave', 'fir_personale').maybeSingle()
@@ -280,7 +391,7 @@ async function saveFir() {
     .upsert({ chiave: 'fir_personale', valore: String(val), aggiornato_a: new Date().toISOString() })
   if (error) { showToast('Errore salvataggio FIR', 'error'); return }
   window.dispatchEvent(new CustomEvent('impostazioni:changed', { detail: { fir_personale: val } }))
-  showToast(`FIR salvato: ${val}%`, 'success')
+  showToast(`FIR globale salvato: ${val}%`, 'success')
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -323,6 +434,14 @@ export function initConfigurazioni() {
   document.getElementById('impost-usa-coeff')?.addEventListener('change', e => saveImpostUseCoeff(e.target.checked))
 
   document.getElementById('fir-save-btn')?.addEventListener('click', saveFir)
+  document.getElementById('fir-ricalcola-btn')?.addEventListener('click', ricalcolaFirDaCcnl)
+
+  document.getElementById('fir-tbody')?.addEventListener('click', async e => {
+    if (e.target.classList.contains('fir-op-save-btn')) {
+      const tr = e.target.closest('tr[data-id]')
+      if (tr) await saveFirOperatore(tr)
+    }
+  })
 
   // Load data when navigating to each config sub-section
   document.getElementById('main-content')?.addEventListener('click', e => {
@@ -331,6 +450,6 @@ export function initConfigurazioni() {
     if (link.dataset.target === 'parametri-ccnl')       refreshCcnl()
     if (link.dataset.target === 'tariffe-inail')        refreshInail()
     if (link.dataset.target === 'coefficienti-rischio') refreshCoefficienti()
-    if (link.dataset.target === 'incidenza-reale')      loadFir()
+    if (link.dataset.target === 'incidenza-reale')      { loadFir(); loadFirPersonale() }
   })
 }

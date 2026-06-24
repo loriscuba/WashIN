@@ -114,7 +114,7 @@ const LIVELLI = [
 
 async function loadOperatoriList() {
   const { data } = await supabase.from('profili')
-    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto')
+    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale')
     .neq('attivo', false)
     .order('cognome')
   _operatoriList = data || []
@@ -164,12 +164,15 @@ function buildOperatoreRow(form, item = {}) {
       const oreMensili = op.ore_mensili_contratto || 173
       cuEl.value = ((op.costo_mensile * getCoeff(form)) / oreMensili).toFixed(4)
       delete cuEl.dataset.firStima
-    } else if (op && op.livello_ccnl && _fir > 0) {
-      const oreMensili = op.ore_mensili_contratto || 173
-      const ccnl = await calcolaCostoCcnl(op.livello_ccnl, 0, op.voce_tariffa_inail)
-      if (ccnl?.lordo) {
-        cuEl.value = ((ccnl.lordo * (1 + _fir / 100) * getCoeff(form)) / oreMensili).toFixed(4)
-        cuEl.dataset.firStima = 'true'
+    } else if (op && op.livello_ccnl) {
+      const firEff = op.fir_personale != null ? op.fir_personale : _fir
+      if (firEff > 0) {
+        const oreMensili = op.ore_mensili_contratto || 173
+        const ccnl = await calcolaCostoCcnl(op.livello_ccnl, 0, op.voce_tariffa_inail)
+        if (ccnl?.lordo) {
+          cuEl.value = ((ccnl.lordo * (1 + firEff / 100) * getCoeff(form)) / oreMensili).toFixed(4)
+          cuEl.dataset.firStima = String(firEff)
+        }
       }
     }
 
@@ -254,10 +257,11 @@ function refreshRischioHint(form) {
     const nome = `${op.cognome || ''} ${op.nome || ''}`.trim() || 'Operatore'
     if (!op.costo_mensile || op.costo_mensile <= 0) {
       const cuElR = row.querySelector('.prev-op-cu')
-      const firStima = cuElR?.dataset?.firStima === 'true'
+      const firStima = cuElR?.dataset?.firStima
       const cuVal = parseFloat(cuElR?.value)
       if (firStima && cuVal > 0) {
-        parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — stima FIR <b>${_fir}%</b>: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
+        const firLabel = op.fir_personale != null ? `FIR individuale ${op.fir_personale}%` : `FIR globale ${firStima}%`
+        parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — stima ${firLabel}: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
       } else {
         parts.push(`<div><span style="color:#dc2626;font-weight:700;">⚠ ${nome}: costo mensile non impostato.</span>
           <span style="color:#dc2626;"> Vai in Anagrafica → carica una busta paga.</span></div>`)
@@ -776,6 +780,18 @@ export function initPreventivi() {
         const f = document.getElementById('preventivo-form')
         if (f && modal?.classList.contains('active')) {
           f.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
+        }
+      }
+      if ('fir_operatore' in e.detail) {
+        const { id, fir_personale } = e.detail.fir_operatore
+        const op = _operatoriList.find(o => o.id === id)
+        if (op) op.fir_personale = fir_personale
+        const f = document.getElementById('preventivo-form')
+        if (f && modal?.classList.contains('active')) {
+          f.querySelectorAll('.prev-op-row').forEach(r => {
+            const sel = r.querySelector('.prev-op-select')
+            if (sel?.value === id) r._aggiornaCosto?.()
+          })
         }
       }
     })
