@@ -50,6 +50,16 @@ async function loadAziendaGeo() {
 let _magItems = null
 let _operatoriList = []
 let _coefficienti   = []
+let _usaCoefficienti = true
+let _impostLoaded    = false
+
+async function loadImpostazioni() {
+  if (_impostLoaded) return
+  const { data } = await supabase.from('impostazioni')
+    .select('valore').eq('chiave', 'preventivi_usa_coefficiente').maybeSingle()
+  _usaCoefficienti = data?.valore !== 'false'
+  _impostLoaded = true
+}
 
 async function loadCoefficienti() {
   const { data } = await supabase.from('coefficienti_rischio').select('*').order('ordine')
@@ -67,6 +77,7 @@ function populateTipoAppaltoSelect(form, savedTipo = null) {
 }
 
 function getCoeff(form) {
+  if (!_usaCoefficienti) return 1
   const sel = form.querySelector('[name="tipo_appalto"]')
   return parseFloat(sel?.options[sel.selectedIndex]?.dataset?.coeff || '1') || 1
 }
@@ -232,7 +243,10 @@ function refreshRischioHint(form) {
     const oreMensili = op.ore_mensili_contratto || 173
     const costoMese  = op.costo_mensile * coeff
     const costoOra   = costoMese / oreMensili
-    parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — base: <b>${EUR(op.costo_mensile)}</b> × <b>${coeff.toFixed(3)}</b> ${tipoLabel} = <b>${EUR(costoMese)}</b>/mese → <b style="font-size:13px;">${EUR(costoOra)}</b>/h</div>`)
+    const coeffNote  = _usaCoefficienti
+      ? `× <b>${coeff.toFixed(3)}</b> ${tipoLabel} = <b>${EUR(costoMese)}</b>/mese`
+      : `<span style="color:#6b7280;font-size:11px;">(coefficiente disabilitato)</span>`
+    parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — base: <b>${EUR(op.costo_mensile)}</b> ${coeffNote} → <b style="font-size:13px;">${EUR(costoOra)}</b>/h</div>`)
   })
 
   if (!parts.length) { hint.style.display = 'none'; return }
@@ -444,6 +458,7 @@ export async function openModalPreventivo(id = null) {
       populateClientiSelect(clienteSelect),
       loadOperatoriList(),
       loadCoefficienti(),
+      loadImpostazioni(),
     ])
     populateTipoAppaltoSelect(form)
 
@@ -719,6 +734,18 @@ export function initPreventivi() {
 
     document.getElementById('add-preventivo-button')?.addEventListener('click', () => openModalPreventivo())
     cancelBtn?.addEventListener('click', () => modal?.classList.remove('active'))
+
+    window.addEventListener('impostazioni:changed', e => {
+      if ('preventivi_usa_coefficiente' in e.detail) {
+        _usaCoefficienti = e.detail.preventivi_usa_coefficiente
+        _impostLoaded = true
+        const f = document.getElementById('preventivo-form')
+        if (f && modal?.classList.contains('active')) {
+          f.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
+          refreshRischioHint(f)
+        }
+      }
+    })
 
     if (form) {
       // Margine slider ↔ number sync

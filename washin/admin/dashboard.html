@@ -154,6 +154,13 @@
       .config-card.group-fin  { --cc-color:#d97706;--cc-bg:#fffbeb;--cc-border:#fde68a;--cc-hover:#fcd34d; }
       /* Azienda — violet */
       .config-card.group-co   { --cc-color:#7c3aed;--cc-bg:#f5f3ff;--cc-border:#ddd6fe;--cc-hover:#c4b5fd; }
+      /* ── Toggle switch ── */
+      .toggle-switch { position:relative; display:inline-block; width:44px; height:24px; flex-shrink:0; }
+      .toggle-switch input { opacity:0; width:0; height:0; position:absolute; }
+      .toggle-slider { position:absolute; cursor:pointer; inset:0; background:#cbd5e1; border-radius:24px; transition:.2s; }
+      .toggle-slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+      .toggle-switch input:checked + .toggle-slider { background:#0d9488; }
+      .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
       .back-link {
         display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
         color:var(--gray-500);text-decoration:none;margin-bottom:10px;
@@ -543,6 +550,16 @@
               </p>
             </div>
             <button id="coeff-add-btn" class="btn btn-primary">+ Aggiungi tipo</button>
+          </div>
+          <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;">
+            <div>
+              <strong style="font-size:14px;">Applica coefficiente nei preventivi</strong>
+              <p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">Se disattivato, il costo orario nei preventivi corrisponde direttamente a costo mensile ÷ ore contrattuali (coefficiente = 1).</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="impost-usa-coeff" checked>
+              <span class="toggle-slider"></span>
+            </label>
           </div>
           <div style="overflow-x:auto;margin-top:16px;">
             <table class="data-table" style="min-width:480px;width:100%;">

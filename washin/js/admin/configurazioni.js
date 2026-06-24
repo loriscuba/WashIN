@@ -239,6 +239,26 @@ function addNewCoefficientiRow() {
 
 async function refreshCoefficienti() {
   renderCoefficientiRischio(await loadCoefficientiRischio())
+  await loadImpostUseCoeff()
+}
+
+// ── Impostazione: usa coefficiente nei preventivi ─────────────────────────────
+
+async function loadImpostUseCoeff() {
+  const { data } = await supabase.from('impostazioni')
+    .select('valore').eq('chiave', 'preventivi_usa_coefficiente').maybeSingle()
+  const val = data?.valore !== 'false'
+  const el = document.getElementById('impost-usa-coeff')
+  if (el) el.checked = val
+  return val
+}
+
+async function saveImpostUseCoeff(val) {
+  const { error } = await supabase.from('impostazioni')
+    .upsert({ chiave: 'preventivi_usa_coefficiente', valore: val ? 'true' : 'false', aggiornato_a: new Date().toISOString() })
+  if (error) { showToast('Errore salvataggio impostazione', 'error'); return }
+  window.dispatchEvent(new CustomEvent('impostazioni:changed', { detail: { preventivi_usa_coefficiente: val } }))
+  showToast(val ? 'Coefficiente abilitato nei preventivi' : 'Coefficiente disabilitato nei preventivi', 'success')
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -278,6 +298,7 @@ export function initConfigurazioni() {
     }
   })
   document.getElementById('coeff-add-btn')?.addEventListener('click', addNewCoefficientiRow)
+  document.getElementById('impost-usa-coeff')?.addEventListener('change', e => saveImpostUseCoeff(e.target.checked))
 
   // Load data when navigating to each config sub-section
   document.getElementById('main-content')?.addEventListener('click', e => {
