@@ -160,9 +160,10 @@ function buildOperatoreRow(form, item = {}) {
     delete cuEl.dataset.mancante
 
     if (op && op.costo_mensile > 0) {
-      // Busta paga presente → usa costo_mensile reale
+      // Busta paga presente: applica FIR sopra se configurato
       const oreMensili = op.ore_mensili_contratto || 173
-      cuEl.value = ((op.costo_mensile * getCoeff(form)) / oreMensili).toFixed(4)
+      const fir = op.fir_personale != null ? op.fir_personale : 0
+      cuEl.value = ((op.costo_mensile * (1 + fir / 100) * getCoeff(form)) / oreMensili).toFixed(4)
       if (op.fir_personale != null) cuEl.dataset.firStima = String(op.fir_personale)
     } else if (op && op.fir_personale != null) {
       // Nessuna busta paga → stima da lordo CCNL × (1 + FIR%)
@@ -285,14 +286,15 @@ function refreshRischioHint(form) {
       return
     }
     const oreMensili = op.ore_mensili_contratto || 173
-    const costoMese  = op.costo_mensile * coeff
+    const fir        = op.fir_personale != null ? op.fir_personale : 0
+    const costoConFir = op.costo_mensile * (1 + fir / 100)
+    const costoMese  = costoConFir * coeff
     const costoOra   = costoMese / oreMensili
+    const firNote    = fir > 0 ? ` +FIR <b>${fir}%</b> = <b>${EUR(costoConFir)}</b>` : ''
     const coeffNote  = _usaCoefficienti
       ? `× <b>${coeff.toFixed(3)}</b> ${tipoLabel} = <b>${EUR(costoMese)}</b>/mese`
       : `<span style="color:#6b7280;font-size:11px;">(coefficiente disabilitato)</span>`
-    const firNote = op.fir_personale != null
-      ? ` <span style="color:#6b7280;font-size:11px;">(FIR: ${op.fir_personale}%)</span>` : ''
-    parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — busta paga: <b>${EUR(op.costo_mensile)}</b> ${coeffNote} → <b style="font-size:13px;">${EUR(costoOra)}</b>/h${firNote}</div>`)
+    parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — busta paga: <b>${EUR(op.costo_mensile)}</b>${firNote} ${coeffNote} → <b style="font-size:13px;">${EUR(costoOra)}</b>/h</div>`)
   })
 
   if (!parts.length) { hint.style.display = 'none'; return }
