@@ -166,8 +166,14 @@ function buildOperatoreRow(form, item = {}) {
       const oreMensili = op.ore_mensili_contratto || 173
       let lordo = 0
       if (op.livello_ccnl) {
-        const ccnl = await calcolaCostoCcnl(op.livello_ccnl, 0, op.voce_tariffa_inail)
-        lordo = ccnl?.lordo || 0
+        const { data: ccnlRow } = await supabase
+          .from('parametri_ccnl')
+          .select('paga_base_mensile,contingenza,edr')
+          .eq('livello', op.livello_ccnl)
+          .order('valido_da', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (ccnlRow) lordo = (ccnlRow.paga_base_mensile || 0) + (ccnlRow.contingenza || 0) + (ccnlRow.edr || 0)
       }
       if (!lordo && op.paga_base > 0) lordo = op.paga_base
       if (lordo > 0) {
