@@ -159,10 +159,8 @@ function buildOperatoreRow(form, item = {}) {
     delete cuEl.dataset.firStima
     delete cuEl.dataset.mancante
 
-    if (op && op.costo_mensile > 0) {
-      const oreMensili = op.ore_mensili_contratto || 173
-      cuEl.value = ((op.costo_mensile * getCoeff(form)) / oreMensili).toFixed(4)
-    } else if (op && op.fir_personale != null) {
+    if (op && op.fir_personale != null) {
+      // FIR esplicito → calcola dal lordo CCNL × (1 + FIR%)
       const oreMensili = op.ore_mensili_contratto || 173
       let lordo = 0
       if (op.livello_ccnl) {
@@ -183,6 +181,10 @@ function buildOperatoreRow(form, item = {}) {
         cuEl.value = ''
         cuEl.dataset.mancante = 'true'
       }
+    } else if (op && op.costo_mensile > 0) {
+      // Nessun FIR → usa costo_mensile da busta paga
+      const oreMensili = op.ore_mensili_contratto || 173
+      cuEl.value = ((op.costo_mensile * getCoeff(form)) / oreMensili).toFixed(4)
     } else if (op) {
       cuEl.value = ''
       cuEl.dataset.mancante = 'true'
@@ -282,12 +284,19 @@ function refreshRischioHint(form) {
       return
     }
     const oreMensili = op.ore_mensili_contratto || 173
+    const cuElR  = row.querySelector('.prev-op-cu')
+    const cuVal  = parseFloat(cuElR?.value)
+    if (op.fir_personale != null && cuVal > 0) {
+      const coeffNote = _usaCoefficienti ? ` × <b>${coeff.toFixed(3)}</b> ${tipoLabel}` : ''
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — FIR <b>${op.fir_personale}%</b>${coeffNote} → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
+      return
+    }
     const costoMese  = op.costo_mensile * coeff
     const costoOra   = costoMese / oreMensili
     const coeffNote  = _usaCoefficienti
       ? `× <b>${coeff.toFixed(3)}</b> ${tipoLabel} = <b>${EUR(costoMese)}</b>/mese`
       : `<span style="color:#6b7280;font-size:11px;">(coefficiente disabilitato)</span>`
-    parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — base: <b>${EUR(op.costo_mensile)}</b> ${coeffNote} → <b style="font-size:13px;">${EUR(costoOra)}</b>/h</div>`)
+    parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — busta paga: <b>${EUR(op.costo_mensile)}</b> ${coeffNote} → <b style="font-size:13px;">${EUR(costoOra)}</b>/h</div>`)
   })
 
   if (!parts.length) { hint.style.display = 'none'; return }
