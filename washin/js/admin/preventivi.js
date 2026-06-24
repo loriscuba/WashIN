@@ -51,17 +51,13 @@ let _magItems = null
 let _operatoriList = []
 let _coefficienti   = []
 let _usaCoefficienti = true
-let _fir             = 80
 let _impostLoaded    = false
 
 async function loadImpostazioni() {
   if (_impostLoaded) return
-  const [coeff, fir] = await Promise.all([
-    supabase.from('impostazioni').select('valore').eq('chiave', 'preventivi_usa_coefficiente').maybeSingle(),
-    supabase.from('impostazioni').select('valore').eq('chiave', 'fir_personale').maybeSingle(),
-  ])
-  _usaCoefficienti = coeff.data?.valore !== 'false'
-  _fir = fir.data?.valore != null ? parseFloat(fir.data.valore) : 80
+  const { data } = await supabase.from('impostazioni')
+    .select('valore').eq('chiave', 'preventivi_usa_coefficiente').maybeSingle()
+  _usaCoefficienti = data?.valore !== 'false'
   _impostLoaded = true
 }
 
@@ -160,20 +156,25 @@ function buildOperatoreRow(form, item = {}) {
     const opId = opSel.value
     const op   = opId ? _operatoriList.find(o => o.id === opId) : null
 
+    delete cuEl.dataset.firStima
+    delete cuEl.dataset.mancante
+
     if (op && op.costo_mensile > 0) {
       const oreMensili = op.ore_mensili_contratto || 173
       cuEl.value = ((op.costo_mensile * getCoeff(form)) / oreMensili).toFixed(4)
-      delete cuEl.dataset.firStima
-    } else if (op && op.livello_ccnl) {
-      const firEff = op.fir_personale != null ? op.fir_personale : _fir
-      if (firEff > 0) {
-        const oreMensili = op.ore_mensili_contratto || 173
-        const ccnl = await calcolaCostoCcnl(op.livello_ccnl, 0, op.voce_tariffa_inail)
-        if (ccnl?.lordo) {
-          cuEl.value = ((ccnl.lordo * (1 + firEff / 100) * getCoeff(form)) / oreMensili).toFixed(4)
-          cuEl.dataset.firStima = String(firEff)
-        }
+    } else if (op && op.fir_personale != null && op.livello_ccnl) {
+      const oreMensili = op.ore_mensili_contratto || 173
+      const ccnl = await calcolaCostoCcnl(op.livello_ccnl, 0, op.voce_tariffa_inail)
+      if (ccnl?.lordo) {
+        cuEl.value = ((ccnl.lordo * (1 + op.fir_personale / 100) * getCoeff(form)) / oreMensili).toFixed(4)
+        cuEl.dataset.firStima = String(op.fir_personale)
+      } else {
+        cuEl.value = ''
+        cuEl.dataset.mancante = 'true'
       }
+    } else if (op) {
+      cuEl.value = ''
+      cuEl.dataset.mancante = 'true'
     }
 
     refreshRischioHint(form)
@@ -260,11 +261,12 @@ function refreshRischioHint(form) {
       const firStima = cuElR?.dataset?.firStima
       const cuVal = parseFloat(cuElR?.value)
       if (firStima && cuVal > 0) {
-        const firLabel = op.fir_personale != null ? `FIR individuale ${op.fir_personale}%` : `FIR globale ${firStima}%`
-        parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — stima ${firLabel}: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
+        parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — stima FIR individuale <b>${op.fir_personale}%</b>: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
       } else {
-        parts.push(`<div><span style="color:#dc2626;font-weight:700;">⚠ ${nome}: costo mensile non impostato.</span>
-          <span style="color:#dc2626;"> Vai in Anagrafica → carica una busta paga.</span></div>`)
+        parts.push(`<div style="background:#fee2e2;border-left:3px solid #dc2626;padding:6px 10px;border-radius:4px;">
+          <span style="color:#dc2626;font-weight:700;">🚫 ${nome}: dati mancanti — non può essere aggiunto al preventivo.</span><br>
+          <span style="color:#dc2626;font-size:11px;">Carica una busta paga in Anagrafica <strong>oppure</strong> imposta il FIR individuale in Configurazioni → Incidenza Personale.</span>
+        </div>`)
       }
       return
     }
@@ -775,13 +777,6 @@ export function initPreventivi() {
           refreshRischioHint(f)
         }
       }
-      if ('fir_personale' in e.detail) {
-        _fir = e.detail.fir_personale
-        const f = document.getElementById('preventivo-form')
-        if (f && modal?.classList.contains('active')) {
-          f.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
-        }
-      }
       if ('fir_operatore' in e.detail) {
         const { id, fir_personale } = e.detail.fir_operatore
         const op = _operatoriList.find(o => o.id === id)
@@ -837,6 +832,10 @@ export function initPreventivi() {
       // Submit
       form.addEventListener('submit', async e => {
         e.preventDefault()
+        if (form.querySelector('.prev-op-cu[data-mancante="true"]')) {
+          showToast('Uno o più operatori non hanno dati di costo. Carica le buste paga o imposta il FIR individuale in Configurazioni.', 'error')
+          return
+        }
         const fd = new FormData(form)
 
         // Collect operatori

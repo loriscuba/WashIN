@@ -346,31 +346,43 @@ async function saveFirOperatore(tr) {
   showToast(`FIR ${val}% salvato`, 'success')
 }
 
-async function ricalcolaFirDaCcnl() {
+async function ricalcolaFirDaBustePaga() {
   const tbody = document.getElementById('fir-tbody')
   if (!tbody) return
-  const { data: ops } = await supabase.from('profili')
-    .select('id,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto')
-    .neq('attivo', false)
-  if (!ops?.length) return
+
+  const { data: buste, error } = await supabase
+    .from('buste_paga')
+    .select('operatore_id,totale_lordo,costo_aziendale')
+    .gt('totale_lordo', 0)
+    .gt('costo_aziendale', 0)
+
+  if (error) { showToast('Errore lettura buste paga', 'error'); return }
+  if (!buste?.length) { showToast('Nessuna busta paga caricata — caricare prima i cedolini in Anagrafica', 'info'); return }
+
+  // Weighted sum per operatore: FIR = (Σ costo_aziendale / Σ totale_lordo − 1) × 100
+  const agg = {}
+  for (const b of buste) {
+    if (!agg[b.operatore_id]) agg[b.operatore_id] = { lordo: 0, costo: 0 }
+    agg[b.operatore_id].lordo += b.totale_lordo
+    agg[b.operatore_id].costo += b.costo_aziendale
+  }
 
   let aggiornati = 0
-  for (const op of ops) {
-    if (!op.livello_ccnl || !op.costo_mensile || op.costo_mensile <= 0) continue
-    const params = { p_livello: op.livello_ccnl, p_ore_ordinarie: op.ore_mensili_contratto || 160, p_include_ratei: true }
-    if (op.voce_tariffa_inail) params.p_voce_tariffa = op.voce_tariffa_inail
-    const { data } = await supabase.rpc('calcola_costo_operatore', params)
-    if (!data?.lordo || data.lordo <= 0) continue
-    const firCalc = Math.round(((op.costo_mensile / data.lordo) - 1) * 1000) / 10
-    if (firCalc < 50 || firCalc > 200) continue
-    const tr = tbody.querySelector(`tr[data-id="${op.id}"]`)
+  for (const [opId, { lordo, costo }] of Object.entries(agg)) {
+    if (lordo <= 0) continue
+    const firCalc = Math.round(((costo / lordo) - 1) * 1000) / 10
+    if (firCalc < 30 || firCalc > 250) continue
+    const tr = tbody.querySelector(`tr[data-id="${opId}"]`)
     if (tr) {
       const inp = tr.querySelector('.fir-op-inp')
       if (inp) { inp.value = firCalc; inp.dispatchEvent(new Event('input')) }
       aggiornati++
     }
   }
-  showToast(`FIR calcolato per ${aggiornati} operatori — premi Salva per confermare`, 'info')
+  showToast(aggiornati > 0
+    ? `FIR calcolato per ${aggiornati} operatori dai cedolini reali — premi Salva per confermare`
+    : 'Nessun operatore con buste paga valide trovato',
+    aggiornati > 0 ? 'info' : 'warning')
 }
 
 // FIR globale fallback (impostazioni table)
@@ -434,7 +446,7 @@ export function initConfigurazioni() {
   document.getElementById('impost-usa-coeff')?.addEventListener('change', e => saveImpostUseCoeff(e.target.checked))
 
   document.getElementById('fir-save-btn')?.addEventListener('click', saveFir)
-  document.getElementById('fir-ricalcola-btn')?.addEventListener('click', ricalcolaFirDaCcnl)
+  document.getElementById('fir-ricalcola-btn')?.addEventListener('click', ricalcolaFirDaBustePaga)
 
   document.getElementById('fir-tbody')?.addEventListener('click', async e => {
     if (e.target.classList.contains('fir-op-save-btn')) {
