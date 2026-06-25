@@ -406,15 +406,26 @@ async function ricalcolaFirDaBustePaga() {
 
 // ── Algoritmo costi: agevolazione INPS e buffer inefficienze ─────────────────
 
+function _setAlgoritmoParamsVisible(attivo) {
+  const paramsEl = document.getElementById('algoritmo-params')
+  if (paramsEl) paramsEl.style.opacity = attivo ? '1' : '0.35'
+  paramsEl?.querySelectorAll('input,button').forEach(el => { el.disabled = !attivo })
+  // lascia visibile il pulsante Salva ma disabilitato — utente capisce lo stato
+}
+
 async function loadAlgoritmoParametri() {
   const { data } = await supabase.from('impostazioni')
     .select('chiave,valore')
-    .in('chiave', ['agevolazione_inps_calibrata', 'buffer_inefficienze'])
+    .in('chiave', ['agevolazione_inps_calibrata', 'buffer_inefficienze', 'algoritmo_costi_attivo'])
   const map = Object.fromEntries((data || []).map(r => [r.chiave, r.valore]))
-  const agevEl = document.getElementById('algoritmo-agevolazione-inps')
-  const bufEl  = document.getElementById('algoritmo-buffer-inefficienze')
+  const attivo = map.algoritmo_costi_attivo === 'true'
+  const toggleEl = document.getElementById('algoritmo-attivo-toggle')
+  const agevEl   = document.getElementById('algoritmo-agevolazione-inps')
+  const bufEl    = document.getElementById('algoritmo-buffer-inefficienze')
+  if (toggleEl) toggleEl.checked = attivo
   if (agevEl) agevEl.value = parseFloat(map.agevolazione_inps_calibrata ?? '0') * 100 || 0
   if (bufEl)  bufEl.value  = parseFloat(map.buffer_inefficienze ?? '0.12') * 100 || 12
+  _setAlgoritmoParamsVisible(attivo)
 }
 
 async function saveAlgoritmoParametri() {
@@ -496,6 +507,16 @@ export function initConfigurazioni() {
   document.getElementById('fir-save-btn')?.addEventListener('click', saveFir)
   document.getElementById('fir-ricalcola-btn')?.addEventListener('click', ricalcolaFirDaBustePaga)
   document.getElementById('algoritmo-save-btn')?.addEventListener('click', saveAlgoritmoParametri)
+
+  document.getElementById('algoritmo-attivo-toggle')?.addEventListener('change', async e => {
+    const attivo = e.target.checked
+    _setAlgoritmoParamsVisible(attivo)
+    const { error } = await supabase.from('impostazioni').upsert({
+      chiave: 'algoritmo_costi_attivo', valore: attivo ? 'true' : 'false', aggiornato_a: new Date().toISOString()
+    })
+    if (error) showToast('Errore salvataggio', 'error')
+    else showToast(attivo ? 'Algoritmo avanzato attivato' : 'Algoritmo disattivato — verrà usato solo il RPC base', 'success')
+  })
 
   document.getElementById('fir-tbody')?.addEventListener('click', async e => {
     if (e.target.classList.contains('fir-op-save-btn')) {
