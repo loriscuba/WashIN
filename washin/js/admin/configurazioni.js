@@ -350,58 +350,57 @@ async function ricalcolaFirDaBustePaga() {
   const tbody = document.getElementById('fir-tbody')
   if (!tbody) return
 
-  // 1. costo_aziendale reale dai cedolini (INPS+INAIL+TFR) — diverso per operatore
-  //    I ratei (13ª/14ª/ferie/ROL) mancano: li stimiamo con le % CCNL
+  // I cedolini non contengono i costi datore reali (INPS datore, ratei, ecc.)
+  // Usiamo il lordo medio mensile + parametri CCNL per una stima uniforme.
+  // Per FIR personalizzati per operatore, caricare il consuntivo della commercialista.
   const { data: buste, error } = await supabase
     .from('buste_paga')
-    .select('operatore_id,totale_lordo,costo_aziendale')
+    .select('operatore_id,totale_lordo')
     .gt('totale_lordo', 0)
 
   if (error) { showToast('Errore lettura buste paga', 'error'); return }
   if (!buste?.length) { showToast('Nessuna busta paga caricata — caricare prima i cedolini in Anagrafica', 'info'); return }
 
-  // 2. Somme per operatore
   const agg = {}
   for (const b of buste) {
-    if (!agg[b.operatore_id]) agg[b.operatore_id] = { lordo: 0, costo: 0 }
+    if (!agg[b.operatore_id]) agg[b.operatore_id] = { lordo: 0, n: 0 }
     agg[b.operatore_id].lordo += b.totale_lordo
-    agg[b.operatore_id].costo += b.costo_aziendale || 0
+    agg[b.operatore_id].n++
   }
 
-  // 3. Parametri CCNL per stimare i ratei mancanti (13ª + 14ª + ferie/ROL + INPS su ratei)
+  // Parametri CCNL per calcolare il costo datore completo
   const { data: ccnl } = await supabase
     .from('parametri_ccnl')
-    .select('percentuale_rateo_13,percentuale_rateo_14,percentuale_rateo_ferie_permessi,aliquota_inps_datore')
+    .select('percentuale_rateo_13,percentuale_rateo_14,percentuale_rateo_ferie_permessi,aliquota_inps_datore,percentuale_tfr')
     .order('valido_da', { ascending: false })
     .limit(1)
     .maybeSingle()
 
+  const inps   = ccnl?.aliquota_inps_datore             ?? 0.31500
+  const inail  = 0.03000
   const r13    = ccnl?.percentuale_rateo_13             ?? 0.08333
   const r14    = ccnl?.percentuale_rateo_14             ?? 0.08333
   const rferie = ccnl?.percentuale_rateo_ferie_permessi ?? 0.22000
-  const inps   = ccnl?.aliquota_inps_datore             ?? 0.31500
-  // quota aggiuntiva sul lordo: ratei + INPS datore sui ratei
-  const rateiExtra = (r13 + r14 + rferie) * (1 + inps)
+  const tfr    = ccnl?.percentuale_tfr                  ?? 0.07407
+  // FIR CCNL = INPS + INAIL + ratei×(1+INPS) + TFR×(1+r13+r14)
+  const firCcnl = inps + inail
+    + (r13 + r14 + rferie) * (1 + inps)
+    + (1 + r13 + r14) * tfr - 1
+  const firPct = Math.round(firCcnl * 1000) / 10
 
-  // 4. FIR = (costo_reale + ratei_stimati) / lordo − 1
-  //    costo_reale è diverso per ogni operatore → FIR diversi
   let aggiornati = 0
-  for (const [opId, { lordo, costo }] of Object.entries(agg)) {
-    if (lordo <= 0 || costo <= 0) continue
-    const costoConRatei = costo + lordo * rateiExtra
-    const firCalc = Math.round(((costoConRatei / lordo) - 1) * 1000) / 10
-    if (firCalc < 30 || firCalc > 250) continue
+  for (const opId of Object.keys(agg)) {
     const tr = tbody.querySelector(`tr[data-id="${opId}"]`)
     if (tr) {
       const inp = tr.querySelector('.fir-op-inp')
-      if (inp) { inp.value = firCalc; inp.dispatchEvent(new Event('input')) }
+      if (inp) { inp.value = firPct; inp.dispatchEvent(new Event('input')) }
       aggiornati++
     }
   }
 
   showToast(aggiornati > 0
-    ? `FIR calcolato per ${aggiornati} operatori (costo reale + ratei CCNL) — premi Salva per confermare`
-    : 'Nessun operatore con costo_aziendale compilato nelle buste paga',
+    ? `FIR CCNL stimato ${firPct}% impostato per ${aggiornati} operatori — carica il consuntivo per valori personalizzati`
+    : 'Nessun operatore con buste paga trovato',
     aggiornati > 0 ? 'info' : 'warning')
 }
 
