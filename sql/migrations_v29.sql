@@ -28,6 +28,11 @@ VALUES ('buffer_inefficienze', '0.12')
 ON CONFLICT (chiave) DO NOTHING;
 
 -- ── 4. Aggiornamento RPC calcola_costo_operatore ─────────────────────────────
+-- Rimuove la firma precedente (9 parametri, v21) per evitare overload ambiguo
+DROP FUNCTION IF EXISTS calcola_costo_operatore(
+  text, text, numeric, numeric, numeric, numeric, numeric, boolean, date
+);
+
 CREATE OR REPLACE FUNCTION calcola_costo_operatore(
   p_livello                 text    DEFAULT NULL,
   p_voce_tariffa            text    DEFAULT NULL,
