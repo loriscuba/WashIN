@@ -20,6 +20,10 @@ WHERE  valore_scatto_ora IS NULL OR valore_scatto_ora = 0;
 
 -- ── 3. Parametri algoritmo in impostazioni ────────────────────────────────────
 INSERT INTO impostazioni (chiave, valore)
+VALUES ('algoritmo_costi_attivo', 'false')
+ON CONFLICT (chiave) DO NOTHING;
+
+INSERT INTO impostazioni (chiave, valore)
 VALUES ('agevolazione_inps_calibrata', '0')
 ON CONFLICT (chiave) DO NOTHING;
 

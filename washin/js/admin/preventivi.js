@@ -52,18 +52,20 @@ let _operatoriList = []
 let _coefficienti       = []
 let _usaCoefficienti    = true
 let _impostLoaded       = false
-let _agevolazioneInps   = 0
-let _bufferInefficienze = 0.12
+let _agevolazioneInps    = 0
+let _bufferInefficienze  = 0.12
+let _algoritmoCostiAttivo = false
 
 async function loadImpostazioni() {
   if (_impostLoaded) return
   const { data } = await supabase.from('impostazioni')
     .select('chiave,valore')
-    .in('chiave', ['preventivi_usa_coefficiente', 'agevolazione_inps_calibrata', 'buffer_inefficienze'])
+    .in('chiave', ['preventivi_usa_coefficiente', 'agevolazione_inps_calibrata', 'buffer_inefficienze', 'algoritmo_costi_attivo'])
   const map = Object.fromEntries((data || []).map(r => [r.chiave, r.valore]))
-  _usaCoefficienti    = map.preventivi_usa_coefficiente !== 'false'
-  _agevolazioneInps   = parseFloat(map.agevolazione_inps_calibrata || '0') || 0
-  _bufferInefficienze = parseFloat(map.buffer_inefficienze || '0.12') || 0.12
+  _usaCoefficienti      = map.preventivi_usa_coefficiente !== 'false'
+  _agevolazioneInps     = parseFloat(map.agevolazione_inps_calibrata || '0') || 0
+  _bufferInefficienze   = parseFloat(map.buffer_inefficienze || '0.12') || 0.12
+  _algoritmoCostiAttivo = map.algoritmo_costi_attivo === 'true'
   _impostLoaded = true
 }
 
@@ -180,25 +182,29 @@ function buildOperatoreRow(form, item = {}) {
     delete cuEl.dataset.mancante
 
     if (op && (op.costo_mensile > 0 || op.livello_ccnl)) {
-      // Busta paga o livello CCNL disponibile → calcolo via RPC (lordo reale o tariffa CCNL)
+      // Busta paga o livello CCNL disponibile → calcolo via RPC
       const ore = op.ore_mensili_contratto || 173
-      const nScatti = nScattiEffettivi(op)
       try {
-        const params = { p_ore_ordinarie: ore, p_include_ratei: true, p_n_scatti: nScatti, p_agevolazione_inps: _agevolazioneInps }
-        if (op.costo_mensile > 0) params.p_lordo_busta = op.costo_mensile  // consuntivo: lordo reale
-        if (op.livello_ccnl)     params.p_livello = op.livello_ccnl        // lookup parametri CCNL
-        if (op.voce_tariffa_inail) params.p_voce_tariffa = op.voce_tariffa_inail
+        const params = { p_ore_ordinarie: ore, p_include_ratei: true }
+        if (op.costo_mensile > 0)    params.p_lordo_busta   = op.costo_mensile
+        if (op.livello_ccnl)         params.p_livello        = op.livello_ccnl
+        if (op.voce_tariffa_inail)   params.p_voce_tariffa  = op.voce_tariffa_inail
+        if (_algoritmoCostiAttivo) {
+          params.p_n_scatti        = nScattiEffettivi(op)
+          params.p_agevolazione_inps = _agevolazioneInps
+        }
         let { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', params)
         if (error) {
-          // migrations_v29.sql non ancora eseguita — riprova senza i nuovi parametri
+          // fallback senza nuovi parametri (migrations_v29 non eseguita)
           const fb = { p_ore_ordinarie: ore, p_include_ratei: true }
           if (op.costo_mensile > 0) fb.p_lordo_busta = op.costo_mensile
-          if (op.livello_ccnl) fb.p_livello = op.livello_ccnl
+          if (op.livello_ccnl)      fb.p_livello      = op.livello_ccnl
           if (op.voce_tariffa_inail) fb.p_voce_tariffa = op.voce_tariffa_inail
           ;({ data: rpc, error } = await supabase.rpc('calcola_costo_operatore', fb))
         }
         if (!error && rpc?.costo_orario_effettivo > 0) {
-          cuEl.value = (rpc.costo_orario_effettivo * (1 + _bufferInefficienze) * getCoeff(form)).toFixed(4)
+          const buffer = _algoritmoCostiAttivo ? (1 + _bufferInefficienze) : 1
+          cuEl.value = (rpc.costo_orario_effettivo * buffer * getCoeff(form)).toFixed(4)
           cuEl.dataset.firStima = op.costo_mensile > 0 ? 'busta' : `ccnl:${op.livello_ccnl}`
         } else {
           cuEl.value = ''
@@ -310,10 +316,12 @@ function refreshRischioHint(form) {
     const agevNote   = _agevolazioneInps > 0 ? `, agev. ${(_agevolazioneInps * 100).toFixed(1)}%` : ''
 
     if (firStima === 'busta') {
-      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi CCNL${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>${coeffNote} → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
+      const extraNote = _algoritmoCostiAttivo ? `${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>` : ''
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi CCNL${extraNote}${coeffNote} → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
     } else if (firStima?.startsWith('ccnl:')) {
       const livello = firStima.slice(5)
-      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#7c3aed;">~ ${nome}</span> — stima CCNL liv. <b>${livello}</b>${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>${coeffNote}: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
+      const extraNote = _algoritmoCostiAttivo ? `${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>` : ''
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#7c3aed;">~ ${nome}</span> — stima CCNL liv. <b>${livello}</b>${extraNote}${coeffNote}: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
     } else if (firStima && cuVal > 0) {
       parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — FIR manuale <b>${op.fir_personale}%</b>: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(imposta livello CCNL per stima automatica)</span></div>`)
     } else {

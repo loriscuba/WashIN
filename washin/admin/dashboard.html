@@ -679,8 +679,19 @@
           </div>
 
           <div class="card" style="max-width:580px;padding:24px;">
-            <h3 style="margin:0 0 18px;font-size:15px;font-weight:700;">Parametri stima costo orario CCNL</h3>
-            <div style="display:grid;gap:20px;">
+            <!-- Toggle on/off -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--gray-200);">
+              <div>
+                <strong style="font-size:14px;">Algoritmo avanzato</strong>
+                <p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">Aggiunge scatti anzianità, agevolazione INPS e buffer inefficienze al costo CCNL</p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="algoritmo-attivo-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <!-- Parametri (disabilitati quando algoritmo spento) -->
+            <div id="algoritmo-params" style="display:grid;gap:20px;transition:opacity .2s;">
               <div>
                 <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">
                   Agevolazione INPS datore
@@ -705,10 +716,10 @@
                   <span style="font-size:12px;color:var(--gray-500);">(12% consigliato per pulizie industriali)</span>
                 </div>
               </div>
-            </div>
-            <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--gray-200);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-              <button id="algoritmo-save-btn" class="btn btn-primary">Salva parametri</button>
-              <span style="font-size:12px;color:var(--gray-500);">Questi valori si applicano subito ai nuovi preventivi senza busta paga.</span>
+              <div style="padding-top:8px;border-top:1px solid var(--gray-200);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <button id="algoritmo-save-btn" class="btn btn-primary">Salva parametri</button>
+                <span style="font-size:12px;color:var(--gray-500);">Questi valori si applicano subito ai nuovi preventivi.</span>
+              </div>
             </div>
           </div>
 
