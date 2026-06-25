@@ -1010,6 +1010,14 @@ async function confirmBusteImport() {
 
   if (!rows.length) { showToast('Nessuna busta abbinata a un operatore', 'error'); return }
 
+  // Deduplica per operatore_id+anno+mese: più pagine PDF dello stesso cedolino generano duplicati
+  const seenBustePaga = new Map()
+  rows.forEach((r, i) => { seenBustePaga.set(`${r.operatore_id}-${r.anno}-${r.mese}`, { row: r, meta: rowsMeta[i] }) })
+  const dedupRows     = Array.from(seenBustePaga.values()).map(v => v.row)
+  const dedupRowsMeta = Array.from(seenBustePaga.values()).map(v => v.meta)
+  rows.length = 0; rows.push(...dedupRows)
+  rowsMeta.length = 0; rowsMeta.push(...dedupRowsMeta)
+
   // Valida operatore_id contro profili attuali prima dell'upsert
   const { data: validProfiles } = await supabase.from('profili').select('id')
   const validIds = new Set((validProfiles || []).map(p => p.id))
