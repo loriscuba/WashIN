@@ -350,37 +350,64 @@ async function ricalcolaFirDaBustePaga() {
   const tbody = document.getElementById('fir-tbody')
   if (!tbody) return
 
+  // 1. Legge solo totale_lordo — costo_aziendale nei cedolini manca i ratei mensili
   const { data: buste, error } = await supabase
     .from('buste_paga')
-    .select('operatore_id,totale_lordo,costo_aziendale')
+    .select('operatore_id,totale_lordo')
     .gt('totale_lordo', 0)
-    .gt('costo_aziendale', 0)
 
   if (error) { showToast('Errore lettura buste paga', 'error'); return }
   if (!buste?.length) { showToast('Nessuna busta paga caricata — caricare prima i cedolini in Anagrafica', 'info'); return }
 
-  // Weighted sum per operatore: FIR = (Σ costo_aziendale / Σ totale_lordo − 1) × 100
+  // 2. Media mensile del lordo per operatore
   const agg = {}
   for (const b of buste) {
-    if (!agg[b.operatore_id]) agg[b.operatore_id] = { lordo: 0, costo: 0 }
+    if (!agg[b.operatore_id]) agg[b.operatore_id] = { lordo: 0, n: 0 }
     agg[b.operatore_id].lordo += b.totale_lordo
-    agg[b.operatore_id].costo += b.costo_aziendale
+    agg[b.operatore_id].n++
   }
 
+  // 3. Profili per livello CCNL e voce INAIL (necessari all'RPC per i tassi esatti)
+  const opIds = Object.keys(agg)
+  const { data: profili } = await supabase
+    .from('profili')
+    .select('id,livello_ccnl,voce_tariffa_inail')
+    .in('id', opIds)
+  const profiloById = Object.fromEntries((profili || []).map(p => [p.id, p]))
+
+  // 4. RPC in parallelo: per ogni operatore stima il costo totale reale
+  //    (INPS datore + INAIL + ratei 13ª/14ª/ferie + contributi su ratei + TFR)
+  //    Il rapporto costo_totale/lordo_medio dà il FIR indipendentemente dal lordo assoluto
+  const results = await Promise.all(
+    opIds.map(async opId => {
+      const { lordo, n } = agg[opId]
+      const avgLordo = lordo / n
+      const profilo = profiloById[opId] || {}
+      const { data: r, error: e } = await supabase.rpc('calcola_costo_operatore', {
+        p_lordo_busta:  avgLordo,
+        p_livello:      profilo.livello_ccnl       || null,
+        p_voce_tariffa: profilo.voce_tariffa_inail || null,
+        p_include_ratei: true
+      })
+      if (e || !r?.costo_totale) return null
+      return { opId, fir: Math.round(((r.costo_totale / avgLordo) - 1) * 1000) / 10 }
+    })
+  )
+
+  // 5. Aggiorna i campi nel DOM
   let aggiornati = 0
-  for (const [opId, { lordo, costo }] of Object.entries(agg)) {
-    if (lordo <= 0) continue
-    const firCalc = Math.round(((costo / lordo) - 1) * 1000) / 10
-    if (firCalc < 30 || firCalc > 250) continue
-    const tr = tbody.querySelector(`tr[data-id="${opId}"]`)
+  for (const res of results) {
+    if (!res || res.fir < 30 || res.fir > 250) continue
+    const tr = tbody.querySelector(`tr[data-id="${res.opId}"]`)
     if (tr) {
       const inp = tr.querySelector('.fir-op-inp')
-      if (inp) { inp.value = firCalc; inp.dispatchEvent(new Event('input')) }
+      if (inp) { inp.value = res.fir; inp.dispatchEvent(new Event('input')) }
       aggiornati++
     }
   }
+
   showToast(aggiornati > 0
-    ? `FIR calcolato per ${aggiornati} operatori dai cedolini reali — premi Salva per confermare`
+    ? `FIR calcolato per ${aggiornati} operatori (INPS+INAIL+ratei+TFR stimati da CCNL) — premi Salva per confermare`
     : 'Nessun operatore con buste paga valide trovato',
     aggiornati > 0 ? 'info' : 'warning')
 }
