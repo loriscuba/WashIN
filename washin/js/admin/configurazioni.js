@@ -404,6 +404,35 @@ async function ricalcolaFirDaBustePaga() {
     aggiornati > 0 ? 'info' : 'warning')
 }
 
+// ── Algoritmo costi: agevolazione INPS e buffer inefficienze ─────────────────
+
+async function loadAlgoritmoParametri() {
+  const { data } = await supabase.from('impostazioni')
+    .select('chiave,valore')
+    .in('chiave', ['agevolazione_inps_calibrata', 'buffer_inefficienze'])
+  const map = Object.fromEntries((data || []).map(r => [r.chiave, r.valore]))
+  const agevEl = document.getElementById('algoritmo-agevolazione-inps')
+  const bufEl  = document.getElementById('algoritmo-buffer-inefficienze')
+  if (agevEl) agevEl.value = parseFloat(map.agevolazione_inps_calibrata ?? '0') * 100 || 0
+  if (bufEl)  bufEl.value  = parseFloat(map.buffer_inefficienze ?? '0.12') * 100 || 12
+}
+
+async function saveAlgoritmoParametri() {
+  const agevEl = document.getElementById('algoritmo-agevolazione-inps')
+  const bufEl  = document.getElementById('algoritmo-buffer-inefficienze')
+  const agev = parseFloat(agevEl?.value || '0') / 100
+  const buf  = parseFloat(bufEl?.value  || '12') / 100
+  if (isNaN(agev) || agev < 0 || agev > 0.5) { showToast('Agevolazione INPS deve essere tra 0% e 50%', 'error'); return }
+  if (isNaN(buf)  || buf  < 0 || buf  > 1)   { showToast('Buffer inefficienze deve essere tra 0% e 100%', 'error'); return }
+  const updates = [
+    { chiave: 'agevolazione_inps_calibrata', valore: String(agev), aggiornato_a: new Date().toISOString() },
+    { chiave: 'buffer_inefficienze',         valore: String(buf),  aggiornato_a: new Date().toISOString() }
+  ]
+  const { error } = await supabase.from('impostazioni').upsert(updates)
+  if (error) { showToast('Errore salvataggio: ' + error.message, 'error'); return }
+  showToast('Parametri algoritmo salvati', 'success')
+}
+
 // FIR globale fallback (impostazioni table)
 async function loadFir() {
   const { data } = await supabase.from('impostazioni')
@@ -466,6 +495,7 @@ export function initConfigurazioni() {
 
   document.getElementById('fir-save-btn')?.addEventListener('click', saveFir)
   document.getElementById('fir-ricalcola-btn')?.addEventListener('click', ricalcolaFirDaBustePaga)
+  document.getElementById('algoritmo-save-btn')?.addEventListener('click', saveAlgoritmoParametri)
 
   document.getElementById('fir-tbody')?.addEventListener('click', async e => {
     if (e.target.classList.contains('fir-op-save-btn')) {
@@ -482,5 +512,6 @@ export function initConfigurazioni() {
     if (link.dataset.target === 'tariffe-inail')        refreshInail()
     if (link.dataset.target === 'coefficienti-rischio') refreshCoefficienti()
     if (link.dataset.target === 'incidenza-reale')      { loadFir(); loadFirPersonale() }
+    if (link.dataset.target === 'algoritmo-costi')      loadAlgoritmoParametri()
   })
 }
