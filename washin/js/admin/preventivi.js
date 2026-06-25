@@ -179,45 +179,34 @@ function buildOperatoreRow(form, item = {}) {
     delete cuEl.dataset.firStima
     delete cuEl.dataset.mancante
 
-    if (op && op.costo_mensile > 0) {
-      // Busta paga presente: applica FIR sopra se configurato
-      const oreMensili = op.ore_mensili_contratto || 173
-      const fir = op.fir_personale != null ? op.fir_personale : 0
-      cuEl.value = ((op.costo_mensile * (1 + fir / 100) * getCoeff(form)) / oreMensili).toFixed(4)
-      if (op.fir_personale != null) cuEl.dataset.firStima = String(op.fir_personale)
-    } else if (op && op.livello_ccnl) {
-      // Nessuna busta paga, ma livello CCNL noto → stima via RPC con scatti + agevolazione + buffer
+    if (op && (op.costo_mensile > 0 || op.livello_ccnl)) {
+      // Busta paga o livello CCNL disponibile → calcolo via RPC (lordo reale o tariffa CCNL)
       const ore = op.ore_mensili_contratto || 173
       const nScatti = nScattiEffettivi(op)
       try {
-        const params = {
-          p_livello: op.livello_ccnl,
-          p_ore_ordinarie: ore,
-          p_include_ratei: true,
-          p_n_scatti: nScatti,
-          p_agevolazione_inps: _agevolazioneInps
-        }
+        const params = { p_ore_ordinarie: ore, p_include_ratei: true, p_n_scatti: nScatti, p_agevolazione_inps: _agevolazioneInps }
+        if (op.costo_mensile > 0) params.p_lordo_busta = op.costo_mensile  // consuntivo: lordo reale
+        if (op.livello_ccnl)     params.p_livello = op.livello_ccnl        // lookup parametri CCNL
         if (op.voce_tariffa_inail) params.p_voce_tariffa = op.voce_tariffa_inail
         let { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', params)
         if (error) {
           // migrations_v29.sql non ancora eseguita — riprova senza i nuovi parametri
-          ;({ data: rpc, error } = await supabase.rpc('calcola_costo_operatore', {
-            p_livello: op.livello_ccnl,
-            p_ore_ordinarie: ore,
-            p_include_ratei: true,
-            ...(op.voce_tariffa_inail ? { p_voce_tariffa: op.voce_tariffa_inail } : {})
-          }))
+          const fb = { p_ore_ordinarie: ore, p_include_ratei: true }
+          if (op.costo_mensile > 0) fb.p_lordo_busta = op.costo_mensile
+          if (op.livello_ccnl) fb.p_livello = op.livello_ccnl
+          if (op.voce_tariffa_inail) fb.p_voce_tariffa = op.voce_tariffa_inail
+          ;({ data: rpc, error } = await supabase.rpc('calcola_costo_operatore', fb))
         }
         if (!error && rpc?.costo_orario_effettivo > 0) {
           cuEl.value = (rpc.costo_orario_effettivo * (1 + _bufferInefficienze) * getCoeff(form)).toFixed(4)
-          cuEl.dataset.firStima = `ccnl:${op.livello_ccnl}`
+          cuEl.dataset.firStima = op.costo_mensile > 0 ? 'busta' : `ccnl:${op.livello_ccnl}`
         } else {
           cuEl.value = ''
           cuEl.dataset.mancante = 'true'
         }
       } catch { cuEl.value = ''; cuEl.dataset.mancante = 'true' }
     } else if (op && op.fir_personale != null) {
-      // FIR impostato manualmente ma nessun livello CCNL → usa paga_base come lordo
+      // Legacy: nessuna busta paga, nessun livello CCNL, FIR impostato manualmente
       const oreMensili = op.ore_mensili_contratto || 173
       const lordo = op.paga_base > 0 ? op.paga_base : 0
       if (lordo > 0) {
@@ -310,38 +299,29 @@ function refreshRischioHint(form) {
     if (!opId) return
     const op = _operatoriList.find(o => o.id === opId)
     if (!op) return
-    const nome = `${op.cognome || ''} ${op.nome || ''}`.trim() || 'Operatore'
-    if (!op.costo_mensile || op.costo_mensile <= 0) {
-      const cuElR = row.querySelector('.prev-op-cu')
-      const firStima = cuElR?.dataset?.firStima
-      const cuVal = parseFloat(cuElR?.value)
-      if (firStima?.startsWith('ccnl:')) {
-        const livello = firStima.slice(5)
-        const nScatti = nScattiEffettivi(op)
-        const bufPct  = Math.round(_bufferInefficienze * 100)
-        const scattiNote = nScatti > 0 ? `, ${nScatti} scatt${nScatti === 1 ? 'o' : 'i'}` : ''
-        const agevNote = _agevolazioneInps > 0 ? `, agev. INPS ${(_agevolazioneInps * 100).toFixed(1)}%` : ''
-        parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#7c3aed;">~ ${nome}</span> — stima CCNL liv. <b>${livello}</b>${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
-      } else if (firStima && cuVal > 0) {
-        parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — stima FIR individuale <b>${op.fir_personale}%</b>: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
-      } else {
-        parts.push(`<div style="background:#fee2e2;border-left:3px solid #dc2626;padding:6px 10px;border-radius:4px;">
-          <span style="color:#dc2626;font-weight:700;">🚫 ${nome}: dati mancanti — non può essere aggiunto al preventivo.</span><br>
-          <span style="color:#dc2626;font-size:11px;">Carica una busta paga in Anagrafica <strong>oppure</strong> imposta il livello CCNL in Configurazioni → Algoritmo Costi.</span>
-        </div>`)
-      }
-      return
+    const nome      = `${op.cognome || ''} ${op.nome || ''}`.trim() || 'Operatore'
+    const cuElR     = row.querySelector('.prev-op-cu')
+    const firStima  = cuElR?.dataset?.firStima
+    const cuVal     = parseFloat(cuElR?.value)
+    const bufPct    = Math.round(_bufferInefficienze * 100)
+    const nScatti   = nScattiEffettivi(op)
+    const coeffNote = _usaCoefficienti ? ` × <b>${coeff.toFixed(3)}</b> ${tipoLabel}` : ''
+    const scattiNote = nScatti > 0 ? `, ${nScatti} scatt${nScatti === 1 ? 'o' : 'i'}` : ''
+    const agevNote   = _agevolazioneInps > 0 ? `, agev. ${(_agevolazioneInps * 100).toFixed(1)}%` : ''
+
+    if (firStima === 'busta') {
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi CCNL${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>${coeffNote} → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
+    } else if (firStima?.startsWith('ccnl:')) {
+      const livello = firStima.slice(5)
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#7c3aed;">~ ${nome}</span> — stima CCNL liv. <b>${livello}</b>${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>${coeffNote}: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
+    } else if (firStima && cuVal > 0) {
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — FIR manuale <b>${op.fir_personale}%</b>: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(imposta livello CCNL per stima automatica)</span></div>`)
+    } else {
+      parts.push(`<div style="background:#fee2e2;border-left:3px solid #dc2626;padding:6px 10px;border-radius:4px;">
+        <span style="color:#dc2626;font-weight:700;">🚫 ${nome}: dati mancanti — non può essere aggiunto al preventivo.</span><br>
+        <span style="color:#dc2626;font-size:11px;">Carica una busta paga in Anagrafica <strong>oppure</strong> imposta il livello CCNL in Configurazioni → Algoritmo Costi.</span>
+      </div>`)
     }
-    const oreMensili = op.ore_mensili_contratto || 173
-    const fir        = op.fir_personale != null ? op.fir_personale : 0
-    const costoConFir = op.costo_mensile * (1 + fir / 100)
-    const costoMese  = costoConFir * coeff
-    const costoOra   = costoMese / oreMensili
-    const firNote    = fir > 0 ? ` +FIR <b>${fir}%</b> = <b>${EUR(costoConFir)}</b>` : ''
-    const coeffNote  = _usaCoefficienti
-      ? `× <b>${coeff.toFixed(3)}</b> ${tipoLabel} = <b>${EUR(costoMese)}</b>/mese`
-      : `<span style="color:#6b7280;font-size:11px;">(coefficiente disabilitato)</span>`
-    parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — busta paga: <b>${EUR(op.costo_mensile)}</b>${firNote} ${coeffNote} → <b style="font-size:13px;">${EUR(costoOra)}</b>/h</div>`)
   })
 
   if (!parts.length) { hint.style.display = 'none'; return }
