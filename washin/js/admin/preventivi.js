@@ -115,10 +115,17 @@ const LIVELLI = [
 ]
 
 async function loadOperatoriList() {
-  const { data } = await supabase.from('profili')
+  let { data, error } = await supabase.from('profili')
     .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base,data_assunzione,n_scatti_anzianita')
     .neq('attivo', false)
     .order('cognome')
+  if (error) {
+    // migrations_v29.sql non ancora eseguita — fallback senza le colonne nuove
+    ;({ data } = await supabase.from('profili')
+      .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base')
+      .neq('attivo', false)
+      .order('cognome'))
+  }
   _operatoriList = data || []
   return _operatoriList
 }
@@ -191,7 +198,16 @@ function buildOperatoreRow(form, item = {}) {
           p_agevolazione_inps: _agevolazioneInps
         }
         if (op.voce_tariffa_inail) params.p_voce_tariffa = op.voce_tariffa_inail
-        const { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', params)
+        let { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', params)
+        if (error) {
+          // migrations_v29.sql non ancora eseguita — riprova senza i nuovi parametri
+          ;({ data: rpc, error } = await supabase.rpc('calcola_costo_operatore', {
+            p_livello: op.livello_ccnl,
+            p_ore_ordinarie: ore,
+            p_include_ratei: true,
+            ...(op.voce_tariffa_inail ? { p_voce_tariffa: op.voce_tariffa_inail } : {})
+          }))
+        }
         if (!error && rpc?.costo_orario_effettivo > 0) {
           cuEl.value = (rpc.costo_orario_effettivo * (1 + _bufferInefficienze) * getCoeff(form)).toFixed(4)
           cuEl.dataset.firStima = `ccnl:${op.livello_ccnl}`
