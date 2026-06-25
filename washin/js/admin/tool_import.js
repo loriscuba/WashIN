@@ -627,12 +627,15 @@ function renderAnagPreview() {
 
 async function confirmAnagImport() {
   if (!_anagData.length) return
-  const rows = _anagData.map(r => {
+  const rowsRaw = _anagData.map(r => {
     const row = {}
     ANAG_COLS.forEach(c => { if (r[c] !== undefined && r[c] !== '') row[c] = r[c] })
     if (row.paga_base) row.paga_base = parseFloat(row.paga_base) || null
     return row
   }).filter(r => r.codice_fiscale || r.cognome)
+  const seenAnag = new Map()
+  rowsRaw.forEach(r => seenAnag.set(r.codice_fiscale || r.cognome, r))
+  const rows = Array.from(seenAnag.values())
 
   if (!rows.length) { showToast('Nessuna riga valida', 'error'); return }
 
@@ -724,12 +727,16 @@ function renderBusteAnagPreview() {
 
 async function confirmBusteAnagOnly() {
   if (!_busteAnagData.length) return
-  const rows = _busteAnagData.filter(r => r.codice_fiscale || r.cognome).map(r => {
+  const rowsRaw = _busteAnagData.filter(r => r.codice_fiscale || r.cognome).map(r => {
     const row = {}
     ANAG_COLS.forEach(c => { if (r[c] !== undefined && r[c] !== '') row[c] = r[c] })
     if (row.paga_base) row.paga_base = +row.paga_base || null
     return row
   })
+  // Deduplica per codice_fiscale: più buste dello stesso dipendente generano righe duplicate
+  const seen = new Map()
+  rowsRaw.forEach(r => seen.set(r.codice_fiscale || r.cognome, r))
+  const rows = Array.from(seen.values())
   if (!rows.length) { showToast('Nessun profilo valido da salvare', 'error'); return }
 
   // Calcola costo_mensile tramite RPC preventivi per ogni operatore con livello CCNL
@@ -913,12 +920,15 @@ async function confirmBusteImport() {
   // 1. Upsert profili from INAIL data (creates new profiles or updates existing ones)
   let upsertedProfiles = {}   // CF → id mapping after upsert
   if (_busteAnagData.length) {
-    const anagRows = _busteAnagData.filter(r => r.codice_fiscale || r.cognome).map(r => {
+    const anagRowsRaw = _busteAnagData.filter(r => r.codice_fiscale || r.cognome).map(r => {
       const row = {}
       ANAG_COLS.forEach(c => { if (r[c] !== undefined && r[c] !== '') row[c] = r[c] })
       if (row.paga_base) row.paga_base = +row.paga_base || null
       return row
     })
+    const seenBuste = new Map()
+    anagRowsRaw.forEach(r => seenBuste.set(r.codice_fiscale || r.cognome, r))
+    const anagRows = Array.from(seenBuste.values())
     if (anagRows.length) {
       const { data: profileData, error: profErr } = await supabase
         .from('profili')
