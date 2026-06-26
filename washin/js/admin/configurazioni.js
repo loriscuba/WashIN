@@ -465,6 +465,84 @@ async function saveFir() {
   showToast(`FIR globale salvato: ${val}%`, 'success')
 }
 
+// ── Email SMTP per cedolini ───────────────────────────────────────────────────
+
+async function loadSmtpConfig() {
+  const { data } = await supabase.from('impostazioni')
+    .select('chiave,valore')
+    .in('chiave', ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_name','smtp_secure'])
+  const map = Object.fromEntries((data || []).map(r => [r.chiave, r.valore]))
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? '' }
+  set('smtp-host',      map.smtp_host ?? '')
+  set('smtp-port',      map.smtp_port ?? '465')
+  set('smtp-user',      map.smtp_user ?? '')
+  set('smtp-pass',      map.smtp_pass ?? '')
+  set('smtp-from-name', map.smtp_from_name ?? '')
+  const secEl = document.getElementById('smtp-secure')
+  if (secEl) secEl.checked = map.smtp_secure !== 'false'
+}
+
+async function saveSmtpConfig() {
+  const g = id => document.getElementById(id)?.value?.trim() ?? ''
+  const host     = g('smtp-host')
+  const port     = g('smtp-port') || '465'
+  const user     = g('smtp-user')
+  const pass     = g('smtp-pass')
+  const fromName = g('smtp-from-name')
+  const secure   = document.getElementById('smtp-secure')?.checked ?? true
+
+  if (!host || !user) { showToast('Host e email mittente sono obbligatori', 'error'); return }
+
+  const updates = [
+    { chiave: 'smtp_host',      valore: host,       aggiornato_a: new Date().toISOString() },
+    { chiave: 'smtp_port',      valore: port,       aggiornato_a: new Date().toISOString() },
+    { chiave: 'smtp_user',      valore: user,       aggiornato_a: new Date().toISOString() },
+    { chiave: 'smtp_from_name', valore: fromName,   aggiornato_a: new Date().toISOString() },
+    { chiave: 'smtp_secure',    valore: String(secure), aggiornato_a: new Date().toISOString() },
+  ]
+  if (pass) updates.push({ chiave: 'smtp_pass', valore: pass, aggiornato_a: new Date().toISOString() })
+
+  const { error } = await supabase.from('impostazioni').upsert(updates)
+  if (error) { showToast('Errore salvataggio SMTP: ' + error.message, 'error'); return }
+  showToast('Configurazione SMTP salvata', 'success')
+}
+
+async function testSmtpConfig() {
+  const resultEl = document.getElementById('smtp-test-result')
+  const btn = document.getElementById('smtp-test-btn')
+  if (btn) { btn.disabled = true; btn.textContent = 'Invio…' }
+  if (resultEl) { resultEl.style.display = 'none' }
+
+  // Prima salva, poi testa
+  await saveSmtpConfig()
+
+  // Recupera email dell'utente loggato per il test
+  const { data: { user } } = await supabase.auth.getUser()
+  const testTo = user?.email
+  if (!testTo) {
+    showToast('Impossibile determinare l\'email di test (utente non loggato)', 'error')
+    if (btn) { btn.disabled = false; btn.textContent = 'Invia email di test' }
+    return
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('send-cedolino', {
+      body: { _test: true, test_to: testTo }
+    })
+    const ok = !error && !data?.error
+    if (resultEl) {
+      resultEl.style.display = 'inline'
+      resultEl.style.color = ok ? '#059669' : '#dc2626'
+      resultEl.textContent = ok ? `Test inviato a ${testTo}` : (data?.error || error?.message || 'Errore')
+    }
+    showToast(ok ? `Email di test inviata a ${testTo}` : (data?.error || 'Errore invio test'), ok ? 'success' : 'error')
+  } catch (e) {
+    showToast('Errore: ' + e.message, 'error')
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Invia email di test' }
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initConfigurazioni() {
@@ -508,6 +586,9 @@ export function initConfigurazioni() {
   document.getElementById('fir-ricalcola-btn')?.addEventListener('click', ricalcolaFirDaBustePaga)
   document.getElementById('algoritmo-save-btn')?.addEventListener('click', saveAlgoritmoParametri)
 
+  document.getElementById('smtp-save-btn')?.addEventListener('click', saveSmtpConfig)
+  document.getElementById('smtp-test-btn')?.addEventListener('click', testSmtpConfig)
+
   document.getElementById('algoritmo-attivo-toggle')?.addEventListener('change', async e => {
     const attivo = e.target.checked
     _setAlgoritmoParamsVisible(attivo)
@@ -534,5 +615,6 @@ export function initConfigurazioni() {
     if (link.dataset.target === 'coefficienti-rischio') refreshCoefficienti()
     if (link.dataset.target === 'incidenza-reale')      { loadFir(); loadFirPersonale() }
     if (link.dataset.target === 'algoritmo-costi')      loadAlgoritmoParametri()
+    if (link.dataset.target === 'email-cedolini')       loadSmtpConfig()
   })
 }
