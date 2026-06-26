@@ -1082,6 +1082,7 @@ function renderBustePagaList(buste) {
               <td style="display:flex;gap:6px;flex-wrap:wrap;">
                 <button class="btn btn-sm btn-secondary" data-action="hr-edit-busta" data-id="${b.id}">Modifica</button>
                 ${b.file_path ? `<button class="btn btn-sm btn-secondary" data-action="hr-download" data-path="${b.file_path}">📎 PDF</button>` : ''}
+                <button class="btn btn-sm btn-primary" data-action="hr-invia-cedolino" data-id="${b.id}" title="Invia cedolino via email">✉ Invia</button>
               </td>
             </tr>
           `).join('')}
@@ -1341,7 +1342,29 @@ export function initGestioneAnagrafica() {
       const btn = e.target.closest('[data-action]')
       if (!btn) return
       if (btn.dataset.action === 'hr-edit-busta') await openModalBusta(btn.dataset.id)
-      if (btn.dataset.action === 'hr-download') await downloadBusta(btn.dataset.path)
+      if (btn.dataset.action === 'hr-download')   await downloadBusta(btn.dataset.path)
+      if (btn.dataset.action === 'hr-invia-cedolino') {
+        const originalText = btn.textContent
+        btn.disabled = true
+        btn.textContent = '…'
+        try {
+          const { data, error } = await supabase.functions.invoke('send-cedolino', {
+            body: { busta_paga_id: btn.dataset.id }
+          })
+          if (error || data?.error) {
+            let msg = data?.error || error?.message || 'Errore invio'
+            try { const body = await error?.context?.json?.(); if (body?.error) msg = body.error } catch {}
+            showToast(msg, 'error')
+          } else {
+            showToast(`Cedolino inviato a ${data.to}`, 'success')
+          }
+        } catch (e) {
+          showToast('Errore invio: ' + (e instanceof Error ? e.message : String(e)), 'error')
+        } finally {
+          btn.disabled = false
+          btn.textContent = originalText
+        }
+      }
     })
 
     // Busta modal close
