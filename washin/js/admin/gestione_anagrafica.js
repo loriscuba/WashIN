@@ -1,6 +1,7 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
 import { validaCF, validaEmail, validaIBAN, validaPW, primoErrore } from '../validate.js'
+import { encryptPdf, bytesToBase64 } from './pdf_crypt.js'
 
 const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
@@ -1047,6 +1048,60 @@ async function loadBustePagaTab(operatoreId) {
   }
 }
 
+// Invia il cedolino via email. Se è presente il PDF allegato, lo cifra con
+// il codice fiscale dell'operatore (AES-256) prima dell'invio.
+async function inviaCedolino(bustaId, btn) {
+  const originalText = btn.textContent
+  btn.disabled = true
+  btn.textContent = '…'
+  try {
+    // Dati busta + operatore (file PDF, codice fiscale, email)
+    const { data: busta, error: bErr } = await supabase
+      .from('buste_paga')
+      .select('id, anno, mese, file_path, profili(codice_fiscale, email, nome, cognome)')
+      .eq('id', bustaId)
+      .single()
+    if (bErr || !busta) { showToast('Busta paga non trovata', 'error'); return }
+
+    const op = busta.profili || {}
+    if (!op.email) { showToast('Operatore senza email — impostala in Anagrafica', 'error'); return }
+
+    const payload = { busta_paga_id: bustaId }
+
+    if (busta.file_path) {
+      const cf = (op.codice_fiscale || '').trim().toUpperCase()
+      if (!cf) {
+        showToast('Operatore senza codice fiscale: impossibile proteggere il PDF con password', 'error')
+        return
+      }
+      btn.textContent = 'Cifro…'
+      // Scarica il PDF dallo storage
+      const { data: blob, error: dErr } = await supabase.storage.from('buste-paga').download(busta.file_path)
+      if (dErr || !blob) { showToast('Errore download PDF: ' + (dErr?.message || ''), 'error'); return }
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      // Cifra con codice fiscale come password
+      const encrypted = await encryptPdf(bytes, cf)
+      payload.pdf_base64   = bytesToBase64(encrypted)
+      payload.pdf_filename = `Cedolino_${(op.cognome || '').trim()}_${MESI[busta.mese - 1]}_${busta.anno}.pdf`.replace(/\s+/g, '_')
+    }
+
+    btn.textContent = 'Invio…'
+    const { data, error } = await supabase.functions.invoke('send-cedolino', { body: payload })
+    if (error || data?.error) {
+      let msg = data?.error || error?.message || 'Errore invio'
+      try { const body = await error?.context?.json?.(); if (body?.error) msg = body.error } catch {}
+      showToast(msg, 'error')
+    } else {
+      showToast(`Cedolino inviato a ${data.to}${payload.pdf_base64 ? ' (PDF protetto da password)' : ''}`, 'success')
+    }
+  } catch (e) {
+    showToast('Errore invio: ' + (e instanceof Error ? e.message : String(e)), 'error')
+  } finally {
+    btn.disabled = false
+    btn.textContent = originalText
+  }
+}
+
 function renderBustePagaList(buste) {
   const container = document.getElementById('hr-buste-list')
   if (!container) return
@@ -1344,26 +1399,7 @@ export function initGestioneAnagrafica() {
       if (btn.dataset.action === 'hr-edit-busta') await openModalBusta(btn.dataset.id)
       if (btn.dataset.action === 'hr-download')   await downloadBusta(btn.dataset.path)
       if (btn.dataset.action === 'hr-invia-cedolino') {
-        const originalText = btn.textContent
-        btn.disabled = true
-        btn.textContent = '…'
-        try {
-          const { data, error } = await supabase.functions.invoke('send-cedolino', {
-            body: { busta_paga_id: btn.dataset.id }
-          })
-          if (error || data?.error) {
-            let msg = data?.error || error?.message || 'Errore invio'
-            try { const body = await error?.context?.json?.(); if (body?.error) msg = body.error } catch {}
-            showToast(msg, 'error')
-          } else {
-            showToast(`Cedolino inviato a ${data.to}`, 'success')
-          }
-        } catch (e) {
-          showToast('Errore invio: ' + (e instanceof Error ? e.message : String(e)), 'error')
-        } finally {
-          btn.disabled = false
-          btn.textContent = originalText
-        }
+        await inviaCedolino(btn.dataset.id, btn)
       }
     })
 

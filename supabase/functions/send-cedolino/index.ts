@@ -106,6 +106,7 @@ function htmlCedolino(busta: Record<string, unknown>, nomeOperatore: string, fro
       ${(busta.ore_straordinario as number) > 0 ? ` &nbsp;·&nbsp; Straordinario: <strong>${busta.ore_straordinario}h</strong>` : ''}
     </p>` : ''}
     ${busta.note ? `<p style="font-size:12px;color:#6b7280;font-style:italic;">Note: ${busta.note}</p>` : ''}
+    <!--PWD_NOTE-->
   </div>
   <div class="ft">Documento generato automaticamente. Per informazioni contatta l'ufficio paghe.</div>
 </div>
@@ -187,11 +188,25 @@ Deno.serve(async (req: Request) => {
       tls:    { rejectUnauthorized: false },  // necessario con alcuni provider italiani
     })
 
+    // Allegato PDF cifrato (opzionale): inviato come base64 dal client, già protetto da password
+    const { pdf_base64, pdf_filename } = body
+    const attachments = pdf_base64
+      ? [{ filename: pdf_filename || `Cedolino_${mese}_${busta.anno}.pdf`, content: pdf_base64, encoding: 'base64' }]
+      : undefined
+
+    const passwordNote = pdf_base64
+      ? `<div style="margin-top:18px;padding:12px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:13px;">
+           📎 In allegato il cedolino in PDF, <strong>protetto da password</strong>.<br>
+           La password è il tuo <strong>codice fiscale</strong> (in MAIUSCOLO).
+         </div>`
+      : ''
+
     await transporter.sendMail({
       from:    `"${fromName}" <${cfg.smtp_user}>`,
       to:      op.email,
       subject: `Cedolino ${mese} ${busta.anno} — ${nomeOp}`,
-      html:    htmlCedolino(busta, nomeOp, fromName),
+      html:    htmlCedolino(busta, nomeOp, fromName).replace('<!--PWD_NOTE-->', passwordNote),
+      attachments,
     })
 
     return new Response(JSON.stringify({ success: true, to: op.email }), {
