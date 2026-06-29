@@ -209,8 +209,29 @@ function buildOperatoreRow(form, item = {}) {
         cuEl.dataset.mancante = 'true'
       }
     } else if (op) {
-      cuEl.value = ''
-      cuEl.dataset.mancante = 'true'
+      // fonte non configurata: fallback automatico (consuntivo se disponibile, poi busta)
+      if (op.costo_orario_medio > 0) {
+        cuEl.value = op.costo_orario_medio.toFixed(4)
+        cuEl.dataset.firStima = 'auto-consuntivo'
+      } else if (op.costo_mensile > 0) {
+        const ore = op.ore_mensili_contratto || 173
+        try {
+          const { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', {
+            p_ore_ordinarie: ore, p_include_ratei: true, p_lordo_busta: op.costo_mensile,
+            ...(op.voce_tariffa_inail ? { p_voce_tariffa: op.voce_tariffa_inail } : {})
+          })
+          if (!error && rpc?.costo_orario_effettivo > 0) {
+            cuEl.value = rpc.costo_orario_effettivo.toFixed(4)
+            cuEl.dataset.firStima = 'auto-busta'
+          } else {
+            cuEl.value = ''
+            cuEl.dataset.mancante = 'true'
+          }
+        } catch { cuEl.value = ''; cuEl.dataset.mancante = 'true' }
+      } else {
+        cuEl.value = ''
+        cuEl.dataset.mancante = 'true'
+      }
     }
 
     refreshRischioHint(form)
@@ -300,12 +321,17 @@ function refreshRischioHint(form) {
       parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <span style="background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">CONSUNTIVO</span> media progressiva <b>€ ${medio}</b>/h → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
     } else if (firStima === 'busta') {
       parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <span style="background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">BUSTA PAGA</span> lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
+    } else if (firStima === 'auto-consuntivo') {
+      const medio = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 5 }).format(op.costo_orario_medio)
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <span style="background:#fef9c3;color:#713f12;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">AUTO</span> consuntivo medio <b>€ ${medio}</b>/h → <b style="font-size:13px;">${EUR(cuVal)}</b>/h <span style="color:#92400e;font-size:11px;">(configura fonte in Anagrafica per fissare)</span></div>`)
+    } else if (firStima === 'auto-busta') {
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <span style="background:#fef9c3;color:#713f12;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">AUTO</span> busta paga lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi → <b style="font-size:13px;">${EUR(cuVal)}</b>/h <span style="color:#92400e;font-size:11px;">(configura fonte in Anagrafica per fissare)</span></div>`)
     } else {
-      const missing = !op.fonte_costo_preventivo
-        ? 'Configura la fonte costo in Anagrafica → Retribuzione.'
-        : op.fonte_costo_preventivo === 'consuntivo'
-          ? 'Importa un consuntivo PDF per questo dipendente in Tool → Consuntivo Costi.'
-          : 'Carica una busta paga in Anagrafica.'
+      const missing = op.fonte_costo_preventivo === 'consuntivo'
+        ? 'Importa un consuntivo PDF per questo dipendente in Tool → Consuntivo Costi.'
+        : op.fonte_costo_preventivo === 'busta'
+          ? 'Carica una busta paga in Tool → Buste paga.'
+          : 'Nessun dato di costo disponibile. Importa una busta paga o un consuntivo PDF.'
       parts.push(`<div style="background:#fee2e2;border-left:3px solid #dc2626;padding:6px 10px;border-radius:4px;">
         <span style="color:#dc2626;font-weight:700;">⚠ ${nome}: costo orario non disponibile.</span><br>
         <span style="color:#dc2626;font-size:11px;">${missing}</span>
