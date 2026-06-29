@@ -118,7 +118,7 @@ const LIVELLI = [
 
 async function loadOperatoriList() {
   let { data, error } = await supabase.from('profili')
-    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base,data_assunzione,n_scatti_anzianita')
+    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base,data_assunzione,n_scatti_anzianita,costo_orario_medio')
     .neq('attivo', false)
     .order('cognome')
   if (error) {
@@ -181,7 +181,12 @@ function buildOperatoreRow(form, item = {}) {
     delete cuEl.dataset.firStima
     delete cuEl.dataset.mancante
 
-    if (op && (op.costo_mensile > 0 || op.livello_ccnl)) {
+    if (op && op.costo_orario_medio > 0) {
+      // Consuntivo reale: media progressiva costo orario da import PDF annuale/mensile
+      const buffer = _algoritmoCostiAttivo ? (1 + _bufferInefficienze) : 1
+      cuEl.value = (op.costo_orario_medio * buffer * getCoeff(form)).toFixed(4)
+      cuEl.dataset.firStima = 'consuntivo'
+    } else if (op && (op.costo_mensile > 0 || op.livello_ccnl)) {
       // Busta paga o livello CCNL disponibile → calcolo via RPC
       const ore = op.ore_mensili_contratto || 173
       try {
@@ -315,7 +320,11 @@ function refreshRischioHint(form) {
     const scattiNote = nScatti > 0 ? `, ${nScatti} scatt${nScatti === 1 ? 'o' : 'i'}` : ''
     const agevNote   = _agevolazioneInps > 0 ? `, agev. ${(_agevolazioneInps * 100).toFixed(1)}%` : ''
 
-    if (firStima === 'busta') {
+    if (firStima === 'consuntivo') {
+      const extraNote = _algoritmoCostiAttivo ? ` +buffer <b>${bufPct}%</b>` : ''
+      const medio = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 5 }).format(op.costo_orario_medio)
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — consuntivo reale <b>€ ${medio}</b>/h (media progressiva)${extraNote}${coeffNote} → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
+    } else if (firStima === 'busta') {
       const extraNote = _algoritmoCostiAttivo ? `${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>` : ''
       parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi CCNL${extraNote}${coeffNote} → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
     } else if (firStima?.startsWith('ccnl:')) {
