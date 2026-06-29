@@ -1125,7 +1125,10 @@ async function handleConsuntivoFiles(files) {
       if (progress) progress.textContent = `OCR ${files[i].name}: ${pct}%`
     })
     const fullText = pages.join('\n')
+    console.log('[consuntivo] testo estratto (prime 1000 char):\n', fullText.substring(0, 1000))
+    console.log('[consuntivo] campione numeri 5dec:', fullText.match(/\d+,\d{5}/g)?.slice(0,5))
     const result = parseConsuntivoPdf(fullText)
+    console.log('[consuntivo] righe parsate:', result.rows.length, result.rows[0])
     if (!parsed) parsed = result
     else result.rows.forEach(r => parsed.rows.push(r))
   }
