@@ -2298,7 +2298,11 @@
               <div class="form-group"><label>Indennità varie (€)</label><input name="indennita" type="number" step="0.01" min="0"></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <div class="form-group"><label>Costo mensile azienda (€)</label><input name="costo_mensile" type="number" step="0.01" min="0"></div>
+              <div class="form-group">
+                <label>Costo mensile azienda (€)</label>
+                <input name="costo_mensile" type="number" step="0.01" min="0">
+                <span id="hr-costo-busta-hint" style="font-size:11px;color:var(--teal,#0d9488);font-weight:600;margin-top:3px;display:none;"></span>
+              </div>
               <div class="form-group"><label>Ore mensili contratto</label><input name="ore_mensili_contratto" type="number" step="0.1" min="0"></div>
             </div>
           </form>
