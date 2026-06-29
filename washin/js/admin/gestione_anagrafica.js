@@ -984,9 +984,10 @@ function setTab(tabName) {
   modal.querySelectorAll('.hr-tab-content').forEach(p => p.classList.toggle('hidden', p.dataset.tab !== tabName))
 
   const saveBtn = document.getElementById('hr-save-btn')
-  if (saveBtn) saveBtn.style.display = tabName === 'buste' ? 'none' : ''
+  if (saveBtn) saveBtn.style.display = (tabName === 'buste' || tabName === 'consuntivo') ? 'none' : ''
 
   if (tabName === 'buste' && _currentOpId) loadBustePagaTab(_currentOpId)
+  if (tabName === 'consuntivo' && _currentOpId) loadConsuntivoTab(_currentOpId)
 }
 
 // ── Save personal / salary data ──────────────────────────────────────────────
@@ -1046,6 +1047,70 @@ async function loadBustePagaTab(operatoreId) {
     container.innerHTML = '<p style="color:#dc2626;">Errore caricamento buste paga</p>'
     console.error(err)
   }
+}
+
+async function loadConsuntivoTab(operatoreId) {
+  const container = document.getElementById('hr-consuntivo-body')
+  if (!container) return
+
+  // Carica profilo (per costo_orario_medio) + storico consuntivi
+  const [profRes, consRes] = await Promise.all([
+    supabase.from('profili').select('costo_orario_medio').eq('id', operatoreId).single(),
+    supabase.from('consuntivo_costi').select('*').eq('operatore_id', operatoreId).order('anno', { ascending: false }).order('mese_da', { ascending: false })
+  ])
+
+  const medio = profRes.data?.costo_orario_medio
+  const righe = consRes.data || []
+
+  const fmt  = n => n != null ? new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 5 }).format(n) : '—'
+  const fmtP = n => n != null ? new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' %' : '—'
+  const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
+  const periodoLabel = r => r.mese_da === 1 && r.mese_a === 12
+    ? `Anno ${r.anno}`
+    : r.mese_da === r.mese_a
+      ? `${MESI_SHORT[r.mese_da - 1]} ${r.anno}`
+      : `${MESI_SHORT[r.mese_da - 1]}–${MESI_SHORT[r.mese_a - 1]} ${r.anno}`
+
+  // Ultima % incidenza disponibile
+  const ultimaPerc = righe[0]?.perc_incidenza ?? null
+
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+      <div style="background:var(--gray-50,#f9fafb);border:1px solid var(--gray-200);border-radius:10px;padding:18px 20px;">
+        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-400);margin:0 0 6px;">Costo orario medio progressivo</p>
+        <p style="font-size:28px;font-weight:700;color:var(--teal,#0d9488);margin:0;">€ ${fmt(medio)}</p>
+        <p style="font-size:11px;color:var(--gray-400);margin:4px 0 0;">Media su ${righe.length} periodo/i importato/i</p>
+      </div>
+      <div style="background:var(--gray-50,#f9fafb);border:1px solid var(--gray-200);border-radius:10px;padding:18px 20px;">
+        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-400);margin:0 0 6px;">% incidenza (ultimo periodo)</p>
+        <p style="font-size:28px;font-weight:700;color:var(--teal,#0d9488);margin:0;">${fmtP(ultimaPerc)}</p>
+        <p style="font-size:11px;color:var(--gray-400);margin:4px 0 0;">${righe[0] ? periodoLabel(righe[0]) : 'Nessun dato'}</p>
+      </div>
+    </div>
+    ${righe.length ? `
+    <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-400);margin:0 0 10px;">Storico consuntivi</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:var(--gray-100);">
+          <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--gray-200);">Periodo</th>
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--gray-200);">Ore lav.</th>
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--gray-200);">Costo orario</th>
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--gray-200);">% incid.</th>
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--gray-200);">Totale</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${righe.map(r => `
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:7px 10px;">${periodoLabel(r)}</td>
+          <td style="padding:7px 10px;text-align:right;">${r.ore_lavorate != null ? new Intl.NumberFormat('it-IT').format(r.ore_lavorate) : '—'}</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:600;">€ ${fmt(r.costo_orario)}</td>
+          <td style="padding:7px 10px;text-align:right;">${fmtP(r.perc_incidenza)}</td>
+          <td style="padding:7px 10px;text-align:right;">${r.totale_costo != null ? EUR(r.totale_costo) : '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>` : '<p style="color:var(--gray-400);font-size:13px;">Nessun consuntivo importato per questo dipendente.</p>'}
+  `
 }
 
 // Invia il cedolino via email. Se è presente il PDF allegato, lo cifra con
