@@ -968,7 +968,7 @@ async function openModalAnag(operatoreId) {
       if (hint) {
         const { data: bp } = await supabase
           .from('buste_paga')
-          .select('costo_aziendale, anno, mese')
+          .select('costo_aziendale, ore_lavorate, anno, mese')
           .eq('operatore_id', operatoreId)
           .not('costo_aziendale', 'is', null)
           .order('anno', { ascending: false })
@@ -978,7 +978,7 @@ async function openModalAnag(operatoreId) {
         if (bp?.costo_aziendale) {
           const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
           const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n)
-          const ore = parseFloat(retribForm.querySelector('[name="ore_mensili_contratto"]')?.value) || null
+          const ore = bp.ore_lavorate || parseFloat(retribForm.querySelector('[name="ore_mensili_contratto"]')?.value) || null
           const orarioStr = ore > 0
             ? ` &nbsp;|&nbsp; <b>${fmt(bp.costo_aziendale / ore)}/h</b> (su ${ore} ore)`
             : ''
