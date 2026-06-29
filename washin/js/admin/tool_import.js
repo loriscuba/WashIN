@@ -1191,16 +1191,22 @@ async function confirmConsuntivoImport() {
   const matched = _consData.filter(r => r._operatore_id)
   if (!matched.length) { showToast('Nessun dipendente abbinato a un profilo', 'error'); return }
 
-  const rows = matched.map(r => ({
-    operatore_id:   r._operatore_id,
-    anno:           r.anno,
-    mese_da:        r.mese_da,
-    mese_a:         r.mese_a,
-    ore_lavorate:   r.ore_lavorate,
-    totale_costo:   r.totale_costo,
-    costo_orario:   r.costo_orario,
-    perc_incidenza: r.perc_incidenza,
-  }))
+  // Deduplica per evitare "ON CONFLICT DO UPDATE command cannot affect row a second time"
+  const dedupMap = new Map()
+  for (const r of matched) {
+    const key = `${r._operatore_id}|${r.anno}|${r.mese_da}|${r.mese_a}`
+    dedupMap.set(key, {
+      operatore_id:   r._operatore_id,
+      anno:           r.anno,
+      mese_da:        r.mese_da,
+      mese_a:         r.mese_a,
+      ore_lavorate:   r.ore_lavorate,
+      totale_costo:   r.totale_costo,
+      costo_orario:   r.costo_orario,
+      perc_incidenza: r.perc_incidenza,
+    })
+  }
+  const rows = [...dedupMap.values()]
 
   const { error } = await supabase
     .from('consuntivo_costi')
