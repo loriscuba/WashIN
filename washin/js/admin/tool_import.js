@@ -539,6 +539,45 @@ function parseCedolino(text) {
     }
   }
 
+  // ── STCED fallback: parse by label (no "Tfr maturato" anchor in this format) ──
+  if (!tfrMatM) {
+    // TOTALE LORDO
+    const lorM = text.match(/TOTALE\s+LORDO\s+([\d.]+,\d{2})/i)
+    if (lorM) { const v = pd(lorM[1]); if (v > 300) busta._bp_lordo = v }
+
+    // IMPON. CONTR. SOC.
+    const imponM = text.match(/IMPON[.\s]+CONTR[.\s]+SOC\.?\s+([\d.]+,\d{2})/i)
+    if (imponM) { const v = pd(imponM[1]); if (v > 0) busta.imponibile_inps = v }
+
+    // CONTRIBUTO 1 (INPS dipendente)
+    const c1M = text.match(/CONTRIBUTO\s+1\s+([\d.]+,\d{2})/i)
+    if (c1M) { const v = pd(c1M[1]); if (v > 0) busta.contributi_inps_dip = v }
+
+    // CONTRIBUTO 4 (INAIL)
+    const c4M = text.match(/CONTRIBUTO\s+4\s+([\d.]+,\d{2})/i)
+    if (c4M) { const v = pd(c4M[1]); if (v > 0) busta.contributo_inail = v }
+
+    // NETTO BUSTA
+    const nettoM = text.match(/NETTO\s+BUSTA\s+([\d.]+,\d{2})/i)
+    if (nettoM) { const v = pd(nettoM[1]); if (v > 100) busta._bp_netto = v }
+
+    // IRPEF PAGATA (before PROGRESSIVI ANNUI section to avoid cumulative value)
+    const progIdx = text.search(/PROGRESSIVI\s+ANNUI/i)
+    const textBefore = progIdx > 0 ? text.substring(0, progIdx) : text
+    const irpefM = textBefore.match(/IRPEF\s+PAGATA\s+([\d.]+,\d{2})/i)
+    if (irpefM) { const v = pd(irpefM[1]); if (v > 0) busta.irpef = v }
+
+    // TFR MESE (in DATI STATISTICI)
+    const tfrMeseM = text.match(/TFR\s+MESE\s+([\d.]+,\d{2})/i)
+    if (tfrMeseM) { const v = pd(tfrMeseM[1]); if (v >= 10 && v <= 700) busta.tfr_mese = v }
+
+    // ORE INPS → ore_lavorate (fallback if 8001 didn't fire)
+    if (!busta.ore_lavorate) {
+      const oreInpsM = text.match(/ORE\s+INPS\s+(\d{1,3})[,.](\d{2})/i)
+      if (oreInpsM) { const v = parseInt(oreInpsM[1]); if (v >= 1 && v <= 250) busta.ore_lavorate = v }
+    }
+  }
+
   // Addizionali: 9117 (reg) + 9119 / 9173 (com)
   let addTot = 0
   for (const code of ['9117','9119','9173']) {
