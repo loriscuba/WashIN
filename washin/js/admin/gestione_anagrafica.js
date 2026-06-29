@@ -1102,6 +1102,88 @@ async function inviaCedolino(bustaId, btn) {
   }
 }
 
+// Normalizza un numero di telefono in formato internazionale per wa.me (solo cifre).
+// Best-effort per numeri italiani: rimuove prefissi/spazi e antepone 39 se mancante.
+function normalizzaTelefono(raw) {
+  let d = (raw || '').replace(/[^\d]/g, '')
+  if (!d) return ''
+  if (d.startsWith('00')) d = d.slice(2)            // 0039... -> 39...
+  if (!d.startsWith('39') && (d.length === 9 || d.length === 10)) d = '39' + d
+  return d
+}
+
+// Invia il cedolino via WhatsApp Web. WhatsApp non consente di allegare file via
+// link, quindi: cifra il PDF (codice fiscale), lo carica nello Storage, genera un
+// link di download temporaneo e apre WhatsApp Web con un messaggio precompilato.
+async function inviaCedolinoWhatsApp(bustaId, btn) {
+  const originalText = btn.textContent
+  // Apre subito una scheda vuota (dentro il gesto del click) per evitare il blocco popup
+  const waWin = window.open('about:blank', '_blank')
+  btn.disabled = true
+  btn.textContent = '…'
+  try {
+    const { data: busta, error: bErr } = await supabase
+      .from('buste_paga')
+      .select('id, anno, mese, file_path, operatore_id, totale_netto, profili(codice_fiscale, telefono, nome, cognome)')
+      .eq('id', bustaId)
+      .single()
+    if (bErr || !busta) { waWin?.close(); showToast('Busta paga non trovata', 'error'); return }
+
+    const op = busta.profili || {}
+    const tel = normalizzaTelefono(op.telefono)
+    if (!tel) { waWin?.close(); showToast('Operatore senza numero di telefono — impostalo in Anagrafica', 'error'); return }
+
+    let signedUrl = null
+    if (busta.file_path) {
+      const cf = (op.codice_fiscale || '').trim().toUpperCase()
+      if (!cf) {
+        waWin?.close()
+        showToast('Operatore senza codice fiscale: impossibile proteggere il PDF con password', 'error')
+        return
+      }
+      btn.textContent = 'Cifro…'
+      const { data: blob, error: dErr } = await supabase.storage.from('buste-paga').download(busta.file_path)
+      if (dErr || !blob) { waWin?.close(); showToast('Errore download PDF: ' + (dErr?.message || ''), 'error'); return }
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      const encrypted = await encryptPdf(bytes, cf)
+
+      // Carica la versione cifrata e crea un link temporaneo (7 giorni)
+      btn.textContent = 'Carico…'
+      const path = `whatsapp/${busta.operatore_id}/${busta.anno}-${busta.mese}.pdf`
+      const { error: upErr } = await supabase.storage.from('buste-paga')
+        .upload(path, new Blob([encrypted], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' })
+      if (upErr) { waWin?.close(); showToast('Errore caricamento PDF cifrato: ' + upErr.message, 'error'); return }
+      const { data: signed, error: sErr } = await supabase.storage.from('buste-paga')
+        .createSignedUrl(path, 60 * 60 * 24 * 7)
+      if (sErr || !signed?.signedUrl) { waWin?.close(); showToast('Errore generazione link: ' + (sErr?.message || ''), 'error'); return }
+      signedUrl = signed.signedUrl
+    }
+
+    // Composizione messaggio
+    const righe = [`Ciao ${(op.nome || '').trim()},`.trim(),
+                   `ecco il cedolino di ${MESI[busta.mese - 1]} ${busta.anno}.`]
+    if (signedUrl) {
+      righe.push('', `📄 Scarica il PDF: ${signedUrl}`, '',
+                 '🔒 Il PDF è protetto da password: il tuo CODICE FISCALE in MAIUSCOLO.',
+                 'Il link è valido 7 giorni.')
+    } else {
+      righe.push('', `Netto in busta: ${FMT_EUR(busta.totale_netto)}`,
+                 '(PDF non disponibile — contatta l\'ufficio paghe per la copia cartacea.)')
+    }
+    const waUrl = `https://wa.me/${tel}?text=${encodeURIComponent(righe.join('\n'))}`
+
+    if (waWin) waWin.location.href = waUrl
+    else window.open(waUrl, '_blank')   // fallback se il popup non era stato aperto
+    showToast('WhatsApp Web aperto — premi invio per inviare il messaggio', 'success')
+  } catch (e) {
+    waWin?.close()
+    showToast('Errore WhatsApp: ' + (e instanceof Error ? e.message : String(e)), 'error')
+  } finally {
+    btn.disabled = false
+    btn.textContent = originalText
+  }
+}
+
 function renderBustePagaList(buste) {
   const container = document.getElementById('hr-buste-list')
   if (!container) return
@@ -1138,6 +1220,7 @@ function renderBustePagaList(buste) {
                 <button class="btn btn-sm btn-secondary" data-action="hr-edit-busta" data-id="${b.id}">Modifica</button>
                 ${b.file_path ? `<button class="btn btn-sm btn-secondary" data-action="hr-download" data-path="${b.file_path}">📎 PDF</button>` : ''}
                 <button class="btn btn-sm btn-primary" data-action="hr-invia-cedolino" data-id="${b.id}" title="Invia cedolino via email">✉ Invia</button>
+                <button class="btn btn-sm" style="background:#25D366;color:#fff;" data-action="hr-whatsapp" data-id="${b.id}" title="Invia cedolino su WhatsApp">WhatsApp</button>
               </td>
             </tr>
           `).join('')}
@@ -1400,6 +1483,9 @@ export function initGestioneAnagrafica() {
       if (btn.dataset.action === 'hr-download')   await downloadBusta(btn.dataset.path)
       if (btn.dataset.action === 'hr-invia-cedolino') {
         await inviaCedolino(btn.dataset.id, btn)
+      }
+      if (btn.dataset.action === 'hr-whatsapp') {
+        await inviaCedolinoWhatsApp(btn.dataset.id, btn)
       }
     })
 
