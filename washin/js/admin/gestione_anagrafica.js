@@ -1051,9 +1051,8 @@ async function loadBustePagaTab(operatoreId) {
 // Invia il cedolino via email. Se è presente il PDF allegato, lo cifra con
 // il codice fiscale dell'operatore (AES-256) prima dell'invio.
 async function inviaCedolino(bustaId, btn) {
-  const originalText = btn.textContent
   btn.disabled = true
-  btn.textContent = '…'
+  btn.classList.add('act-busy')
   try {
     // Dati busta + operatore (file PDF, codice fiscale, email)
     const { data: busta, error: bErr } = await supabase
@@ -1074,7 +1073,6 @@ async function inviaCedolino(bustaId, btn) {
         showToast('Operatore senza codice fiscale: impossibile proteggere il PDF con password', 'error')
         return
       }
-      btn.textContent = 'Cifro…'
       // Scarica il PDF dallo storage
       const { data: blob, error: dErr } = await supabase.storage.from('buste-paga').download(busta.file_path)
       if (dErr || !blob) { showToast('Errore download PDF: ' + (dErr?.message || ''), 'error'); return }
@@ -1085,7 +1083,6 @@ async function inviaCedolino(bustaId, btn) {
       payload.pdf_filename = `Cedolino_${(op.cognome || '').trim()}_${MESI[busta.mese - 1]}_${busta.anno}.pdf`.replace(/\s+/g, '_')
     }
 
-    btn.textContent = 'Invio…'
     const { data, error } = await supabase.functions.invoke('send-cedolino', { body: payload })
     if (error || data?.error) {
       let msg = data?.error || error?.message || 'Errore invio'
@@ -1098,7 +1095,7 @@ async function inviaCedolino(bustaId, btn) {
     showToast('Errore invio: ' + (e instanceof Error ? e.message : String(e)), 'error')
   } finally {
     btn.disabled = false
-    btn.textContent = originalText
+    btn.classList.remove('act-busy')
   }
 }
 
@@ -1116,11 +1113,10 @@ function normalizzaTelefono(raw) {
 // link, quindi: cifra il PDF (codice fiscale), lo carica nello Storage, genera un
 // link di download temporaneo e apre WhatsApp Web con un messaggio precompilato.
 async function inviaCedolinoWhatsApp(bustaId, btn) {
-  const originalText = btn.textContent
   // Apre subito una scheda vuota (dentro il gesto del click) per evitare il blocco popup
   const waWin = window.open('about:blank', '_blank')
   btn.disabled = true
-  btn.textContent = '…'
+  btn.classList.add('act-busy')
   try {
     const { data: busta, error: bErr } = await supabase
       .from('buste_paga')
@@ -1141,14 +1137,12 @@ async function inviaCedolinoWhatsApp(bustaId, btn) {
         showToast('Operatore senza codice fiscale: impossibile proteggere il PDF con password', 'error')
         return
       }
-      btn.textContent = 'Cifro…'
       const { data: blob, error: dErr } = await supabase.storage.from('buste-paga').download(busta.file_path)
       if (dErr || !blob) { waWin?.close(); showToast('Errore download PDF: ' + (dErr?.message || ''), 'error'); return }
       const bytes = new Uint8Array(await blob.arrayBuffer())
       const encrypted = await encryptPdf(bytes, cf)
 
       // Carica la versione cifrata
-      btn.textContent = 'Carico…'
       const path = `whatsapp/${busta.operatore_id}/${busta.anno}-${busta.mese}.pdf`
       const { error: upErr } = await supabase.storage.from('buste-paga')
         .upload(path, new Blob([encrypted], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' })
@@ -1181,7 +1175,7 @@ async function inviaCedolinoWhatsApp(bustaId, btn) {
     showToast('Errore WhatsApp: ' + (e instanceof Error ? e.message : String(e)), 'error')
   } finally {
     btn.disabled = false
-    btn.textContent = originalText
+    btn.classList.remove('act-busy')
   }
 }
 
@@ -1217,11 +1211,21 @@ function renderBustePagaList(buste) {
               <td>${FMT_EUR(b.tfr_mese)}</td>
               <td>${FMT_EUR(b.costo_aziendale)}</td>
               <td><span class="badge ${STATO_BADGE[b.stato] || 'badge-warning'}">${b.stato}</span></td>
-              <td style="display:flex;gap:6px;flex-wrap:wrap;">
-                <button class="btn btn-sm btn-secondary" data-action="hr-edit-busta" data-id="${b.id}">Modifica</button>
-                ${b.file_path ? `<button class="btn btn-sm btn-secondary" data-action="hr-download" data-path="${b.file_path}">📎 PDF</button>` : ''}
-                <button class="btn btn-sm btn-primary" data-action="hr-invia-cedolino" data-id="${b.id}" title="Invia cedolino via email">✉ Invia</button>
-                <button class="btn btn-sm" style="background:#25D366;color:#fff;" data-action="hr-whatsapp" data-id="${b.id}" title="Invia cedolino su WhatsApp">WhatsApp</button>
+              <td>
+                <div class="act-row">
+                  <button class="act-btn act-edit" data-action="hr-edit-busta" data-id="${b.id}" data-tip="Modifica" aria-label="Modifica">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                  </button>
+                  ${b.file_path ? `<button class="act-btn act-pdf" data-action="hr-download" data-path="${b.file_path}" data-tip="Apri PDF" aria-label="Apri PDF">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </button>` : ''}
+                  <button class="act-btn act-mail" data-action="hr-invia-cedolino" data-id="${b.id}" data-tip="Invia via email" aria-label="Invia via email">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  </button>
+                  <button class="act-btn act-wa" data-action="hr-whatsapp" data-id="${b.id}" data-tip="Invia su WhatsApp" aria-label="Invia su WhatsApp">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 6.32A8.78 8.78 0 0 0 3.5 16.9L2 22l5.25-1.38a8.78 8.78 0 0 0 4.2 1.07h.01a8.79 8.79 0 0 0 6.14-15.01zM12 20.2h-.01a7.3 7.3 0 0 1-3.72-1.02l-.27-.16-2.77.73.74-2.7-.17-.28a7.29 7.29 0 1 1 6.2 3.43zm4.01-5.46c-.22-.11-1.3-.64-1.5-.71-.2-.08-.35-.11-.5.11-.15.22-.57.71-.7.86-.13.15-.26.16-.48.05-.22-.11-.93-.34-1.77-1.09-.65-.58-1.1-1.3-1.22-1.52-.13-.22-.01-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.39-.06-.11-.5-1.2-.68-1.65-.18-.43-.36-.37-.5-.38h-.43c-.15 0-.39.06-.59.28-.2.22-.78.76-.78 1.84 0 1.08.8 2.13.91 2.28.11.15 1.56 2.38 3.78 3.34.53.23.94.36 1.26.46.53.17 1.01.15 1.39.09.42-.06 1.3-.53 1.48-1.05.18-.51.18-.95.13-1.04-.05-.09-.2-.15-.42-.26z"/></svg>
+                  </button>
+                </div>
               </td>
             </tr>
           `).join('')}
