@@ -1106,7 +1106,7 @@ async function loadConsuntivoTab(operatoreId) {
           <td style="padding:7px 10px;text-align:right;">${r.ore_lavorate != null ? new Intl.NumberFormat('it-IT').format(r.ore_lavorate) : '—'}</td>
           <td style="padding:7px 10px;text-align:right;font-weight:600;">€ ${fmt(r.costo_orario)}</td>
           <td style="padding:7px 10px;text-align:right;">${fmtP(r.perc_incidenza)}</td>
-          <td style="padding:7px 10px;text-align:right;">${r.totale_costo != null ? EUR(r.totale_costo) : '—'}</td>
+          <td style="padding:7px 10px;text-align:right;">${r.totale_costo != null ? new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(r.totale_costo) : '—'}</td>
         </tr>`).join('')}
       </tbody>
     </table>` : '<p style="color:var(--gray-400);font-size:13px;">Nessun consuntivo importato per questo dipendente.</p>'}
