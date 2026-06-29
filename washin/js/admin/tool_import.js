@@ -1060,10 +1060,9 @@ async function confirmBusteImport() {
 let _consData = []   // righe parsate dal PDF consuntivo
 
 function parseConsuntivoPdf(text) {
-  // Estrae periodo: "DAL MESE DI <MESE> <ANNO> AL MESE DI <MESE> <ANNO>"
   const MESI_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                    'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
-  const periodoM = text.match(/DAL MESE DI (\w+)\s+(\d{4})\s+AL MESE DI (\w+)\s+(\d{4})/i)
+  const periodoM = text.match(/DAL MESE DI\s+(\w+)\s+(\d{4})\s+AL MESE DI\s+(\w+)\s+(\d{4})/i)
   let mese_da = 1, mese_a = 12, anno = new Date().getFullYear()
   if (periodoM) {
     const idxDa = MESI_IT.findIndex(m => m.toLowerCase() === periodoM[1].toLowerCase())
@@ -1073,37 +1072,38 @@ function parseConsuntivoPdf(text) {
     anno    = parseInt(periodoM[2])
   }
 
-  // Il testo estratto da PDF è piatto (token separati da spazi).
-  // Ancora affidabile: costo_orario ha SEMPRE 5 decimali (es. "27,21095")
-  // subito seguito da % incid con 2 decimali (es. "1,95").
-  // Cerchiamo a ritroso per matricola e nome, avanti per totale.
+  // Testo piatto: token separati da spazi.
+  // Ancora: costo_orario ha sempre 5 decimali, immediatamente seguito da % incid (2 dec).
   const rows = []
-  const costoRe = /\b(\d+,\d{5})\s+(\d+,\d{2})\b/g
+  const costoRe = /(\d+,\d{5})\s+(\d+,\d{2})\b/g
   const pdIt = s => parseFloat(s.replace(/\./g,'').replace(',','.'))
 
   for (const cm of text.matchAll(costoRe)) {
     const costo_orario   = pdIt(cm[1])
     const perc_incidenza = pdIt(cm[2])
-    if (!costo_orario || perc_incidenza > 10) continue  // skip totale azienda
+    if (!costo_orario) continue
 
-    // Guarda i 300 char prima dell'ancora per trovare matricola e nome
-    const before = text.substring(Math.max(0, cm.index - 300), cm.index)
-    // Matricola: ultimo numero intero breve prima di una sequenza di maiuscole
-    const matM = before.match(/(\d{1,3})\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s']{2,35}?)\s+\d[\d,]+\s*$/)
-    if (!matM) continue
+    // Finestra prima del match per trovare matricola e nome
+    const winStart = Math.max(0, cm.index - 600)
+    const before = text.substring(winStart, cm.index)
 
-    const matricola    = matM[1]
-    const cognome_nome = matM[2].trim().replace(/\s+/g,' ')
+    // Trova l'ULTIMA occorrenza di "NNN COGNOME NOME" (matricola + nome tutto maiuscolo)
+    // Il nome termina quando inizia il primo numero (ore lavorate)
+    const rowRe = /\b(\d{1,3})\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s']{1,50}?)(?=\s+\d)/g
+    let lastRow = null
+    for (const m of before.matchAll(rowRe)) lastRow = m
+    if (!lastRow) continue
 
-    // Ore lavorate: primo numero dopo il nome (prima dei dati economici)
-    const afterName = before.substring(before.lastIndexOf(matM[0]) + matM[0].length)
-    const oreM = afterName.match(/^[\s,]*(\d[\d.]*,\d{2})/)
-    const ore_lavorate = oreM ? pdIt(oreM[1]) : null
+    const matricola    = lastRow[1]
+    const cognome_nome = lastRow[2].trim().replace(/\s+/g,' ')
 
-    // Totale costo: numero con 2 decimali immediatamente prima di costo_orario
-    // (può avere punti migliaia: es "37.387,85")
-    const totM = before.match(/(\d[\d.]*,\d{2})\s*$/)
-    const totale_costo = totM ? pdIt(totM[1]) : null
+    // Segmento tra fine nome e costo_orario: contiene tutti i valori numerici della riga
+    const afterName = before.substring(lastRow.index + lastRow[0].length)
+    const nums = [...afterName.matchAll(/\d[\d.]*,\d+/g)].map(m => pdIt(m[0]))
+
+    // Primo numero = ore lavorate, ultimo = totale costo aziendale
+    const ore_lavorate = nums.length > 0 ? nums[0] : null
+    const totale_costo = nums.length > 0 ? nums[nums.length - 1] : null
 
     rows.push({ matricola, cognome_nome, ore_lavorate, totale_costo, costo_orario, perc_incidenza, anno, mese_da, mese_a })
   }
@@ -1125,10 +1125,7 @@ async function handleConsuntivoFiles(files) {
       if (progress) progress.textContent = `OCR ${files[i].name}: ${pct}%`
     })
     const fullText = pages.join('\n')
-    console.log('[consuntivo] testo estratto (prime 1000 char):\n', fullText.substring(0, 1000))
-    console.log('[consuntivo] campione numeri 5dec:', fullText.match(/\d+,\d{5}/g)?.slice(0,5))
     const result = parseConsuntivoPdf(fullText)
-    console.log('[consuntivo] righe parsate:', result.rows.length, result.rows[0])
     if (!parsed) parsed = result
     else result.rows.forEach(r => parsed.rows.push(r))
   }
