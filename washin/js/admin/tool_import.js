@@ -1073,46 +1073,45 @@ function parseConsuntivoPdf(text) {
     anno    = parseInt(periodoM[2])
   }
 
+  // Il testo estratto da PDF è piatto (token separati da spazi).
+  // Ancora affidabile: costo_orario ha SEMPRE 5 decimali (es. "27,21095")
+  // subito seguito da % incid con 2 decimali (es. "1,95").
+  // Cerchiamo a ritroso per matricola e nome, avanti per totale.
   const rows = []
-  // Ogni riga dipendente: numero_matricola COGNOME NOME  ore_lav  ... costo_orario  perc_incid
-  // Il formato è fisso: l'ultima colonna è % incid, penultima costo_orario, prima è matricola
-  // Usiamo regex per righe che iniziano con numero intero (matricola) seguito da nome in maiuscolo
-  const lineRe = /^\s*(\d+)\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s']+?)\s+([\d.,]+)\s+[\d.,]+\s+[\d.,]+(?:\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+)?\s+([\d.,]+)\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)\s+([\d.,]+)\s*$/gm
-  for (const m of text.matchAll(lineRe)) {
-    const costo_orario   = parseFloat(m[5].replace(/\./g,'').replace(',','.'))
-    const perc_incidenza = parseFloat(m[6].replace(',','.'))
-    if (!costo_orario) continue
-    rows.push({
-      matricola:       m[1].trim(),
-      cognome_nome:    m[2].trim(),
-      ore_lavorate:    parseFloat(m[3].replace(',','.')),
-      totale_costo:    parseFloat(m[4].replace(/\./g,'').replace(',','.')),
-      costo_orario,
-      perc_incidenza,
-      anno,
-      mese_da,
-      mese_a,
-    })
+  const costoRe = /\b(\d+,\d{5})\s+(\d+,\d{2})\b/g
+  const pdIt = s => parseFloat(s.replace(/\./g,'').replace(',','.'))
+
+  for (const cm of text.matchAll(costoRe)) {
+    const costo_orario   = pdIt(cm[1])
+    const perc_incidenza = pdIt(cm[2])
+    if (!costo_orario || perc_incidenza > 10) continue  // skip totale azienda
+
+    // Guarda i 300 char prima dell'ancora per trovare matricola e nome
+    const before = text.substring(Math.max(0, cm.index - 300), cm.index)
+    // Matricola: ultimo numero intero breve prima di una sequenza di maiuscole
+    const matM = before.match(/(\d{1,3})\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s']{2,35}?)\s+\d[\d,]+\s*$/)
+    if (!matM) continue
+
+    const matricola    = matM[1]
+    const cognome_nome = matM[2].trim().replace(/\s+/g,' ')
+
+    // Ore lavorate: primo numero dopo il nome (prima dei dati economici)
+    const afterName = before.substring(before.lastIndexOf(matM[0]) + matM[0].length)
+    const oreM = afterName.match(/^[\s,]*(\d[\d.]*,\d{2})/)
+    const ore_lavorate = oreM ? pdIt(oreM[1]) : null
+
+    // Totale costo: numero con 2 decimali immediatamente prima di costo_orario
+    // (può avere punti migliaia: es "37.387,85")
+    const totM = before.match(/(\d[\d.]*,\d{2})\s*$/)
+    const totale_costo = totM ? pdIt(totM[1]) : null
+
+    rows.push({ matricola, cognome_nome, ore_lavorate, totale_costo, costo_orario, perc_incidenza, anno, mese_da, mese_a })
   }
 
-  // Fallback: parsing posizionale per righe che non matchano la regex completa
-  if (!rows.length) {
-    const lines = text.split('\n')
-    for (const line of lines) {
-      const m = line.match(/^\s*(\d{1,3})\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s']{3,35?})\s+[\d,.\s]+\s+([\d]+[,.][\d]{5})\s+([\d]+[,.][\d]{2})\s*$/)
-      if (!m) continue
-      rows.push({
-        matricola:       m[1].trim(),
-        cognome_nome:    m[2].trim(),
-        ore_lavorate:    null,
-        totale_costo:    null,
-        costo_orario:    parseFloat(m[3].replace(',','.')),
-        perc_incidenza:  parseFloat(m[4].replace(',','.')),
-        anno, mese_da, mese_a,
-      })
-    }
-  }
-  return { rows, periodo: periodoM ? periodoM[0] : `Anno ${anno}`, anno, mese_da, mese_a }
+  const periodo = periodoM
+    ? `${periodoM[1]} ${periodoM[2]}${periodoM[1] !== periodoM[3] ? ' – ' + periodoM[3] + ' ' + periodoM[4] : ''}`
+    : `Anno ${anno}`
+  return { rows, periodo, anno, mese_da, mese_a }
 }
 
 async function handleConsuntivoFiles(files) {
