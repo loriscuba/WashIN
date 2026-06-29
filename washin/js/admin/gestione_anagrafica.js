@@ -968,7 +968,7 @@ async function openModalAnag(operatoreId) {
       if (hint) {
         const { data: bp } = await supabase
           .from('buste_paga')
-          .select('costo_aziendale, anno, mese')
+          .select('costo_aziendale, ore_ordinarie, anno, mese')
           .eq('operatore_id', operatoreId)
           .not('costo_aziendale', 'is', null)
           .order('anno', { ascending: false })
@@ -977,8 +977,13 @@ async function openModalAnag(operatoreId) {
           .maybeSingle()
         if (bp?.costo_aziendale) {
           const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
-          const eur = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(bp.costo_aziendale)
-          hint.textContent = `Ultima busta (${MESI[bp.mese - 1]} ${bp.anno}): ${eur}`
+          const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n)
+          const oreContratto = parseFloat(retribForm.querySelector('[name="ore_mensili_contratto"]')?.value) || null
+          const ore = bp.ore_ordinarie || oreContratto
+          const orarioStr = ore > 0
+            ? ` &nbsp;|&nbsp; <b>${fmt(bp.costo_aziendale / ore)}/h</b> (su ${ore} ore)`
+            : ''
+          hint.innerHTML = `📋 Ultima busta <b>${MESI[bp.mese - 1]} ${bp.anno}</b> — costo aziendale: <b>${fmt(bp.costo_aziendale)}/mese</b>${orarioStr}`
           hint.style.display = ''
         } else {
           hint.style.display = 'none'
