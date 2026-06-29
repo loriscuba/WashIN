@@ -576,6 +576,16 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
+          <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;">
+            <div>
+              <strong style="font-size:14px;">Mostra tab Anagrafica nel Tool Import</strong>
+              <p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">Se disattivato, la tab Anagrafica è nascosta nel Tool Import (utile se gestisci le anagrafiche solo tramite Gestione Anagrafica).</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="impost-tool-anag" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
           <div style="overflow-x:auto;margin-top:16px;">
             <table class="data-table" style="min-width:480px;width:100%;">
               <thead>
@@ -961,8 +971,9 @@
 
           <!-- Tab bar -->
           <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:24px;">
-            <button class="ti-tab-btn" data-tab="anag" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--teal,#0d9488);border-bottom:2px solid var(--teal,#0d9488);margin-bottom:-2px;">Anagrafica</button>
-            <button class="ti-tab-btn" data-tab="buste" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Buste paga</button>
+            <button class="ti-tab-btn" data-tab="anag" id="ti-tab-anag-btn" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Anagrafica</button>
+            <button class="ti-tab-btn" data-tab="buste" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--teal,#0d9488);border-bottom:2px solid var(--teal,#0d9488);margin-bottom:-2px;">Buste paga</button>
+            <button class="ti-tab-btn" data-tab="consuntivo" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Consuntivo Costi</button>
           </div>
 
           <!-- ─ Panel: Anagrafica ─ -->
@@ -1069,6 +1080,48 @@
                 <table class="washin-table" id="ti-buste-table">
                   <thead><tr><th>Operatore</th><th>Mese</th><th>Anno</th><th>Lordo €</th><th>IRPEF €</th><th>INPS dip. €</th><th>TFR €</th><th>Netto €</th><th>Stato</th></tr></thead>
                   <tbody id="ti-buste-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- ─ Panel: Consuntivo Costi ─ -->
+          <div id="ti-panel-consuntivo" style="display:none;">
+            <div class="card" style="padding:20px;margin-bottom:20px;">
+              <h3 style="margin:0 0 6px;font-size:15px;">Carica report Costo Consuntivo del Periodo</h3>
+              <p style="font-size:13px;color:var(--gray-500);margin:0 0 14px;">Trascina o seleziona il PDF esportato dal gestionale paghe (formato "COSTO CONSUNTIVO DEL PERIODO"). Puoi caricare sia report annuali che mensili.</p>
+              <div id="ti-cons-dropzone" style="border:2px dashed var(--gray-300);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:border-color .15s;background:var(--gray-50,#f8fafc);">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 12v6"/><path d="m9 15 3-3 3 3"/></svg>
+                <p style="margin:0;font-size:14px;color:var(--gray-500);">Trascina il PDF qui oppure <span style="color:var(--teal,#0d9488);font-weight:600;">seleziona file</span></p>
+                <input type="file" id="ti-cons-input" accept=".pdf" multiple style="display:none;">
+              </div>
+              <div id="ti-cons-progress" style="font-size:12px;color:var(--gray-500);margin-top:10px;min-height:16px;"></div>
+            </div>
+
+            <!-- Preview -->
+            <div id="ti-cons-preview" style="display:none;">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+                <div>
+                  <h3 style="margin:0;font-size:15px;">Anteprima — <span id="ti-cons-periodo"></span></h3>
+                  <p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;"><span id="ti-cons-count">0</span> dipendenti — match per matricola o cognome</p>
+                </div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-secondary btn-sm" id="ti-cons-cancel">Annulla</button>
+                  <button class="btn btn-primary btn-sm" id="ti-cons-confirm">Salva consuntivo</button>
+                </div>
+              </div>
+              <div style="overflow-x:auto;">
+                <table class="washin-table">
+                  <thead>
+                    <tr>
+                      <th>Matr.</th><th>Cognome e Nome</th><th>Match</th>
+                      <th style="text-align:right">Ore lav.</th>
+                      <th style="text-align:right">Totale €</th>
+                      <th style="text-align:right">Costo orario €</th>
+                      <th style="text-align:right">% incid.</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ti-cons-tbody"></tbody>
                 </table>
               </div>
             </div>
