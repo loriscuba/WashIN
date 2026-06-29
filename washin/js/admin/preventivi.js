@@ -118,13 +118,12 @@ const LIVELLI = [
 
 async function loadOperatoriList() {
   let { data, error } = await supabase.from('profili')
-    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base,data_assunzione,n_scatti_anzianita,costo_orario_medio')
+    .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base,data_assunzione,n_scatti_anzianita,costo_orario_medio,fonte_costo_preventivo')
     .neq('attivo', false)
     .order('cognome')
   if (error) {
-    // migrations_v29.sql non ancora eseguita — fallback senza le colonne nuove
     ;({ data } = await supabase.from('profili')
-      .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base')
+      .select('id,nome,cognome,livello_ccnl,voce_tariffa_inail,costo_mensile,ore_mensili_contratto,fir_personale,paga_base,costo_orario_medio,fonte_costo_preventivo')
       .neq('attivo', false)
       .order('cognome'))
   }
@@ -181,48 +180,30 @@ function buildOperatoreRow(form, item = {}) {
     delete cuEl.dataset.firStima
     delete cuEl.dataset.mancante
 
-    if (op && op.costo_orario_medio > 0) {
-      // Consuntivo reale: media progressiva costo orario da import PDF annuale/mensile
-      const buffer = _algoritmoCostiAttivo ? (1 + _bufferInefficienze) : 1
-      cuEl.value = (op.costo_orario_medio * buffer * getCoeff(form)).toFixed(4)
-      cuEl.dataset.firStima = 'consuntivo'
-    } else if (op && (op.costo_mensile > 0 || op.livello_ccnl)) {
-      // Busta paga o livello CCNL disponibile → calcolo via RPC
-      const ore = op.ore_mensili_contratto || 173
-      try {
-        const params = { p_ore_ordinarie: ore, p_include_ratei: true }
-        if (op.costo_mensile > 0)    params.p_lordo_busta   = op.costo_mensile
-        if (op.livello_ccnl)         params.p_livello        = op.livello_ccnl
-        if (op.voce_tariffa_inail)   params.p_voce_tariffa  = op.voce_tariffa_inail
-        if (_algoritmoCostiAttivo) {
-          params.p_n_scatti        = nScattiEffettivi(op)
-          params.p_agevolazione_inps = _agevolazioneInps
-        }
-        let { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', params)
-        if (error) {
-          // fallback senza nuovi parametri (migrations_v29 non eseguita)
-          const fb = { p_ore_ordinarie: ore, p_include_ratei: true }
-          if (op.costo_mensile > 0) fb.p_lordo_busta = op.costo_mensile
-          if (op.livello_ccnl)      fb.p_livello      = op.livello_ccnl
-          if (op.voce_tariffa_inail) fb.p_voce_tariffa = op.voce_tariffa_inail
-          ;({ data: rpc, error } = await supabase.rpc('calcola_costo_operatore', fb))
-        }
-        if (!error && rpc?.costo_orario_effettivo > 0) {
-          const buffer = _algoritmoCostiAttivo ? (1 + _bufferInefficienze) : 1
-          cuEl.value = (rpc.costo_orario_effettivo * buffer * getCoeff(form)).toFixed(4)
-          cuEl.dataset.firStima = op.costo_mensile > 0 ? 'busta' : `ccnl:${op.livello_ccnl}`
-        } else {
-          cuEl.value = ''
-          cuEl.dataset.mancante = 'true'
-        }
-      } catch { cuEl.value = ''; cuEl.dataset.mancante = 'true' }
-    } else if (op && op.fir_personale != null) {
-      // Legacy: nessuna busta paga, nessun livello CCNL, FIR impostato manualmente
-      const oreMensili = op.ore_mensili_contratto || 173
-      const lordo = op.paga_base > 0 ? op.paga_base : 0
-      if (lordo > 0) {
-        cuEl.value = ((lordo * (1 + op.fir_personale / 100) * getCoeff(form)) / oreMensili).toFixed(4)
-        cuEl.dataset.firStima = String(op.fir_personale)
+    if (op && op.fonte_costo_preventivo === 'consuntivo') {
+      if (op.costo_orario_medio > 0) {
+        cuEl.value = op.costo_orario_medio.toFixed(4)
+        cuEl.dataset.firStima = 'consuntivo'
+      } else {
+        cuEl.value = ''
+        cuEl.dataset.mancante = 'true'
+      }
+    } else if (op && op.fonte_costo_preventivo === 'busta') {
+      if (op.costo_mensile > 0) {
+        const ore = op.ore_mensili_contratto || 173
+        try {
+          const { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', {
+            p_ore_ordinarie: ore, p_include_ratei: true, p_lordo_busta: op.costo_mensile,
+            ...(op.voce_tariffa_inail ? { p_voce_tariffa: op.voce_tariffa_inail } : {})
+          })
+          if (!error && rpc?.costo_orario_effettivo > 0) {
+            cuEl.value = rpc.costo_orario_effettivo.toFixed(4)
+            cuEl.dataset.firStima = 'busta'
+          } else {
+            cuEl.value = ''
+            cuEl.dataset.mancante = 'true'
+          }
+        } catch { cuEl.value = ''; cuEl.dataset.mancante = 'true' }
       } else {
         cuEl.value = ''
         cuEl.dataset.mancante = 'true'
@@ -314,29 +295,20 @@ function refreshRischioHint(form) {
     const cuElR     = row.querySelector('.prev-op-cu')
     const firStima  = cuElR?.dataset?.firStima
     const cuVal     = parseFloat(cuElR?.value)
-    const bufPct    = Math.round(_bufferInefficienze * 100)
-    const nScatti   = nScattiEffettivi(op)
-    const coeffNote = _usaCoefficienti ? ` × <b>${coeff.toFixed(3)}</b> ${tipoLabel}` : ''
-    const scattiNote = nScatti > 0 ? `, ${nScatti} scatt${nScatti === 1 ? 'o' : 'i'}` : ''
-    const agevNote   = _agevolazioneInps > 0 ? `, agev. ${(_agevolazioneInps * 100).toFixed(1)}%` : ''
-
     if (firStima === 'consuntivo') {
-      const extraNote = _algoritmoCostiAttivo ? ` +buffer <b>${bufPct}%</b>` : ''
       const medio = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 5 }).format(op.costo_orario_medio)
-      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — consuntivo reale <b>€ ${medio}</b>/h (media progressiva)${extraNote}${coeffNote} → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <span style="background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">CONSUNTIVO</span> media progressiva <b>€ ${medio}</b>/h → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
     } else if (firStima === 'busta') {
-      const extraNote = _algoritmoCostiAttivo ? `${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>` : ''
-      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi CCNL${extraNote}${coeffNote} → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
-    } else if (firStima?.startsWith('ccnl:')) {
-      const livello = firStima.slice(5)
-      const extraNote = _algoritmoCostiAttivo ? `${scattiNote}${agevNote} +buffer <b>${bufPct}%</b>` : ''
-      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#7c3aed;">~ ${nome}</span> — stima CCNL liv. <b>${livello}</b>${extraNote}${coeffNote}: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(busta paga non caricata)</span></div>`)
-    } else if (firStima && cuVal > 0) {
-      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#f59e0b;">~ ${nome}</span> — FIR manuale <b>${op.fir_personale}%</b>: <b>${EUR(cuVal)}</b>/h <span style="color:#6b7280;font-size:11px;">(imposta livello CCNL per stima automatica)</span></div>`)
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <span style="background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">BUSTA PAGA</span> lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi → <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
     } else {
+      const missing = !op.fonte_costo_preventivo
+        ? 'Configura la fonte costo in Anagrafica → Retribuzione.'
+        : op.fonte_costo_preventivo === 'consuntivo'
+          ? 'Importa un consuntivo PDF per questo dipendente in Tool → Consuntivo Costi.'
+          : 'Carica una busta paga in Anagrafica.'
       parts.push(`<div style="background:#fee2e2;border-left:3px solid #dc2626;padding:6px 10px;border-radius:4px;">
-        <span style="color:#dc2626;font-weight:700;">🚫 ${nome}: dati mancanti — non può essere aggiunto al preventivo.</span><br>
-        <span style="color:#dc2626;font-size:11px;">Carica una busta paga in Anagrafica <strong>oppure</strong> imposta il livello CCNL in Configurazioni → Algoritmo Costi.</span>
+        <span style="color:#dc2626;font-weight:700;">⚠ ${nome}: costo orario non disponibile.</span><br>
+        <span style="color:#dc2626;font-size:11px;">${missing}</span>
       </div>`)
     }
   })
