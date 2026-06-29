@@ -962,6 +962,28 @@ async function openModalAnag(operatoreId) {
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
       await populateRetribSelects(data.livello_ccnl, data.voce_tariffa_inail || '0411')
+
+      // Mostra costo_aziendale dall'ultima busta paga disponibile
+      const hint = document.getElementById('hr-costo-busta-hint')
+      if (hint) {
+        const { data: bp } = await supabase
+          .from('buste_paga')
+          .select('costo_aziendale, anno, mese')
+          .eq('operatore_id', operatoreId)
+          .not('costo_aziendale', 'is', null)
+          .order('anno', { ascending: false })
+          .order('mese', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (bp?.costo_aziendale) {
+          const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
+          const eur = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(bp.costo_aziendale)
+          hint.textContent = `Ultima busta (${MESI[bp.mese - 1]} ${bp.anno}): ${eur}`
+          hint.style.display = ''
+        } else {
+          hint.style.display = 'none'
+        }
+      }
     }
 
     setTab('dati')
