@@ -957,7 +957,7 @@ async function openModalAnag(operatoreId) {
     const retribForm = document.getElementById('hr-retrib-form')
     if (retribForm) {
       ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto',
-        'tipologia','tipo_retribuzione','reparto','posizione_inail']
+        'tipologia','tipo_retribuzione','reparto','posizione_inail','fonte_costo_preventivo']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
@@ -1011,7 +1011,7 @@ async function saveDatiPersonali() {
     const retribForm = document.getElementById('hr-retrib-form')
     if (retribForm) {
       ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto','livello_ccnl','voce_tariffa_inail',
-        'tipologia','tipo_retribuzione','reparto','posizione_inail']
+        'tipologia','tipo_retribuzione','reparto','posizione_inail','fonte_costo_preventivo']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value || null })
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value ? parseFloat(el.value) : null })
