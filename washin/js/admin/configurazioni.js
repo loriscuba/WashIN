@@ -582,6 +582,22 @@ export function initConfigurazioni() {
   document.getElementById('coeff-add-btn')?.addEventListener('click', addNewCoefficientiRow)
   document.getElementById('impost-usa-coeff')?.addEventListener('change', e => saveImpostUseCoeff(e.target.checked))
 
+  // Toggle visibilità tab Anagrafica nel Tool Import
+  supabase.from('impostazioni').select('valore').eq('chiave', 'tool_show_anag_tab').maybeSingle().then(({ data }) => {
+    const el = document.getElementById('impost-tool-anag')
+    if (el) el.checked = data ? data.valore !== 'false' : true
+  })
+  document.getElementById('impost-tool-anag')?.addEventListener('change', async e => {
+    const val = e.target.checked
+    await supabase.from('impostazioni').upsert({ chiave: 'tool_show_anag_tab', valore: val ? 'true' : 'false', aggiornato_a: new Date().toISOString() })
+    // Aggiorna subito il Tool se già aperto
+    try {
+      const { setToolAnagTabVisible } = await import('./tool_import.js')
+      setToolAnagTabVisible(val)
+    } catch {}
+    showToast(val ? 'Tab Anagrafica visibile nel Tool' : 'Tab Anagrafica nascosta nel Tool', 'success')
+  })
+
   document.getElementById('fir-save-btn')?.addEventListener('click', saveFir)
   document.getElementById('fir-ricalcola-btn')?.addEventListener('click', ricalcolaFirDaBustePaga)
   document.getElementById('algoritmo-save-btn')?.addEventListener('click', saveAlgoritmoParametri)

@@ -1055,10 +1055,199 @@ async function confirmBusteImport() {
   renderBustePreview([])
 }
 
+// ── Consuntivo Costi ──────────────────────────────────────────────────────────
+
+let _consData = []   // righe parsate dal PDF consuntivo
+
+function parseConsuntivoPdf(text) {
+  // Estrae periodo: "DAL MESE DI <MESE> <ANNO> AL MESE DI <MESE> <ANNO>"
+  const MESI_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+  const periodoM = text.match(/DAL MESE DI (\w+)\s+(\d{4})\s+AL MESE DI (\w+)\s+(\d{4})/i)
+  let mese_da = 1, mese_a = 12, anno = new Date().getFullYear()
+  if (periodoM) {
+    const idxDa = MESI_IT.findIndex(m => m.toLowerCase() === periodoM[1].toLowerCase())
+    const idxA  = MESI_IT.findIndex(m => m.toLowerCase() === periodoM[3].toLowerCase())
+    mese_da = idxDa >= 0 ? idxDa + 1 : 1
+    mese_a  = idxA  >= 0 ? idxA  + 1 : 12
+    anno    = parseInt(periodoM[2])
+  }
+
+  const rows = []
+  // Ogni riga dipendente: numero_matricola COGNOME NOME  ore_lav  ... costo_orario  perc_incid
+  // Il formato è fisso: l'ultima colonna è % incid, penultima costo_orario, prima è matricola
+  // Usiamo regex per righe che iniziano con numero intero (matricola) seguito da nome in maiuscolo
+  const lineRe = /^\s*(\d+)\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s']+?)\s+([\d.,]+)\s+[\d.,]+\s+[\d.,]+(?:\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+)?\s+([\d.,]+)\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)\s+([\d.,]+)\s*$/gm
+  for (const m of text.matchAll(lineRe)) {
+    const costo_orario   = parseFloat(m[5].replace(/\./g,'').replace(',','.'))
+    const perc_incidenza = parseFloat(m[6].replace(',','.'))
+    if (!costo_orario) continue
+    rows.push({
+      matricola:       m[1].trim(),
+      cognome_nome:    m[2].trim(),
+      ore_lavorate:    parseFloat(m[3].replace(',','.')),
+      totale_costo:    parseFloat(m[4].replace(/\./g,'').replace(',','.')),
+      costo_orario,
+      perc_incidenza,
+      anno,
+      mese_da,
+      mese_a,
+    })
+  }
+
+  // Fallback: parsing posizionale per righe che non matchano la regex completa
+  if (!rows.length) {
+    const lines = text.split('\n')
+    for (const line of lines) {
+      const m = line.match(/^\s*(\d{1,3})\s+([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ\s']{3,35?})\s+[\d,.\s]+\s+([\d]+[,.][\d]{5})\s+([\d]+[,.][\d]{2})\s*$/)
+      if (!m) continue
+      rows.push({
+        matricola:       m[1].trim(),
+        cognome_nome:    m[2].trim(),
+        ore_lavorate:    null,
+        totale_costo:    null,
+        costo_orario:    parseFloat(m[3].replace(',','.')),
+        perc_incidenza:  parseFloat(m[4].replace(',','.')),
+        anno, mese_da, mese_a,
+      })
+    }
+  }
+  return { rows, periodo: periodoM ? periodoM[0] : `Anno ${anno}`, anno, mese_da, mese_a }
+}
+
+async function handleConsuntivoFiles(files) {
+  _consData = []
+  const progress = document.getElementById('ti-cons-progress')
+  let parsed = null
+
+  for (let i = 0; i < files.length; i++) {
+    if (progress) progress.textContent = `Elaborazione ${i + 1}/${files.length}: ${files[i].name}…`
+    const pages = await extractPageTextsFromPdf(files[i], pct => {
+      if (progress) progress.textContent = `OCR ${files[i].name}: ${pct}%`
+    })
+    const fullText = pages.join('\n')
+    const result = parseConsuntivoPdf(fullText)
+    if (!parsed) parsed = result
+    else result.rows.forEach(r => parsed.rows.push(r))
+  }
+
+  if (!parsed?.rows.length) {
+    if (progress) progress.textContent = 'Nessuna riga trovata nel PDF.'
+    return
+  }
+
+  // Match con profili esistenti per matricola o cognome
+  const ops = await loadOperatori()
+  parsed.rows.forEach(r => {
+    let match = ops.find(o => o.matricola && o.matricola === r.matricola)
+    if (!match) {
+      const cn = r.cognome_nome.toLowerCase()
+      match = ops.find(o => {
+        const full = `${o.cognome || ''} ${o.nome || ''}`.trim().toLowerCase()
+        return full === cn || cn.startsWith(o.cognome?.toLowerCase() || '___')
+      })
+    }
+    r._operatore_id = match?.id || null
+    r._match_label  = match ? `${match.cognome} ${match.nome}`.trim() : '— non trovato —'
+  })
+
+  _consData = parsed.rows
+  if (progress) progress.textContent = `${parsed.rows.length} dipendenti trovati nel PDF`
+  renderConsuntivoPreview(parsed.periodo)
+}
+
+function renderConsuntivoPreview(periodo) {
+  const preview = document.getElementById('ti-cons-preview')
+  const tbody   = document.getElementById('ti-cons-tbody')
+  const periodoEl = document.getElementById('ti-cons-periodo')
+  const countEl   = document.getElementById('ti-cons-count')
+  if (!tbody) return
+
+  if (periodoEl) periodoEl.textContent = periodo
+  if (countEl)   countEl.textContent   = _consData.length
+
+  const fmt = (v, dec = 2) => v != null ? v.toLocaleString('it-IT', { minimumFractionDigits: dec, maximumFractionDigits: dec + 3 }) : '—'
+
+  tbody.innerHTML = _consData.map((r, i) => `
+    <tr>
+      <td>${r.matricola}</td>
+      <td style="font-size:12px;">${r.cognome_nome}</td>
+      <td>
+        ${r._operatore_id
+          ? `<span class="badge badge-success" style="font-size:11px;">${r._match_label}</span>`
+          : `<span class="badge badge-error" style="font-size:11px;">Non trovato</span>`}
+      </td>
+      <td style="text-align:right">${fmt(r.ore_lavorate, 2)}</td>
+      <td style="text-align:right">${fmt(r.totale_costo)}</td>
+      <td style="text-align:right;font-weight:600;">${fmt(r.costo_orario, 5)}</td>
+      <td style="text-align:right">${fmt(r.perc_incidenza, 2)}</td>
+    </tr>
+  `).join('')
+
+  if (preview) preview.style.display = _consData.length ? 'block' : 'none'
+}
+
+async function confirmConsuntivoImport() {
+  if (!_consData.length) return
+  const matched = _consData.filter(r => r._operatore_id)
+  if (!matched.length) { showToast('Nessun dipendente abbinato a un profilo', 'error'); return }
+
+  const rows = matched.map(r => ({
+    operatore_id:   r._operatore_id,
+    anno:           r.anno,
+    mese_da:        r.mese_da,
+    mese_a:         r.mese_a,
+    ore_lavorate:   r.ore_lavorate,
+    totale_costo:   r.totale_costo,
+    costo_orario:   r.costo_orario,
+    perc_incidenza: r.perc_incidenza,
+  }))
+
+  const { error } = await supabase
+    .from('consuntivo_costi')
+    .upsert(rows, { onConflict: 'operatore_id,anno,mese_da,mese_a' })
+  if (error) { showToast('Errore salvataggio: ' + error.message, 'error'); return }
+
+  // Aggiorna costo_orario_medio su profili (media progressiva di tutti i consuntivi)
+  const ids = [...new Set(matched.map(r => r._operatore_id))]
+  await Promise.all(ids.map(async id => {
+    const { data } = await supabase
+      .from('consuntivo_costi')
+      .select('costo_orario')
+      .eq('operatore_id', id)
+    if (!data?.length) return
+    const media = data.reduce((s, r) => s + r.costo_orario, 0) / data.length
+    await supabase.from('profili').update({ costo_orario_medio: Math.round(media * 100000) / 100000 }).eq('id', id)
+  }))
+
+  showToast(`${matched.length} consuntivi salvati`, 'success')
+  _consData = []
+  document.getElementById('ti-cons-preview').style.display = 'none'
+  const p = document.getElementById('ti-cons-progress')
+  if (p) p.textContent = `Salvati ${matched.length} dipendenti — costo_orario_medio aggiornato su tutti i profili`
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initToolImport() {
-  // Tab switching (Anagrafica / Buste paga)
+  // Carica visibilità tab Anagrafica da impostazioni
+  supabase.from('impostazioni').select('valore').eq('chiave', 'tool_show_anag_tab').maybeSingle().then(({ data }) => {
+    const show = data ? data.valore !== 'false' : true
+    const btn = document.getElementById('ti-tab-anag-btn')
+    if (btn) btn.style.display = show ? '' : 'none'
+  })
+
+  // Attiva tab Buste paga di default
+  const defaultBtn = document.querySelector('.ti-tab-btn[data-tab="buste"]')
+  if (defaultBtn) {
+    defaultBtn.style.color = 'var(--teal,#0d9488)'
+    defaultBtn.style.borderBottom = '2px solid var(--teal,#0d9488)'
+  }
+  document.getElementById('ti-panel-anag').style.display       = 'none'
+  document.getElementById('ti-panel-buste').style.display      = ''
+  document.getElementById('ti-panel-consuntivo').style.display = 'none'
+
+  // Tab switching
   document.querySelectorAll('.ti-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.ti-tab-btn').forEach(b => {
@@ -1068,8 +1257,9 @@ export function initToolImport() {
       btn.style.color = 'var(--teal,#0d9488)'
       btn.style.borderBottom = '2px solid var(--teal,#0d9488)'
       const tab = btn.dataset.tab
-      document.getElementById('ti-panel-anag').style.display   = tab === 'anag' ? '' : 'none'
-      document.getElementById('ti-panel-buste').style.display  = tab === 'buste' ? '' : 'none'
+      document.getElementById('ti-panel-anag').style.display       = tab === 'anag'       ? '' : 'none'
+      document.getElementById('ti-panel-buste').style.display      = tab === 'buste'      ? '' : 'none'
+      document.getElementById('ti-panel-consuntivo').style.display = tab === 'consuntivo' ? '' : 'none'
     })
   })
 
@@ -1153,4 +1343,35 @@ export function initToolImport() {
     const p = document.getElementById('ti-buste-pdf-progress')
     if (p) p.textContent = ''
   })
+
+  // Consuntivo Costi: drag & drop + click
+  const dropzone = document.getElementById('ti-cons-dropzone')
+  const consInput = document.getElementById('ti-cons-input')
+  if (dropzone && consInput) {
+    dropzone.addEventListener('click', () => consInput.click())
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--teal,#0d9488)' })
+    dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = 'var(--gray-300)' })
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault()
+      dropzone.style.borderColor = 'var(--gray-300)'
+      const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'))
+      if (files.length) handleConsuntivoFiles(files)
+    })
+    consInput.addEventListener('change', () => {
+      if (consInput.files?.length) handleConsuntivoFiles(Array.from(consInput.files))
+    })
+  }
+  document.getElementById('ti-cons-confirm')?.addEventListener('click', confirmConsuntivoImport)
+  document.getElementById('ti-cons-cancel')?.addEventListener('click', () => {
+    _consData = []
+    document.getElementById('ti-cons-preview').style.display = 'none'
+    const p = document.getElementById('ti-cons-progress')
+    if (p) p.textContent = ''
+  })
+}
+
+// Esporta funzione per aggiornare visibilità tab Anagrafica (chiamata da configurazioni)
+export function setToolAnagTabVisible(visible) {
+  const btn = document.getElementById('ti-tab-anag-btn')
+  if (btn) btn.style.display = visible ? '' : 'none'
 }
