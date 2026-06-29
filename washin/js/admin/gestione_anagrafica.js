@@ -1198,7 +1198,7 @@ async function inviaCedolinoWhatsApp(bustaId, btn) {
     const tel = normalizzaTelefono(op.telefono)
     if (!tel) { waWin?.close(); showToast('Operatore senza numero di telefono — impostalo in Anagrafica', 'error'); return }
 
-    let signedUrl = null
+    let downloadLink = null
     if (busta.file_path) {
       const cf = (op.codice_fiscale || '').trim().toUpperCase()
       if (!cf) {
@@ -1212,30 +1212,31 @@ async function inviaCedolinoWhatsApp(bustaId, btn) {
       const bytes = new Uint8Array(await blob.arrayBuffer())
       const encrypted = await encryptPdf(bytes, cf)
 
-      // Carica la versione cifrata e crea un link temporaneo (7 giorni)
+      // Carica la versione cifrata
       btn.textContent = 'Carico…'
       const path = `whatsapp/${busta.operatore_id}/${busta.anno}-${busta.mese}.pdf`
       const { error: upErr } = await supabase.storage.from('buste-paga')
         .upload(path, new Blob([encrypted], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' })
       if (upErr) { waWin?.close(); showToast('Errore caricamento PDF cifrato: ' + upErr.message, 'error'); return }
-      const { data: signed, error: sErr } = await supabase.storage.from('buste-paga')
-        .createSignedUrl(path, 60 * 60 * 24 * 7)
-      if (sErr || !signed?.signedUrl) { waWin?.close(); showToast('Errore generazione link: ' + (sErr?.message || ''), 'error'); return }
-      signedUrl = signed.signedUrl
+
+      // Link breve: la Edge Function "c" genera al volo il signed URL e reindirizza al download
+      const base = (window.SUPABASE_URL || '').replace(/\/$/, '')
+      downloadLink = `${base}/functions/v1/c?b=${busta.id}`
     }
 
-    // Composizione messaggio
+    // Composizione messaggio (testo semplice, senza emoji: alcuni server li corrompono)
     const righe = [`Ciao ${(op.nome || '').trim()},`.trim(),
                    `ecco il cedolino di ${MESI[busta.mese - 1]} ${busta.anno}.`]
-    if (signedUrl) {
-      righe.push('', `📄 Scarica il PDF: ${signedUrl}`, '',
-                 '🔒 Il PDF è protetto da password: il tuo CODICE FISCALE in MAIUSCOLO.',
-                 'Il link è valido 7 giorni.')
+    if (downloadLink) {
+      righe.push('', `Scarica il PDF: ${downloadLink}`, '',
+                 'Il PDF e protetto da password: il tuo CODICE FISCALE in MAIUSCOLO.',
+                 'Il link e valido 7 giorni.')
     } else {
       righe.push('', `Netto in busta: ${FMT_EUR(busta.totale_netto)}`,
-                 '(PDF non disponibile — contatta l\'ufficio paghe per la copia cartacea.)')
+                 '(PDF non disponibile, contatta l\'ufficio paghe per la copia cartacea.)')
     }
-    const waUrl = `https://wa.me/${tel}?text=${encodeURIComponent(righe.join('\n'))}`
+    // web.whatsapp.com/send apre direttamente WhatsApp Web, saltando la pagina intermedia di api.whatsapp.com
+    const waUrl = `https://web.whatsapp.com/send?phone=${tel}&text=${encodeURIComponent(righe.join('\n'))}`
 
     if (waWin) waWin.location.href = waUrl
     else window.open(waUrl, '_blank')   // fallback se il popup non era stato aperto
