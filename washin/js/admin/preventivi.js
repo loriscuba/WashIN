@@ -326,6 +326,9 @@ function refreshRischioHint(form) {
       parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <span style="background:#fef9c3;color:#713f12;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">AUTO</span> consuntivo medio <b>€ ${medio}</b>/h → <b style="font-size:13px;">${EUR(cuVal)}</b>/h <span style="color:#92400e;font-size:11px;">(configura fonte in Anagrafica per fissare)</span></div>`)
     } else if (firStima === 'auto-busta') {
       parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <span style="background:#fef9c3;color:#713f12;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;">AUTO</span> busta paga lordo <b>${EUR(op.costo_mensile)}</b>/mese + contributi → <b style="font-size:13px;">${EUR(cuVal)}</b>/h <span style="color:#92400e;font-size:11px;">(configura fonte in Anagrafica per fissare)</span></div>`)
+    } else if (cuVal > 0) {
+      // Valore presente (es. caricato da preventivo salvato) ma firStima non impostato — mostra senza errore
+      parts.push(`<div style="padding:2px 0;"><span style="font-weight:700;color:#0d9488;">${nome}</span> — <b style="font-size:13px;">${EUR(cuVal)}</b>/h</div>`)
     } else {
       const missing = op.fonte_costo_preventivo === 'consuntivo'
         ? 'Importa un consuntivo PDF per questo dipendente in Tool → Consuntivo Costi.'
@@ -590,7 +593,11 @@ export async function openModalPreventivo(id = null) {
         : data.livello_ccnl
           ? [{ livello_ccnl: data.livello_ccnl, ore_stimate: data.ore_stimate, costo_orario: data.costo_orario }]
           : []
-      savedOps.forEach(op => opList?.appendChild(buildOperatoreRow(form, op)))
+      savedOps.forEach(op => {
+        const r = buildOperatoreRow(form, op)
+        opList?.appendChild(r)
+        r._aggiornaCosto?.()
+      })
 
       await updateKmHint(form, data.cliente_id)
       calcAll(form)
