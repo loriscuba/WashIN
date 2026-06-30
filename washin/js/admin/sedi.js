@@ -46,12 +46,16 @@ async function googleGeocodeAll(query) {
         const houseNumber = get('street_number') || null
         const road = get('route')
         const city = get('locality') || get('administrative_area_level_3') || get('administrative_area_level_2') || ''
-        const cap = get('postal_code')
-        const clean = [road + (houseNumber ? ' ' + houseNumber : ''), [cap, city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+        // Senza CAP: spesso Google lo sbaglia per frazioni italiane
+        const streetOnly = road + (houseNumber ? ' ' + houseNumber : '')
+        const displayName = [streetOnly, city].filter(Boolean).join(', ')
+        // streetBase = solo via+città senza civico, per il click del suggerimento
+        const streetBase = [road, city].filter(Boolean).join(', ')
         return {
           lat: r.geometry.location.lat(),
           lng: r.geometry.location.lng(),
-          displayName: clean || r.formatted_address,
+          displayName: displayName || r.formatted_address,
+          streetBase,
           houseNumber,
         }
       }))
@@ -319,8 +323,11 @@ export function initSedi() {
           form._geoResult = (result && !result._denied) ? result : null
 
           const renderCandidates = (msg, color, candidates) => {
+            // data-base = via+città senza civico: l'utente aggiunge il suo numero
             const btns = (candidates || []).map(c =>
-              `<button type="button" class="geo-suggest-btn" data-addr="${c.displayName.replace(/"/g,'&quot;')}"
+              `<button type="button" class="geo-suggest-btn"
+                data-base="${(c.streetBase || c.displayName).replace(/"/g,'&quot;')}"
+                data-label="${c.displayName.replace(/"/g,'&quot;')}"
                 style="margin:3px 4px 0 0;padding:3px 10px;background:#f0f9ff;border:1px solid #93c5fd;border-radius:6px;font-size:11px;color:#1e40af;cursor:pointer;">
                 ↩ ${c.displayName}
               </button>`
@@ -328,8 +335,12 @@ export function initSedi() {
             geofb.innerHTML = `<span style="color:${color};">${msg}</span>${btns ? '<br>' + btns : ''}`
             geofb.querySelectorAll('.geo-suggest-btn').forEach(btn => {
               btn.addEventListener('click', () => {
-                indirizzoInput.value = btn.dataset.addr
-                indirizzoInput.dispatchEvent(new Event('input'))
+                // Inserisce via+città senza civico e posiziona il cursore per aggiungere il numero
+                indirizzoInput.value = btn.dataset.base + ' '
+                indirizzoInput.focus()
+                indirizzoInput.setSelectionRange(indirizzoInput.value.length, indirizzoInput.value.length)
+                // Non rilancia subito la geocode: l'utente deve aggiungere il civico
+                geofb.innerHTML = `<span style="color:#6b7280;">↩ Aggiungi il numero civico e attendi la verifica…</span>`
               })
             })
           }
