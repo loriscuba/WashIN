@@ -26,57 +26,52 @@ async function ensureGeocoder() {
   return _gmLoadPromise
 }
 
-async function googleGeocode(query) {
-  const geocoder = await ensureGeocoder()
-  if (!geocoder) return null
-  return new Promise(resolve => {
-    geocoder.geocode({ address: query + ', Italia', region: 'IT', language: 'it' }, (results, status) => {
-      if (status === 'REQUEST_DENIED') {
-        console.error('Geocoding REQUEST_DENIED — controlla le restrizioni HTTP referrer della chiave API in Google Cloud Console → Credenziali')
-        resolve({ _denied: true })
-        return
-      }
-      if (status !== 'OK' || !results?.length) {
-        console.warn('Google Geocoding status:', status)
-        resolve(null)
-        return
-      }
-      const r = results[0]
-      const comps = r.address_components || []
-      const get = (...types) => comps.find(c => types.every(t => c.types.includes(t)))?.long_name || ''
-      const houseNumber = get('street_number') || null
-      const road = get('route')
-      const city = get('locality') || get('administrative_area_level_3') || get('administrative_area_level_2') || ''
-      const cap = get('postal_code')
-      const clean = [road + (houseNumber ? ' ' + houseNumber : ''), [cap, city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
-      resolve({
-        lat: r.geometry.location.lat(),
-        lng: r.geometry.location.lng(),
-        displayName: clean || r.formatted_address,
-        houseNumber,
-      })
-    })
-  })
+
+// Estrae il civico dall'indirizzo completo (supporta formati "Via X 5", "Via X, 5", "Via X, 5/A")
+function extractInputNum(address) {
+  const m = address.match(/[,\s]+(\d{1,4}[A-Za-z]?(?:\/\d{1,3})?)\s*(?:[,\s]|$)/)
+  return m ? m[1].toUpperCase() : null
 }
 
-// Estrae il civico dalla parte di strada (prima della prima virgola), es. "Via Roma 50, ..." → "50"
-function extractInputNum(address) {
-  const streetPart = address.split(',')[0] || ''
-  const m = streetPart.match(/\s+(\d{1,4}[A-Za-z]?)\s*$/)
-  return m ? m[1].toUpperCase() : null
+async function googleGeocodeAll(query) {
+  const geocoder = await ensureGeocoder()
+  if (!geocoder) return []
+  return new Promise(resolve => {
+    geocoder.geocode({ address: query + ', Italia', region: 'IT', language: 'it' }, (results, status) => {
+      if (status === 'REQUEST_DENIED') { resolve([{ _denied: true }]); return }
+      if (status !== 'OK' || !results?.length) { resolve([]); return }
+      resolve(results.slice(0, 5).map(r => {
+        const comps = r.address_components || []
+        const get = (...types) => comps.find(c => types.every(t => c.types.includes(t)))?.long_name || ''
+        const houseNumber = get('street_number') || null
+        const road = get('route')
+        const city = get('locality') || get('administrative_area_level_3') || get('administrative_area_level_2') || ''
+        const cap = get('postal_code')
+        const clean = [road + (houseNumber ? ' ' + houseNumber : ''), [cap, city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+        return {
+          lat: r.geometry.location.lat(),
+          lng: r.geometry.location.lng(),
+          displayName: clean || r.formatted_address,
+          houseNumber,
+        }
+      }))
+    })
+  })
 }
 
 async function runGeoCheck(address) {
   const t = address?.trim()
   if (!t || t.length < 6) return null
   const inputNum = extractInputNum(t)
-  const result = await googleGeocode(t)
-  if (!result || result._denied) return result ?? null
-  const returnedNum = result.houseNumber?.toUpperCase() || null
+  const all = await googleGeocodeAll(t)
+  if (!all.length) return null
+  if (all[0]?._denied) return { _denied: true }
+  const best = all[0]
+  const returnedNum = best.houseNumber?.toUpperCase() || null
   const civicOk = !inputNum || (!!returnedNum && (
     returnedNum === inputNum || returnedNum.includes(inputNum)
   ))
-  return { found: true, civicOk, inputNum, ...result }
+  return { found: true, civicOk, inputNum, candidates: all, ...best }
 }
 
 export async function loadSedi(filtri = {}) {
@@ -323,14 +318,19 @@ export function initSedi() {
           const result = await runGeoCheck(val)
           form._geoResult = (result && !result._denied) ? result : null
 
-          const showSuggest = (msg) => {
-            geofb.innerHTML = `<span style="color:#d97706;">${msg}</span><br>
-              <button type="button" class="geo-suggest-btn" style="margin-top:4px;padding:3px 10px;background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#92400e;cursor:pointer;">
-                ↩ Usa "${result.displayName}"
+          const renderCandidates = (msg, color, candidates) => {
+            const btns = (candidates || []).map(c =>
+              `<button type="button" class="geo-suggest-btn" data-addr="${c.displayName.replace(/"/g,'&quot;')}"
+                style="margin:3px 4px 0 0;padding:3px 10px;background:#f0f9ff;border:1px solid #93c5fd;border-radius:6px;font-size:11px;color:#1e40af;cursor:pointer;">
+                ↩ ${c.displayName}
               </button>`
-            geofb.querySelector('.geo-suggest-btn')?.addEventListener('click', () => {
-              indirizzoInput.value = result.displayName
-              indirizzoInput.dispatchEvent(new Event('input'))
+            ).join('')
+            geofb.innerHTML = `<span style="color:${color};">${msg}</span>${btns ? '<br>' + btns : ''}`
+            geofb.querySelectorAll('.geo-suggest-btn').forEach(btn => {
+              btn.addEventListener('click', () => {
+                indirizzoInput.value = btn.dataset.addr
+                indirizzoInput.dispatchEvent(new Event('input'))
+              })
             })
           }
 
@@ -338,12 +338,12 @@ export function initSedi() {
             geofb.innerHTML = '<span style="color:#dc2626;">✗ Chiave API Google non autorizzata — aggiungi <strong>https://loriscuba.github.io/*</strong> nelle restrizioni HTTP referrer (Google Cloud Console → Credenziali → modifica chiave API)</span>'
           } else if (!result) {
             geofb.innerHTML = '<span style="color:#dc2626;">✗ Indirizzo non trovato — controlla via e comune</span>'
-          } else if (result.found && !result.inputNum) {
-            geofb.innerHTML = `<span style="color:#2563eb;">ℹ Via verificata senza civico — <em style="font-style:normal;">${result.displayName}</em></span>`
-          } else if (result.found && result.civicOk) {
+          } else if (result.found && result.civicOk && result.inputNum) {
             geofb.innerHTML = `<span style="color:#059669;">✓ Via e civico verificati: <em style="font-style:normal;">${result.displayName}</em></span>`
+          } else if (result.found && !result.inputNum) {
+            renderCandidates(`ℹ Nessun civico nell'indirizzo — seleziona o aggiungi il numero:`, '#2563eb', result.candidates)
           } else {
-            showSuggest(`⚠ Civico <strong>${result.inputNum}</strong> non trovato — indirizzo più vicino:`)
+            renderCandidates(`⚠ Civico <strong>${result.inputNum}</strong> non trovato — indirizzi simili:`, '#d97706', result.candidates)
           }
         }, 800))
 
