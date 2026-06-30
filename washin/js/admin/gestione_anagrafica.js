@@ -1202,11 +1202,17 @@ function normalizzaTelefono(raw) {
 }
 
 // Invia il cedolino via WhatsApp Web. WhatsApp non consente di allegare file via
+// Finestra WhatsApp persistente: riusata tra invii per evitare "aperta altrove"
+let _waWin = null
+
 // link, quindi: cifra il PDF (codice fiscale), lo carica nello Storage, genera un
 // link di download temporaneo e apre WhatsApp Web con un messaggio precompilato.
 async function inviaCedolinoWhatsApp(bustaId, btn) {
-  // Apre sempre la stessa scheda denominata per evitare conflitti WhatsApp "aperta altrove"
-  const waWin = window.open('about:blank', 'washin-whatsapp')
+  // Riusa la finestra esistente se ancora aperta, altrimenti ne apre una nuova
+  if (!_waWin || _waWin.closed) {
+    _waWin = window.open('about:blank', 'washin-whatsapp')
+  }
+  const waWin = _waWin
   btn.disabled = true
   btn.classList.add('act-busy')
   try {

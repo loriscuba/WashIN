@@ -1,7 +1,7 @@
 // pdf_crypt.js — cifratura PDF lato browser con qpdf compilato in WASM.
 // Usato per proteggere i cedolini con password (codice fiscale) prima dell'invio.
 
-const QPDF_URL = 'https://cdn.jsdelivr.net/npm/qpdf-wasm-esm-embedded@1.1.1/qpdf.mjs'
+const QPDF_URL = 'https://unpkg.com/qpdf-wasm-esm-embedded@1.1.1/qpdf.mjs'
 
 let _factoryPromise = null
 
