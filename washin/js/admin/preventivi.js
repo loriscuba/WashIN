@@ -1,5 +1,6 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
+import { loadModelliPreventivo, getModelliCache } from './modelli_preventivo.js'
 
 const EUR = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n || 0)
 
@@ -453,7 +454,8 @@ export function renderTabellaPreventivi(preventivi) {
       <td><span class="badge ${badge}">${p.stato}</span></td>
       <td style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn btn-sm btn-secondary" data-action="edit-preventivo" data-id="${p.id}">Modifica</button>
-        <button class="btn btn-sm btn-secondary" data-action="print-preventivo" data-id="${p.id}">🖨 Stampa</button>
+        <button class="btn btn-sm btn-secondary" data-action="print-preventivo" data-id="${p.id}">🖨 Preventivo</button>
+        ${p.modello_id ? `<button class="btn btn-sm btn-secondary" data-action="print-lettera-preventivo" data-id="${p.id}">✉ Lettera</button>` : ''}
         ${convertBtn}
       </td>
     `
@@ -473,6 +475,129 @@ async function populateClientiSelect(selectEl, selectedId = null) {
     if (selectedId && c.id === selectedId) o.selected = true
     selectEl.appendChild(o)
   })
+}
+
+// ── Template lettera ─────────────────────────────────────────────────────────
+
+async function populateModelliSelect(selectEl, selectedId = null) {
+  const modelli = await loadModelliPreventivo()
+  selectEl.innerHTML = '<option value="">— Nessun modello lettera —</option>'
+  modelli.forEach(m => {
+    const opt = document.createElement('option')
+    opt.value = m.id
+    opt.textContent = m.nome
+    if (m.id === selectedId) opt.selected = true
+    selectEl.appendChild(opt)
+  })
+}
+
+function buildLetteraPanel(modelloId, lettData = {}) {
+  const modelli = getModelliCache()
+  const modello = modelli.find(m => m.id === modelloId)
+  const panel = document.getElementById('prev-lettera-panel')
+  if (!panel) return
+  if (!modello) { panel.style.display = 'none'; return }
+
+  const cfg = modello.configurazione || {}
+  const servizi = Array.isArray(modello.servizi_default) ? modello.servizi_default : []
+  const savedServizi = Array.isArray(lettData.servizi) ? lettData.servizi : servizi
+
+  panel.style.display = 'block'
+  panel.innerHTML = `
+    <p style="margin:0 0 10px;font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;">Lettera cliente — ${modello.nome}</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">Luogo e data</label>
+        <input id="lett-luogo-data" type="text" placeholder="es. Quiliano, 30 giugno 2026"
+          value="${lettData.luogo_data || (cfg.luogo_default ? cfg.luogo_default + ', ' + new Date().toLocaleDateString('it-IT', {day:'numeric',month:'long',year:'numeric'}) : '')}">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">Frequenza (testo)</label>
+        <input id="lett-frequenza-testo" type="text" placeholder="es. settimanalmente, due volte a settimana"
+          value="${lettData.frequenza_testo || ''}">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">Destinatario (nome)</label>
+        <input id="lett-nome-dest" type="text" placeholder="es. Condominio Via Roma 1" value="${lettData.nome_destinatario || ''}">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">Indirizzo destinatario</label>
+        <input id="lett-indirizzo-dest" type="text" placeholder="es. Via Roma 1" value="${lettData.indirizzo_destinatario || ''}">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">CAP e Città destinatario</label>
+        <input id="lett-cap-citta-dest" type="text" placeholder="es. 17047 QUILIANO (SV)" value="${lettData.cap_citta_destinatario || ''}">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">Importo in lettere</label>
+        <input id="lett-importo-lettere" type="text" placeholder="es. duecento" value="${lettData.importo_lettere || ''}">
+      </div>
+    </div>
+    <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Servizi inclusi</div>
+      ${servizi.map(s => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;font-weight:400;cursor:pointer;">
+          <input type="checkbox" class="lett-servizio-check" value="${s.replace(/"/g,'&quot;')}"
+            ${savedServizi.includes(s) ? 'checked' : ''} style="width:auto;">
+          ${s}
+        </label>
+      `).join('')}
+    </div>
+    ${modello.tipo === 'condominio' ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">Costo/ora sgrossatura (€)</label>
+        <input id="lett-sgrossatura-ora" type="number" step="0.01" min="0"
+          placeholder="es. 25.00" value="${lettData.sgrossatura_costo_ora || ''}">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">Compagnia assicurazione</label>
+        <input id="lett-compagnia-ass" type="text" placeholder="es. Generali"
+          value="${lettData.compagnia_assicurazione || cfg.compagnia_default || ''}">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label style="font-size:12px;">N. polizza</label>
+        <input id="lett-num-polizza" type="text" placeholder="es. 1234567"
+          value="${lettData.numero_polizza || cfg.polizza_default || ''}">
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;font-weight:400;cursor:pointer;">
+      <input id="lett-incluso-vetri" type="checkbox" style="width:auto;"
+        ${lettData.incluso_vetri !== false ? 'checked' : ''}> Includi pulizia vetri/infissi/davanzali/rampa garage (mensile)
+    </label>` : ''}
+  `
+}
+
+function collectLetteraData(modelloId) {
+  const panel = document.getElementById('prev-lettera-panel')
+  if (!panel || panel.style.display === 'none') return null
+  const modelli = getModelliCache()
+  const modello = modelli.find(m => m.id === modelloId)
+  if (!modello) return null
+
+  const servizi = []
+  panel.querySelectorAll('.lett-servizio-check:checked').forEach(cb => servizi.push(cb.value))
+
+  const data = {
+    luogo_data:             document.getElementById('lett-luogo-data')?.value || '',
+    frequenza_testo:        document.getElementById('lett-frequenza-testo')?.value || '',
+    nome_destinatario:      document.getElementById('lett-nome-dest')?.value || '',
+    indirizzo_destinatario: document.getElementById('lett-indirizzo-dest')?.value || '',
+    cap_citta_destinatario: document.getElementById('lett-cap-citta-dest')?.value || '',
+    importo_lettere:        document.getElementById('lett-importo-lettere')?.value || '',
+    servizi,
+  }
+  if (modello.tipo === 'condominio') {
+    data.sgrossatura_costo_ora = parseFloat(document.getElementById('lett-sgrossatura-ora')?.value) || null
+    data.compagnia_assicurazione = document.getElementById('lett-compagnia-ass')?.value || ''
+    data.numero_polizza = document.getElementById('lett-num-polizza')?.value || ''
+    data.incluso_vetri = document.getElementById('lett-incluso-vetri')?.checked !== false
+  }
+  return data
 }
 
 export async function openModalPreventivo(id = null) {
@@ -502,12 +627,20 @@ export async function openModalPreventivo(id = null) {
     if (numEl)  numEl.value  = 30
 
     const clienteSelect = form.querySelector('[name="cliente_id"]')
+    const modelloSelect = form.querySelector('[name="modello_id"]')
     await Promise.all([
       populateClientiSelect(clienteSelect),
       loadOperatoriList(),
       loadCoefficienti(),
       loadImpostazioni(),
+      modelloSelect ? populateModelliSelect(modelloSelect) : Promise.resolve(),
     ])
+    // Reset lettera panel
+    const lettPanel = document.getElementById('prev-lettera-panel')
+    if (lettPanel) lettPanel.style.display = 'none'
+    modelloSelect?.addEventListener('change', () => {
+      buildLetteraPanel(modelloSelect.value || null)
+    })
     populateTipoAppaltoSelect(form)
     syncTipoAppaltoVisibility(form)
 
@@ -524,10 +657,15 @@ export async function openModalPreventivo(id = null) {
       populateTipoAppaltoSelect(form, data.tipo_appalto)
       Object.entries(data).forEach(([k, v]) => {
         if (k === 'tipo_appalto') return  // già gestito sopra
+        if (k === 'lettera_data' || k === 'modello_id') return  // gestito sotto
         const el = form.querySelector(`[name="${k}"]`)
         if (el && v != null) el.value = v
       })
       if (clienteSelect && data.cliente_id) clienteSelect.value = data.cliente_id
+      if (modelloSelect && data.modello_id) {
+        modelloSelect.value = data.modello_id
+        buildLetteraPanel(data.modello_id, data.lettera_data || {})
+      }
       form.dataset.preventivoId = id
       modal.querySelector('h2').textContent = 'Modifica Preventivo'
 
@@ -627,6 +765,8 @@ export async function savePreventivo(payload) {
       note:              payload.note || null,
       tipo_appalto:      payload.tipo_appalto || null,
       coefficiente_rischio: payload.coefficiente_rischio || null,
+      modello_id:        payload.modello_id || null,
+      lettera_data:      payload.lettera_data || null,
     }
     let error
     if (payload.id) {
@@ -747,6 +887,140 @@ ${p.note ? `<div style="margin-top:16px;padding:14px 18px;background:#fffbeb;bor
     showToast('Errore stampa preventivo', 'error')
     console.error(err)
   }
+}
+
+// ── Stampa lettera cliente ────────────────────────────────────────────────────
+
+export async function printLetteraPreventivo(id) {
+  try {
+    const { data: p, error } = await supabase
+      .from('preventivi')
+      .select('*, clienti(ragione_sociale,indirizzo,citta,cap), modelli_preventivo:modello_id(*)')
+      .eq('id', id).single()
+    if (error) throw error
+    if (!p.modello_id || !p.lettera_data) {
+      showToast('Nessun modello lettera associato a questo preventivo', 'warning')
+      return
+    }
+
+    const { data: az } = await supabase.from('azienda').select('*').limit(1).single()
+    const modello = p.modelli_preventivo || {}
+    const lett = p.lettera_data || {}
+    const importo = p.importo || 0
+
+    const aziendaHeader = az ? [
+      `<strong>${az.ragione_sociale || ''}</strong>`,
+      az.indirizzo || '',
+      [az.cap, az.citta].filter(Boolean).join(' ') + (az.provincia ? ` ${az.provincia}` : ''),
+      az.piva ? `P.I. ${az.piva}` : '',
+      az.telefono ? `Tel ${az.telefono}` : '',
+    ].filter(Boolean).join('<br>') : '<strong>WashIN</strong>'
+
+    const html = _buildLetteraHtml({ p, modello, lett, importo, aziendaHeader, ragioneSociale: az?.ragione_sociale || 'WashIN' })
+    const win = window.open('', '_blank', 'width=850,height=1000')
+    if (!win) { showToast('Popup bloccato — consenti popup per stampare', 'warning'); return }
+    win.document.write(html)
+    win.document.close()
+  } catch (err) {
+    showToast('Errore stampa lettera', 'error')
+    console.error(err)
+  }
+}
+
+function _buildLetteraHtml({ p, modello, lett, importo, aziendaHeader, ragioneSociale = 'WashIN' }) {
+  const EUR_NUM = n => new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)
+  const cfg = modello.configurazione || {}
+  const clausole = modello.clausole || {}
+  const servizi = Array.isArray(lett.servizi) && lett.servizi.length
+    ? lett.servizi
+    : (Array.isArray(modello.servizi_default) ? modello.servizi_default : [])
+
+  const importoLettere = lett.importo_lettere ? ` (${lett.importo_lettere})` : ''
+  const oggetto = cfg.oggetto || 'Servizio di pulizia'
+  const intro = (cfg.intro || 'Formuliamo la nostra offerta per il servizio da eseguirsi {FREQUENZA} con le seguenti modalità:')
+    .replace('{FREQUENZA}', lett.frequenza_testo || p.frequenza || '')
+
+  const serviziHtml = servizi.map(s => `<li style="margin-bottom:4px;">${s}</li>`).join('')
+
+  let extraHtml = ''
+  if (modello.tipo === 'condominio') {
+    if (lett.incluso_vetri !== false && clausole.incluso_vetri) {
+      extraHtml += `<p style="margin:16px 0;">${clausole.incluso_vetri}</p>`
+    }
+    if (lett.sgrossatura_costo_ora) {
+      extraHtml += `<p style="margin:16px 0;">Se necessario si esegue un servizio di sgrossatura iniziale il cui costo orario è di <strong>€ ${EUR_NUM(lett.sgrossatura_costo_ora)}</strong> + iva per addetto impiegato.</p>`
+    }
+    if (clausole.materiali) {
+      extraHtml += `<p style="margin:16px 0;">${clausole.materiali}</p>`
+    }
+    if (clausole.assicurazione && (lett.compagnia_assicurazione || lett.numero_polizza)) {
+      const assText = clausole.assicurazione
+        .replace('{COMPAGNIA}', lett.compagnia_assicurazione || '___')
+        .replace('{N_POLIZZA}', lett.numero_polizza || '___')
+      extraHtml += `<p style="margin:16px 0;">${assText}</p>`
+    } else if (clausole.assicurazione) {
+      let assText = clausole.assicurazione
+      if (lett.compagnia_assicurazione) assText += ` Compagnia: ${lett.compagnia_assicurazione}.`
+      if (lett.numero_polizza) assText += ` Polizza n. ${lett.numero_polizza}.`
+      extraHtml += `<p style="margin:16px 0;">${assText}</p>`
+    }
+  }
+
+  const destLines = [
+    lett.nome_destinatario || (p.clienti?.ragione_sociale || ''),
+    lett.indirizzo_destinatario || (p.clienti?.indirizzo || ''),
+    lett.cap_citta_destinatario || [p.clienti?.cap, p.clienti?.citta].filter(Boolean).join(' '),
+  ].filter(Boolean).join('<br>')
+
+  return `<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8">
+<title>Lettera — ${p.numero_preventivo || oggetto}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Times New Roman',Times,serif;font-size:12pt;color:#111;padding:40px 50px;line-height:1.6;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;}
+  .mittente{font-size:11pt;line-height:1.8;}
+  .destinatario{font-size:11pt;line-height:1.8;text-align:left;margin:30px 0;}
+  .oggetto{margin:24px 0;font-size:11pt;}
+  .servizi-list{margin:12px 0 12px 20px;}
+  .prezzo{margin:24px 0;font-size:12pt;}
+  .footer-firma{margin-top:60px;display:flex;justify-content:flex-end;}
+  .firma-box{text-align:center;}
+  .firma-line{border-bottom:1px solid #111;width:200px;margin:50px auto 6px;}
+  @media print{body{padding:20px 40px}button{display:none}}
+</style></head><body>
+<div class="header">
+  <div class="mittente">${aziendaHeader}</div>
+  <div style="font-size:11pt;text-align:right;">${lett.luogo_data || new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})}</div>
+</div>
+
+<div class="destinatario">
+  Spettabile<br>
+  ${destLines}
+</div>
+
+<div class="oggetto"><strong>Oggetto:</strong> ${oggetto}</div>
+
+<p>Gentili Signori,</p>
+<p style="margin:16px 0;">${intro}</p>
+
+<ul class="servizi-list">${serviziHtml}</ul>
+
+<div class="prezzo">
+  Vi preventiviamo una spesa mensile di: <strong>€ ${EUR_NUM(importo)}${importoLettere}</strong> + iva
+</div>
+
+${extraHtml}
+
+<p style="margin:24px 0;">Cordiali saluti,</p>
+<div class="footer-firma">
+  <div class="firma-box">
+    <div class="firma-line"></div>
+    <div style="font-size:10pt;">${ragioneSociale}</div>
+  </div>
+</div>
+<script>window.onload=()=>window.print()<\/script>
+</body></html>`
 }
 
 // ── Converti in contratto ─────────────────────────────────────────────────────
@@ -920,6 +1194,8 @@ export function initPreventivi() {
           note:              fd.get('note'),
           tipo_appalto:      fd.get('tipo_appalto') || null,
           coefficiente_rischio: getCoeff(form),
+          modello_id:        fd.get('modello_id') || null,
+          lettera_data:      collectLetteraData(fd.get('modello_id') || null),
         }
         await savePreventivo(payload)
         modal.classList.remove('active')
@@ -932,6 +1208,7 @@ export function initPreventivi() {
       if (!(t instanceof HTMLElement)) return
       if (t.dataset.action === 'edit-preventivo' && t.dataset.id) await openModalPreventivo(t.dataset.id)
       if (t.dataset.action === 'print-preventivo' && t.dataset.id) await printPreventivo(t.dataset.id)
+      if (t.dataset.action === 'print-lettera-preventivo' && t.dataset.id) await printLetteraPreventivo(t.dataset.id)
       if (t.dataset.action === 'converti-preventivo' && t.dataset.id) {
         if (confirm('Creare un contratto da questo preventivo?')) {
           await convertiInContratto(t.dataset.id)
