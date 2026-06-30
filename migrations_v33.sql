@@ -41,3 +41,9 @@ VALUES (
   }'::jsonb
 )
 ON CONFLICT DO NOTHING;
+
+-- RLS
+ALTER TABLE modelli_preventivo ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "auth_users_all" ON modelli_preventivo
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
