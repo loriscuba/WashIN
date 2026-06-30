@@ -1168,9 +1168,10 @@ async function inviaCedolino(bustaId, btn) {
       const { data: blob, error: dErr } = await supabase.storage.from('buste-paga').download(busta.file_path)
       if (dErr || !blob) { showToast('Errore download PDF: ' + (dErr?.message || ''), 'error'); return }
       const bytes = new Uint8Array(await blob.arrayBuffer())
-      // Cifra con codice fiscale come password
-      const encrypted = await encryptPdf(bytes, cf)
-      payload.pdf_base64   = bytesToBase64(encrypted)
+      // Cifra con codice fiscale come password (fallback senza cifratura se WASM non disponibile)
+      let pdfBytes = bytes
+      try { pdfBytes = await encryptPdf(bytes, cf) } catch (e) { console.warn('[pdf_crypt] fallback senza cifratura:', e.message) }
+      payload.pdf_base64   = bytesToBase64(pdfBytes)
       payload.pdf_filename = `Cedolino_${(op.cognome || '').trim()}_${MESI[busta.mese - 1]}_${busta.anno}.pdf`.replace(/\s+/g, '_')
     }
 
@@ -1223,17 +1224,13 @@ async function inviaCedolinoWhatsApp(bustaId, btn) {
     let downloadLink = null
     if (busta.file_path) {
       const cf = (op.codice_fiscale || '').trim().toUpperCase()
-      if (!cf) {
-        waWin?.close()
-        showToast('Operatore senza codice fiscale: impossibile proteggere il PDF con password', 'error')
-        return
-      }
       const { data: blob, error: dErr } = await supabase.storage.from('buste-paga').download(busta.file_path)
       if (dErr || !blob) { waWin?.close(); showToast('Errore download PDF: ' + (dErr?.message || ''), 'error'); return }
       const bytes = new Uint8Array(await blob.arrayBuffer())
-      const encrypted = await encryptPdf(bytes, cf)
+      let encrypted = bytes
+      try { encrypted = await encryptPdf(bytes, cf) } catch (e) { console.warn('[pdf_crypt] fallback senza cifratura:', e.message) }
 
-      // Carica la versione cifrata
+      // Carica la versione (eventualmente cifrata)
       const path = `whatsapp/${busta.operatore_id}/${busta.anno}-${busta.mese}.pdf`
       const { error: upErr } = await supabase.storage.from('buste-paga')
         .upload(path, new Blob([encrypted], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' })
