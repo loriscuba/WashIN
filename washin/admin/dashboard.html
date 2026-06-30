@@ -487,6 +487,11 @@
               <strong>Algoritmo Costi</strong>
               <p>Scatti anzianità e parametri stima CCNL</p>
             </a>
+            <a href="#modelli-preventivo" data-target="modelli-preventivo" class="config-card group-ops">
+              <div class="config-card-icon"><span><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/></svg></span></div>
+              <strong>Modelli Preventivo</strong>
+              <p>Template lettera per tipo cliente</p>
+            </a>
             <a href="#email-cedolini" data-target="email-cedolini" class="config-card group-hr">
               <div class="config-card-icon"><span><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span></div>
               <strong>Email Cedolini</strong>
@@ -960,6 +965,17 @@
               <tbody id="hr-operatori-body"></tbody>
             </table>
           </div>
+        </section>
+
+        <!-- ── Modelli Preventivo ─────────────────────── -->
+        <section id="modelli-preventivo" class="section hidden">
+          <div class="page-header">
+            <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+            <h1>Modelli Preventivo</h1>
+          </div>
+          <p style="color:var(--gray-500);margin-bottom:20px;">Template lettera per i preventivi commerciali. Ogni modello definisce servizi predefiniti, clausole e dati aziendali per tipo cliente.</p>
+          <button class="btn btn-primary" data-action="new-modello-prev" style="margin-bottom:20px;">+ Nuovo modello</button>
+          <div id="modelli-prev-list"></div>
         </section>
 
         <!-- ── Tool Import ────────────────────────────── -->
@@ -1865,6 +1881,18 @@
             </div>
           </div>
 
+          <!-- Modello lettera -->
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Lettera cliente (opzionale)</div>
+            <div class="form-group" style="margin:0 0 12px;">
+              <label style="font-size:12px;">Modello lettera</label>
+              <select name="modello_id" style="max-width:300px;">
+                <option value="">— Nessun modello —</option>
+              </select>
+            </div>
+            <div id="prev-lettera-panel" style="display:none;"></div>
+          </div>
+
           <!-- Stato e note -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div class="form-group"><label>Stato</label>
@@ -1882,6 +1910,42 @@
           <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
             <button type="button" class="btn btn-secondary btn-sm" id="preventivo-cancel">Annulla</button>
             <button type="submit" class="btn btn-primary btn-sm">Salva preventivo</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Modal Modello Preventivo ── -->
+    <div class="modal-overlay" id="modello-prev-modal">
+      <div class="modal-box" style="max-width:600px;">
+        <h2>Nuovo Modello</h2>
+        <form>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Nome modello *</label><input name="nome" type="text" placeholder="es. Condominio" required></div>
+            <div class="form-group"><label>Tipo *</label>
+              <select name="tipo" required>
+                <option value="condominio">Condominio</option>
+                <option value="hotel">Hotel</option>
+                <option value="uffici">Uffici</option>
+                <option value="facchinaggio">Facchinaggio</option>
+                <option value="altro">Altro</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group"><label>Descrizione</label><input name="descrizione" type="text" placeholder="Breve descrizione del modello"></div>
+          <div class="form-group">
+            <label>Servizi predefiniti <span style="font-weight:400;font-size:11px;color:var(--gray-400);">(uno per riga)</span></label>
+            <textarea name="servizi_testo" rows="6" placeholder="Spazzatura e lavaggio scala&#10;Pulizia portone&#10;..."></textarea>
+          </div>
+          <p style="font-size:11px;font-weight:700;color:var(--teal,#0d9488);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 8px;">Dati predefiniti lettera</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label style="font-size:12px;">Luogo default</label><input name="luogo_default" type="text" placeholder="es. Quiliano"></div>
+            <div class="form-group"><label style="font-size:12px;">Compagnia assicurazione</label><input name="compagnia_default" type="text" placeholder="es. Generali"></div>
+          </div>
+          <div class="form-group" style="max-width:240px;"><label style="font-size:12px;">N. polizza default</label><input name="polizza_default" type="text" placeholder="es. 1234567"></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="modello-prev-cancel">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva modello</button>
           </div>
         </form>
       </div>
@@ -2793,6 +2857,7 @@
       import { initContoEconomico } from '../js/admin/contoeconomico.js'
       import { initAnagrafica } from '../js/admin/anagrafica.js'
       import { initModelliContratti } from '../js/admin/modelli_contratti.js'
+      import { initModelliPreventivo } from '../js/admin/modelli_preventivo.js'
       import { initImpostazioni } from '../js/admin/impostazioni.js'
       import { initFornitori } from '../js/admin/fornitori.js'
       import { initGestioneAnagrafica } from '../js/admin/gestione_anagrafica.js'
@@ -2953,6 +3018,7 @@
         initContoEconomico()
         initAnagrafica()
         initModelliContratti()
+        initModelliPreventivo()
         initImpostazioni()
         initFornitori()
         initGestioneAnagrafica()
