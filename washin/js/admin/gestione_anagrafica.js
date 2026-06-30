@@ -1205,8 +1205,8 @@ function normalizzaTelefono(raw) {
 // link, quindi: cifra il PDF (codice fiscale), lo carica nello Storage, genera un
 // link di download temporaneo e apre WhatsApp Web con un messaggio precompilato.
 async function inviaCedolinoWhatsApp(bustaId, btn) {
-  // Apre subito una scheda vuota (dentro il gesto del click) per evitare il blocco popup
-  const waWin = window.open('about:blank', '_blank')
+  // Apre sempre la stessa scheda denominata per evitare conflitti WhatsApp "aperta altrove"
+  const waWin = window.open('about:blank', 'washin-whatsapp')
   btn.disabled = true
   btn.classList.add('act-busy')
   try {
@@ -1256,7 +1256,7 @@ async function inviaCedolinoWhatsApp(bustaId, btn) {
     const waUrl = `https://web.whatsapp.com/send?phone=${tel}&text=${encodeURIComponent(righe.join('\n'))}`
 
     if (waWin) waWin.location.href = waUrl
-    else window.open(waUrl, '_blank')   // fallback se il popup non era stato aperto
+    else window.open(waUrl, 'washin-whatsapp')
     showToast('WhatsApp Web aperto — premi invio per inviare il messaggio', 'success')
   } catch (e) {
     waWin?.close()
