@@ -190,21 +190,11 @@ function buildOperatoreRow(form, item = {}) {
         cuEl.dataset.mancante = 'true'
       }
     } else if (op && op.fonte_costo_preventivo === 'busta') {
+      // costo_mensile è già il costo totale datore (contributi inclusi) — dividi per le ore
       if (op.costo_mensile > 0) {
         const ore = op.ore_mensili_contratto || 173
-        try {
-          const { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', {
-            p_ore_ordinarie: ore, p_include_ratei: true, p_lordo_busta: op.costo_mensile,
-            ...(op.voce_tariffa_inail ? { p_voce_tariffa: op.voce_tariffa_inail } : {})
-          })
-          if (!error && rpc?.costo_orario_effettivo > 0) {
-            cuEl.value = rpc.costo_orario_effettivo.toFixed(4)
-            cuEl.dataset.firStima = 'busta'
-          } else {
-            cuEl.value = ''
-            cuEl.dataset.mancante = 'true'
-          }
-        } catch { cuEl.value = ''; cuEl.dataset.mancante = 'true' }
+        cuEl.value = (op.costo_mensile / ore).toFixed(4)
+        cuEl.dataset.firStima = 'busta'
       } else {
         cuEl.value = ''
         cuEl.dataset.mancante = 'true'
@@ -216,19 +206,8 @@ function buildOperatoreRow(form, item = {}) {
         cuEl.dataset.firStima = 'auto-consuntivo'
       } else if (op.costo_mensile > 0) {
         const ore = op.ore_mensili_contratto || 173
-        try {
-          const { data: rpc, error } = await supabase.rpc('calcola_costo_operatore', {
-            p_ore_ordinarie: ore, p_include_ratei: true, p_lordo_busta: op.costo_mensile,
-            ...(op.voce_tariffa_inail ? { p_voce_tariffa: op.voce_tariffa_inail } : {})
-          })
-          if (!error && rpc?.costo_orario_effettivo > 0) {
-            cuEl.value = rpc.costo_orario_effettivo.toFixed(4)
-            cuEl.dataset.firStima = 'auto-busta'
-          } else {
-            cuEl.value = ''
-            cuEl.dataset.mancante = 'true'
-          }
-        } catch { cuEl.value = ''; cuEl.dataset.mancante = 'true' }
+        cuEl.value = (op.costo_mensile / ore).toFixed(4)
+        cuEl.dataset.firStima = 'auto-busta'
       } else {
         cuEl.value = ''
         cuEl.dataset.mancante = 'true'
