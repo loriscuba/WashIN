@@ -32,10 +32,26 @@
 
           <button type="submit" class="button action">Accedi</button>
 
-          <a href="#" class="forgot">Password dimenticata?</a>
+          <a href="#" class="forgot" id="forgot-link">Password dimenticata?</a>
 
           <p id="error-msg" class="error" aria-live="polite"></p>
         </form>
+
+        <!-- Reset password panel (hidden by default) -->
+        <div id="reset-panel" style="display:none;margin-top:16px;">
+          <form id="reset-form" class="login-form">
+            <p style="font-size:14px;color:#374151;margin:0 0 14px;">
+              Inserisci la tua email e ti invieremo un link per reimpostare la password.
+            </p>
+            <label>
+              Email
+              <input type="email" id="reset-email" name="reset_email" placeholder="es. nome@azienda.it" required>
+            </label>
+            <button type="submit" class="button action">Invia link di reset</button>
+            <a href="#" class="forgot" id="back-to-login">← Torna al login</a>
+            <p id="reset-msg" class="error" aria-live="polite"></p>
+          </form>
+        </div>
       </section>
     </main>
 
