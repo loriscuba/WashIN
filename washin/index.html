@@ -37,19 +37,32 @@
           <p id="error-msg" class="error" aria-live="polite"></p>
         </form>
 
-        <!-- Reset password panel (hidden by default) -->
-        <div id="reset-panel" style="display:none;margin-top:16px;">
+        <!-- Pannello recupero: "password dimenticata" (senza email) -->
+        <div id="reset-panel" style="display:none;">
           <form id="reset-form" class="login-form">
+            <p style="font-size:14px;color:#374151;margin:0 0 14px;line-height:1.5;">
+              Contatta l'amministratore per richiedere un accesso temporaneo.
+            </p>
+            <a href="#" class="forgot" id="back-to-login">← Torna al login</a>
+          </form>
+        </div>
+
+        <!-- Pannello imposta nuova password (da link recovery) -->
+        <div id="new-password-panel" style="display:none;">
+          <form id="new-password-form" class="login-form">
             <p style="font-size:14px;color:#374151;margin:0 0 14px;">
-              Inserisci la tua email e ti invieremo un link per reimpostare la password.
+              Scegli la tua nuova password.
             </p>
             <label>
-              Email
-              <input type="email" id="reset-email" name="reset_email" placeholder="es. nome@azienda.it" required>
+              Nuova password
+              <input type="password" id="new-pw" placeholder="Minimo 8 caratteri" required minlength="8">
             </label>
-            <button type="submit" class="button action">Invia link di reset</button>
-            <a href="#" class="forgot" id="back-to-login">← Torna al login</a>
-            <p id="reset-msg" class="error" aria-live="polite"></p>
+            <label>
+              Conferma password
+              <input type="password" id="confirm-pw" placeholder="Ripeti la password" required minlength="8">
+            </label>
+            <button type="submit" class="button action">Imposta password</button>
+            <p id="new-pw-msg" class="error" aria-live="polite"></p>
           </form>
         </div>
       </section>
