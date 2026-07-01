@@ -350,39 +350,98 @@ async function ricalcolaFirDaBustePaga() {
   const tbody = document.getElementById('fir-tbody')
   if (!tbody) return
 
+  // I cedolini non contengono i costi datore reali (INPS datore, ratei, ecc.)
+  // Usiamo il lordo medio mensile + parametri CCNL per una stima uniforme.
+  // Per FIR personalizzati per operatore, caricare il consuntivo della commercialista.
   const { data: buste, error } = await supabase
     .from('buste_paga')
-    .select('operatore_id,totale_lordo,costo_aziendale')
+    .select('operatore_id,totale_lordo')
     .gt('totale_lordo', 0)
-    .gt('costo_aziendale', 0)
 
   if (error) { showToast('Errore lettura buste paga', 'error'); return }
   if (!buste?.length) { showToast('Nessuna busta paga caricata — caricare prima i cedolini in Anagrafica', 'info'); return }
 
-  // Weighted sum per operatore: FIR = (Σ costo_aziendale / Σ totale_lordo − 1) × 100
   const agg = {}
   for (const b of buste) {
-    if (!agg[b.operatore_id]) agg[b.operatore_id] = { lordo: 0, costo: 0 }
+    if (!agg[b.operatore_id]) agg[b.operatore_id] = { lordo: 0, n: 0 }
     agg[b.operatore_id].lordo += b.totale_lordo
-    agg[b.operatore_id].costo += b.costo_aziendale
+    agg[b.operatore_id].n++
   }
 
+  // Parametri CCNL per calcolare il costo datore completo
+  const { data: ccnl } = await supabase
+    .from('parametri_ccnl')
+    .select('percentuale_rateo_13,percentuale_rateo_14,percentuale_rateo_ferie_permessi,aliquota_inps_datore,percentuale_tfr')
+    .order('valido_da', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const inps   = ccnl?.aliquota_inps_datore             ?? 0.31500
+  const inail  = 0.03000
+  const r13    = ccnl?.percentuale_rateo_13             ?? 0.08333
+  const r14    = ccnl?.percentuale_rateo_14             ?? 0.08333
+  const rferie = ccnl?.percentuale_rateo_ferie_permessi ?? 0.22000
+  const tfr    = ccnl?.percentuale_tfr                  ?? 0.07407
+  // FIR CCNL = INPS + INAIL + ratei×(1+INPS) + TFR×(1+r13+r14)
+  const firCcnl = inps + inail
+    + (r13 + r14 + rferie) * (1 + inps)
+    + (1 + r13 + r14) * tfr - 1
+  const firPct = Math.round(firCcnl * 1000) / 10
+
   let aggiornati = 0
-  for (const [opId, { lordo, costo }] of Object.entries(agg)) {
-    if (lordo <= 0) continue
-    const firCalc = Math.round(((costo / lordo) - 1) * 1000) / 10
-    if (firCalc < 30 || firCalc > 250) continue
+  for (const opId of Object.keys(agg)) {
     const tr = tbody.querySelector(`tr[data-id="${opId}"]`)
     if (tr) {
       const inp = tr.querySelector('.fir-op-inp')
-      if (inp) { inp.value = firCalc; inp.dispatchEvent(new Event('input')) }
+      if (inp) { inp.value = firPct; inp.dispatchEvent(new Event('input')) }
       aggiornati++
     }
   }
+
   showToast(aggiornati > 0
-    ? `FIR calcolato per ${aggiornati} operatori dai cedolini reali — premi Salva per confermare`
-    : 'Nessun operatore con buste paga valide trovato',
+    ? `FIR CCNL stimato ${firPct}% impostato per ${aggiornati} operatori — carica il consuntivo per valori personalizzati`
+    : 'Nessun operatore con buste paga trovato',
     aggiornati > 0 ? 'info' : 'warning')
+}
+
+// ── Algoritmo costi: agevolazione INPS e buffer inefficienze ─────────────────
+
+function _setAlgoritmoParamsVisible(attivo) {
+  const paramsEl = document.getElementById('algoritmo-params')
+  if (paramsEl) paramsEl.style.opacity = attivo ? '1' : '0.35'
+  paramsEl?.querySelectorAll('input,button').forEach(el => { el.disabled = !attivo })
+  // lascia visibile il pulsante Salva ma disabilitato — utente capisce lo stato
+}
+
+async function loadAlgoritmoParametri() {
+  const { data } = await supabase.from('impostazioni')
+    .select('chiave,valore')
+    .in('chiave', ['agevolazione_inps_calibrata', 'buffer_inefficienze', 'algoritmo_costi_attivo'])
+  const map = Object.fromEntries((data || []).map(r => [r.chiave, r.valore]))
+  const attivo = map.algoritmo_costi_attivo === 'true'
+  const toggleEl = document.getElementById('algoritmo-attivo-toggle')
+  const agevEl   = document.getElementById('algoritmo-agevolazione-inps')
+  const bufEl    = document.getElementById('algoritmo-buffer-inefficienze')
+  if (toggleEl) toggleEl.checked = attivo
+  if (agevEl) agevEl.value = parseFloat(map.agevolazione_inps_calibrata ?? '0') * 100 || 0
+  if (bufEl)  bufEl.value  = parseFloat(map.buffer_inefficienze ?? '0.12') * 100 || 12
+  _setAlgoritmoParamsVisible(attivo)
+}
+
+async function saveAlgoritmoParametri() {
+  const agevEl = document.getElementById('algoritmo-agevolazione-inps')
+  const bufEl  = document.getElementById('algoritmo-buffer-inefficienze')
+  const agev = parseFloat(agevEl?.value || '0') / 100
+  const buf  = parseFloat(bufEl?.value  || '12') / 100
+  if (isNaN(agev) || agev < 0 || agev > 0.5) { showToast('Agevolazione INPS deve essere tra 0% e 50%', 'error'); return }
+  if (isNaN(buf)  || buf  < 0 || buf  > 1)   { showToast('Buffer inefficienze deve essere tra 0% e 100%', 'error'); return }
+  const updates = [
+    { chiave: 'agevolazione_inps_calibrata', valore: String(agev), aggiornato_a: new Date().toISOString() },
+    { chiave: 'buffer_inefficienze',         valore: String(buf),  aggiornato_a: new Date().toISOString() }
+  ]
+  const { error } = await supabase.from('impostazioni').upsert(updates)
+  if (error) { showToast('Errore salvataggio: ' + error.message, 'error'); return }
+  showToast('Parametri algoritmo salvati', 'success')
 }
 
 // FIR globale fallback (impostazioni table)
@@ -404,6 +463,84 @@ async function saveFir() {
   if (error) { showToast('Errore salvataggio FIR', 'error'); return }
   window.dispatchEvent(new CustomEvent('impostazioni:changed', { detail: { fir_personale: val } }))
   showToast(`FIR globale salvato: ${val}%`, 'success')
+}
+
+// ── Email SMTP per cedolini ───────────────────────────────────────────────────
+
+async function loadSmtpConfig() {
+  const { data } = await supabase.from('impostazioni')
+    .select('chiave,valore')
+    .in('chiave', ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_name','smtp_secure'])
+  const map = Object.fromEntries((data || []).map(r => [r.chiave, r.valore]))
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? '' }
+  set('smtp-host',      map.smtp_host ?? '')
+  set('smtp-port',      map.smtp_port ?? '465')
+  set('smtp-user',      map.smtp_user ?? '')
+  set('smtp-pass',      map.smtp_pass ?? '')
+  set('smtp-from-name', map.smtp_from_name ?? '')
+  const secEl = document.getElementById('smtp-secure')
+  if (secEl) secEl.checked = map.smtp_secure !== 'false'
+}
+
+async function saveSmtpConfig() {
+  const g = id => document.getElementById(id)?.value?.trim() ?? ''
+  const host     = g('smtp-host')
+  const port     = g('smtp-port') || '465'
+  const user     = g('smtp-user')
+  const pass     = g('smtp-pass')
+  const fromName = g('smtp-from-name')
+  const secure   = document.getElementById('smtp-secure')?.checked ?? true
+
+  if (!host || !user) { showToast('Host e email mittente sono obbligatori', 'error'); return }
+
+  const updates = [
+    { chiave: 'smtp_host',      valore: host,       aggiornato_a: new Date().toISOString() },
+    { chiave: 'smtp_port',      valore: port,       aggiornato_a: new Date().toISOString() },
+    { chiave: 'smtp_user',      valore: user,       aggiornato_a: new Date().toISOString() },
+    { chiave: 'smtp_from_name', valore: fromName,   aggiornato_a: new Date().toISOString() },
+    { chiave: 'smtp_secure',    valore: String(secure), aggiornato_a: new Date().toISOString() },
+  ]
+  if (pass) updates.push({ chiave: 'smtp_pass', valore: pass, aggiornato_a: new Date().toISOString() })
+
+  const { error } = await supabase.from('impostazioni').upsert(updates)
+  if (error) { showToast('Errore salvataggio SMTP: ' + error.message, 'error'); return }
+  showToast('Configurazione SMTP salvata', 'success')
+}
+
+async function testSmtpConfig() {
+  const resultEl = document.getElementById('smtp-test-result')
+  const btn = document.getElementById('smtp-test-btn')
+  if (btn) { btn.disabled = true; btn.textContent = 'Invio…' }
+  if (resultEl) { resultEl.style.display = 'none' }
+
+  // Prima salva, poi testa
+  await saveSmtpConfig()
+
+  // Recupera email dell'utente loggato per il test
+  const { data: { user } } = await supabase.auth.getUser()
+  const testTo = user?.email
+  if (!testTo) {
+    showToast('Impossibile determinare l\'email di test (utente non loggato)', 'error')
+    if (btn) { btn.disabled = false; btn.textContent = 'Invia email di test' }
+    return
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke('send-cedolino', {
+      body: { _test: true, test_to: testTo }
+    })
+    const ok = !error && !data?.error
+    if (resultEl) {
+      resultEl.style.display = 'inline'
+      resultEl.style.color = ok ? '#059669' : '#dc2626'
+      resultEl.textContent = ok ? `Test inviato a ${testTo}` : (data?.error || error?.message || 'Errore')
+    }
+    showToast(ok ? `Email di test inviata a ${testTo}` : (data?.error || 'Errore invio test'), ok ? 'success' : 'error')
+  } catch (e) {
+    showToast('Errore: ' + e.message, 'error')
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Invia email di test' }
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -445,8 +582,38 @@ export function initConfigurazioni() {
   document.getElementById('coeff-add-btn')?.addEventListener('click', addNewCoefficientiRow)
   document.getElementById('impost-usa-coeff')?.addEventListener('change', e => saveImpostUseCoeff(e.target.checked))
 
+  // Toggle visibilità tab Anagrafica nel Tool Import
+  supabase.from('impostazioni').select('valore').eq('chiave', 'tool_show_anag_tab').maybeSingle().then(({ data }) => {
+    const el = document.getElementById('impost-tool-anag')
+    if (el) el.checked = data ? data.valore !== 'false' : true
+  })
+  document.getElementById('impost-tool-anag')?.addEventListener('change', async e => {
+    const val = e.target.checked
+    await supabase.from('impostazioni').upsert({ chiave: 'tool_show_anag_tab', valore: val ? 'true' : 'false', aggiornato_a: new Date().toISOString() })
+    // Aggiorna subito il Tool se già aperto
+    try {
+      const { setToolAnagTabVisible } = await import('./tool_import.js')
+      setToolAnagTabVisible(val)
+    } catch {}
+    showToast(val ? 'Tab Anagrafica visibile nel Tool' : 'Tab Anagrafica nascosta nel Tool', 'success')
+  })
+
   document.getElementById('fir-save-btn')?.addEventListener('click', saveFir)
   document.getElementById('fir-ricalcola-btn')?.addEventListener('click', ricalcolaFirDaBustePaga)
+  document.getElementById('algoritmo-save-btn')?.addEventListener('click', saveAlgoritmoParametri)
+
+  document.getElementById('smtp-save-btn')?.addEventListener('click', saveSmtpConfig)
+  document.getElementById('smtp-test-btn')?.addEventListener('click', testSmtpConfig)
+
+  document.getElementById('algoritmo-attivo-toggle')?.addEventListener('change', async e => {
+    const attivo = e.target.checked
+    _setAlgoritmoParamsVisible(attivo)
+    const { error } = await supabase.from('impostazioni').upsert({
+      chiave: 'algoritmo_costi_attivo', valore: attivo ? 'true' : 'false', aggiornato_a: new Date().toISOString()
+    })
+    if (error) showToast('Errore salvataggio', 'error')
+    else showToast(attivo ? 'Algoritmo avanzato attivato' : 'Algoritmo disattivato — verrà usato solo il RPC base', 'success')
+  })
 
   document.getElementById('fir-tbody')?.addEventListener('click', async e => {
     if (e.target.classList.contains('fir-op-save-btn')) {
@@ -463,5 +630,7 @@ export function initConfigurazioni() {
     if (link.dataset.target === 'tariffe-inail')        refreshInail()
     if (link.dataset.target === 'coefficienti-rischio') refreshCoefficienti()
     if (link.dataset.target === 'incidenza-reale')      { loadFir(); loadFirPersonale() }
+    if (link.dataset.target === 'algoritmo-costi')      loadAlgoritmoParametri()
+    if (link.dataset.target === 'email-cedolini')       loadSmtpConfig()
   })
 }

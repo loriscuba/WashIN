@@ -1,6 +1,7 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
 import { validaCF, validaEmail, validaIBAN, validaPW, primoErrore } from '../validate.js'
+import { encryptPdf, bytesToBase64 } from './pdf_crypt.js'
 
 const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
@@ -956,11 +957,37 @@ async function openModalAnag(operatoreId) {
     const retribForm = document.getElementById('hr-retrib-form')
     if (retribForm) {
       ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto',
-        'tipologia','tipo_retribuzione','reparto','posizione_inail']
+        'tipologia','tipo_retribuzione','reparto','posizione_inail','fonte_costo_preventivo']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) el.value = data[f] ?? '' })
       await populateRetribSelects(data.livello_ccnl, data.voce_tariffa_inail || '0411')
+
+      // Mostra costo_aziendale dall'ultima busta paga disponibile
+      const hint = document.getElementById('hr-costo-busta-hint')
+      if (hint) {
+        const { data: bp } = await supabase
+          .from('buste_paga')
+          .select('costo_aziendale, ore_lavorate, anno, mese')
+          .eq('operatore_id', operatoreId)
+          .not('costo_aziendale', 'is', null)
+          .order('anno', { ascending: false })
+          .order('mese', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (bp?.costo_aziendale) {
+          const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
+          const fmt = n => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n)
+          const ore = bp.ore_lavorate || parseFloat(retribForm.querySelector('[name="ore_mensili_contratto"]')?.value) || null
+          const orarioStr = ore > 0
+            ? ` &nbsp;|&nbsp; <b>${fmt(bp.costo_aziendale / ore)}/h</b> (su ${ore} ore)`
+            : ''
+          hint.innerHTML = `📋 Ultima busta <b>${MESI[bp.mese - 1]} ${bp.anno}</b> — costo aziendale: <b>${fmt(bp.costo_aziendale)}/mese</b>${orarioStr}`
+          hint.style.display = ''
+        } else {
+          hint.style.display = 'none'
+        }
+      }
     }
 
     setTab('dati')
@@ -983,9 +1010,10 @@ function setTab(tabName) {
   modal.querySelectorAll('.hr-tab-content').forEach(p => p.classList.toggle('hidden', p.dataset.tab !== tabName))
 
   const saveBtn = document.getElementById('hr-save-btn')
-  if (saveBtn) saveBtn.style.display = tabName === 'buste' ? 'none' : ''
+  if (saveBtn) saveBtn.style.display = (tabName === 'buste' || tabName === 'consuntivo') ? 'none' : ''
 
   if (tabName === 'buste' && _currentOpId) loadBustePagaTab(_currentOpId)
+  if (tabName === 'consuntivo' && _currentOpId) loadConsuntivoTab(_currentOpId)
 }
 
 // ── Save personal / salary data ──────────────────────────────────────────────
@@ -1009,7 +1037,7 @@ async function saveDatiPersonali() {
     const retribForm = document.getElementById('hr-retrib-form')
     if (retribForm) {
       ;['ccnl','categoria_lavorativa','tipo_contratto','data_scadenza_contratto','livello_ccnl','voce_tariffa_inail',
-        'tipologia','tipo_retribuzione','reparto','posizione_inail']
+        'tipologia','tipo_retribuzione','reparto','posizione_inail','fonte_costo_preventivo']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value || null })
       ;['paga_base','scatti_anzianita','indennita','costo_mensile','ore_mensili_contratto']
         .forEach(f => { const el = retribForm.querySelector(`[name="${f}"]`); if (el) fields[f] = el.value ? parseFloat(el.value) : null })
@@ -1047,6 +1075,204 @@ async function loadBustePagaTab(operatoreId) {
   }
 }
 
+async function loadConsuntivoTab(operatoreId) {
+  const container = document.getElementById('hr-consuntivo-body')
+  if (!container) return
+
+  // Carica profilo (per costo_orario_medio) + storico consuntivi
+  const [profRes, consRes] = await Promise.all([
+    supabase.from('profili').select('costo_orario_medio').eq('id', operatoreId).single(),
+    supabase.from('consuntivo_costi').select('*').eq('operatore_id', operatoreId).order('anno', { ascending: false }).order('mese_da', { ascending: false })
+  ])
+
+  const medio = profRes.data?.costo_orario_medio
+  const righe = consRes.data || []
+
+  const fmt  = n => n != null ? new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 5 }).format(n) : '—'
+  const fmtP = n => n != null ? new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' %' : '—'
+  const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic']
+  const periodoLabel = r => r.mese_da === 1 && r.mese_a === 12
+    ? `Anno ${r.anno}`
+    : r.mese_da === r.mese_a
+      ? `${MESI_SHORT[r.mese_da - 1]} ${r.anno}`
+      : `${MESI_SHORT[r.mese_da - 1]}–${MESI_SHORT[r.mese_a - 1]} ${r.anno}`
+
+  // Ultima % incidenza disponibile
+  const ultimaPerc = righe[0]?.perc_incidenza ?? null
+
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+      <div style="background:var(--gray-50,#f9fafb);border:1px solid var(--gray-200);border-radius:10px;padding:18px 20px;">
+        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-400);margin:0 0 6px;">Costo orario medio progressivo</p>
+        <p style="font-size:28px;font-weight:700;color:var(--teal,#0d9488);margin:0;">€ ${fmt(medio)}</p>
+        <p style="font-size:11px;color:var(--gray-400);margin:4px 0 0;">Media su ${righe.length} periodo/i importato/i</p>
+      </div>
+      <div style="background:var(--gray-50,#f9fafb);border:1px solid var(--gray-200);border-radius:10px;padding:18px 20px;">
+        <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-400);margin:0 0 6px;">% incidenza (ultimo periodo)</p>
+        <p style="font-size:28px;font-weight:700;color:var(--teal,#0d9488);margin:0;">${fmtP(ultimaPerc)}</p>
+        <p style="font-size:11px;color:var(--gray-400);margin:4px 0 0;">${righe[0] ? periodoLabel(righe[0]) : 'Nessun dato'}</p>
+      </div>
+    </div>
+    ${righe.length ? `
+    <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-400);margin:0 0 10px;">Storico consuntivi</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:var(--gray-100);">
+          <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--gray-200);">Periodo</th>
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--gray-200);">Ore lav.</th>
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--gray-200);">Costo orario</th>
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--gray-200);">% incid.</th>
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--gray-200);">Totale</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${righe.map(r => `
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:7px 10px;">${periodoLabel(r)}</td>
+          <td style="padding:7px 10px;text-align:right;">${r.ore_lavorate != null ? new Intl.NumberFormat('it-IT').format(r.ore_lavorate) : '—'}</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:600;">€ ${fmt(r.costo_orario)}</td>
+          <td style="padding:7px 10px;text-align:right;">${fmtP(r.perc_incidenza)}</td>
+          <td style="padding:7px 10px;text-align:right;">${r.totale_costo != null ? new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(r.totale_costo) : '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>` : '<p style="color:var(--gray-400);font-size:13px;">Nessun consuntivo importato per questo dipendente.</p>'}
+  `
+}
+
+// Invia il cedolino via email. Se è presente il PDF allegato, lo cifra con
+// il codice fiscale dell'operatore (AES-256) prima dell'invio.
+async function inviaCedolino(bustaId, btn) {
+  btn.disabled = true
+  btn.classList.add('act-busy')
+  try {
+    // Dati busta + operatore (file PDF, codice fiscale, email)
+    const { data: busta, error: bErr } = await supabase
+      .from('buste_paga')
+      .select('id, anno, mese, file_path, profili(codice_fiscale, email, nome, cognome)')
+      .eq('id', bustaId)
+      .single()
+    if (bErr || !busta) { showToast('Busta paga non trovata', 'error'); return }
+
+    const op = busta.profili || {}
+    if (!op.email) { showToast('Operatore senza email — impostala in Anagrafica', 'error'); return }
+
+    const payload = { busta_paga_id: bustaId }
+
+    if (busta.file_path) {
+      const cf = (op.codice_fiscale || '').trim().toUpperCase()
+      if (!cf) {
+        showToast('Operatore senza codice fiscale: impossibile proteggere il PDF con password', 'error')
+        return
+      }
+      // Scarica il PDF dallo storage
+      const { data: blob, error: dErr } = await supabase.storage.from('buste-paga').download(busta.file_path)
+      if (dErr || !blob) { showToast('Errore download PDF: ' + (dErr?.message || ''), 'error'); return }
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      // Cifra con codice fiscale come password (fallback senza cifratura se WASM non disponibile)
+      let pdfBytes = bytes
+      try { pdfBytes = await encryptPdf(bytes, cf) } catch (e) { console.warn('[pdf_crypt] fallback senza cifratura:', e.message) }
+      payload.pdf_base64   = bytesToBase64(pdfBytes)
+      payload.pdf_filename = `Cedolino_${(op.cognome || '').trim()}_${MESI[busta.mese - 1]}_${busta.anno}.pdf`.replace(/\s+/g, '_')
+    }
+
+    const { data, error } = await supabase.functions.invoke('send-cedolino', { body: payload })
+    if (error || data?.error) {
+      let msg = data?.error || error?.message || 'Errore invio'
+      try { const body = await error?.context?.json?.(); if (body?.error) msg = body.error } catch {}
+      showToast(msg, 'error')
+    } else {
+      showToast(`Cedolino inviato a ${data.to}${payload.pdf_base64 ? ' (PDF protetto da password)' : ''}`, 'success')
+    }
+  } catch (e) {
+    showToast('Errore invio: ' + (e instanceof Error ? e.message : String(e)), 'error')
+  } finally {
+    btn.disabled = false
+    btn.classList.remove('act-busy')
+  }
+}
+
+// Normalizza un numero di telefono in formato internazionale per wa.me (solo cifre).
+// Best-effort per numeri italiani: rimuove prefissi/spazi e antepone 39 se mancante.
+function normalizzaTelefono(raw) {
+  let d = (raw || '').replace(/[^\d]/g, '')
+  if (!d) return ''
+  if (d.startsWith('00')) d = d.slice(2)            // 0039... -> 39...
+  if (!d.startsWith('39') && (d.length === 9 || d.length === 10)) d = '39' + d
+  return d
+}
+
+// Invia il cedolino via WhatsApp Web. WhatsApp non consente di allegare file via
+// Finestra WhatsApp persistente: riusata tra invii per evitare "aperta altrove"
+let _waWin = null
+
+// link, quindi: cifra il PDF (codice fiscale), lo carica nello Storage, genera un
+// link di download temporaneo e apre WhatsApp Web con un messaggio precompilato.
+async function inviaCedolinoWhatsApp(bustaId, btn) {
+  // Riusa la finestra esistente se ancora aperta, altrimenti ne apre una nuova
+  if (!_waWin || _waWin.closed) {
+    _waWin = window.open('about:blank', 'washin-whatsapp')
+  }
+  const waWin = _waWin
+  btn.disabled = true
+  btn.classList.add('act-busy')
+  try {
+    const { data: busta, error: bErr } = await supabase
+      .from('buste_paga')
+      .select('id, anno, mese, file_path, operatore_id, totale_netto, profili(codice_fiscale, telefono, nome, cognome)')
+      .eq('id', bustaId)
+      .single()
+    if (bErr || !busta) { waWin?.close(); showToast('Busta paga non trovata', 'error'); return }
+
+    const op = busta.profili || {}
+    const tel = normalizzaTelefono(op.telefono)
+    if (!tel) { waWin?.close(); showToast('Operatore senza numero di telefono — impostalo in Anagrafica', 'error'); return }
+
+    let downloadLink = null
+    if (busta.file_path) {
+      const cf = (op.codice_fiscale || '').trim().toUpperCase()
+      const { data: blob, error: dErr } = await supabase.storage.from('buste-paga').download(busta.file_path)
+      if (dErr || !blob) { waWin?.close(); showToast('Errore download PDF: ' + (dErr?.message || ''), 'error'); return }
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      let encrypted = bytes
+      try { encrypted = await encryptPdf(bytes, cf) } catch (e) { console.warn('[pdf_crypt] fallback senza cifratura:', e.message) }
+
+      // Carica la versione (eventualmente cifrata)
+      const path = `whatsapp/${busta.operatore_id}/${busta.anno}-${busta.mese}.pdf`
+      const { error: upErr } = await supabase.storage.from('buste-paga')
+        .upload(path, new Blob([encrypted], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' })
+      if (upErr) { waWin?.close(); showToast('Errore caricamento PDF cifrato: ' + upErr.message, 'error'); return }
+
+      // Link breve: la Edge Function "c" genera al volo il signed URL e reindirizza al download
+      const base = (window.SUPABASE_URL || '').replace(/\/$/, '')
+      downloadLink = `${base}/functions/v1/c?b=${busta.id}`
+    }
+
+    // Composizione messaggio (testo semplice, senza emoji: alcuni server li corrompono)
+    const righe = [`Ciao ${(op.nome || '').trim()},`.trim(),
+                   `ecco il cedolino di ${MESI[busta.mese - 1]} ${busta.anno}.`]
+    if (downloadLink) {
+      righe.push('', `Scarica il PDF: ${downloadLink}`, '',
+                 'Il PDF e protetto da password: il tuo CODICE FISCALE in MAIUSCOLO.',
+                 'Il link e valido 7 giorni.')
+    } else {
+      righe.push('', `Netto in busta: ${FMT_EUR(busta.totale_netto)}`,
+                 '(PDF non disponibile, contatta l\'ufficio paghe per la copia cartacea.)')
+    }
+    // web.whatsapp.com/send apre direttamente WhatsApp Web, saltando la pagina intermedia di api.whatsapp.com
+    const waUrl = `https://web.whatsapp.com/send?phone=${tel}&text=${encodeURIComponent(righe.join('\n'))}`
+
+    if (waWin) waWin.location.href = waUrl
+    else window.open(waUrl, 'washin-whatsapp')
+    showToast('WhatsApp Web aperto — premi invio per inviare il messaggio', 'success')
+  } catch (e) {
+    waWin?.close()
+    showToast('Errore WhatsApp: ' + (e instanceof Error ? e.message : String(e)), 'error')
+  } finally {
+    btn.disabled = false
+    btn.classList.remove('act-busy')
+  }
+}
+
 function renderBustePagaList(buste) {
   const container = document.getElementById('hr-buste-list')
   if (!container) return
@@ -1079,9 +1305,21 @@ function renderBustePagaList(buste) {
               <td>${FMT_EUR(b.tfr_mese)}</td>
               <td>${FMT_EUR(b.costo_aziendale)}</td>
               <td><span class="badge ${STATO_BADGE[b.stato] || 'badge-warning'}">${b.stato}</span></td>
-              <td style="display:flex;gap:6px;flex-wrap:wrap;">
-                <button class="btn btn-sm btn-secondary" data-action="hr-edit-busta" data-id="${b.id}">Modifica</button>
-                ${b.file_path ? `<button class="btn btn-sm btn-secondary" data-action="hr-download" data-path="${b.file_path}">📎 PDF</button>` : ''}
+              <td>
+                <div class="act-row">
+                  <button class="act-btn act-edit" data-action="hr-edit-busta" data-id="${b.id}" data-tip="Modifica" aria-label="Modifica">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                  </button>
+                  ${b.file_path ? `<button class="act-btn act-pdf" data-action="hr-download" data-path="${b.file_path}" data-tip="Apri PDF" aria-label="Apri PDF">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </button>` : ''}
+                  <button class="act-btn act-mail" data-action="hr-invia-cedolino" data-id="${b.id}" data-tip="Invia via email" aria-label="Invia via email">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  </button>
+                  <button class="act-btn act-wa" data-action="hr-whatsapp" data-id="${b.id}" data-tip="Invia su WhatsApp" aria-label="Invia su WhatsApp">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 6.32A8.78 8.78 0 0 0 3.5 16.9L2 22l5.25-1.38a8.78 8.78 0 0 0 4.2 1.07h.01a8.79 8.79 0 0 0 6.14-15.01zM12 20.2h-.01a7.3 7.3 0 0 1-3.72-1.02l-.27-.16-2.77.73.74-2.7-.17-.28a7.29 7.29 0 1 1 6.2 3.43zm4.01-5.46c-.22-.11-1.3-.64-1.5-.71-.2-.08-.35-.11-.5.11-.15.22-.57.71-.7.86-.13.15-.26.16-.48.05-.22-.11-.93-.34-1.77-1.09-.65-.58-1.1-1.3-1.22-1.52-.13-.22-.01-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.39-.06-.11-.5-1.2-.68-1.65-.18-.43-.36-.37-.5-.38h-.43c-.15 0-.39.06-.59.28-.2.22-.78.76-.78 1.84 0 1.08.8 2.13.91 2.28.11.15 1.56 2.38 3.78 3.34.53.23.94.36 1.26.46.53.17 1.01.15 1.39.09.42-.06 1.3-.53 1.48-1.05.18-.51.18-.95.13-1.04-.05-.09-.2-.15-.42-.26z"/></svg>
+                  </button>
+                </div>
               </td>
             </tr>
           `).join('')}
@@ -1341,7 +1579,13 @@ export function initGestioneAnagrafica() {
       const btn = e.target.closest('[data-action]')
       if (!btn) return
       if (btn.dataset.action === 'hr-edit-busta') await openModalBusta(btn.dataset.id)
-      if (btn.dataset.action === 'hr-download') await downloadBusta(btn.dataset.path)
+      if (btn.dataset.action === 'hr-download')   await downloadBusta(btn.dataset.path)
+      if (btn.dataset.action === 'hr-invia-cedolino') {
+        await inviaCedolino(btn.dataset.id, btn)
+      }
+      if (btn.dataset.action === 'hr-whatsapp') {
+        await inviaCedolinoWhatsApp(btn.dataset.id, btn)
+      }
     })
 
     // Busta modal close
