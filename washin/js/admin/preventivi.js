@@ -658,6 +658,8 @@ export async function openModalPreventivo(id = null) {
     delete form.dataset.preventivoId
     const hint = document.getElementById('prev-km-hint')
     if (hint) hint.style.display = 'none'
+    const ccnlHint = document.getElementById('prev-ccnl-hint')
+    if (ccnlHint) { ccnlHint.style.display = 'none'; ccnlHint.innerHTML = '' }
     ;['prev-tot-op','prev-tot-prod','prev-tot-km','r-op','r-prod','r-km','r-altri','r-totale','r-prezzo'].forEach(id => {
       const el = document.getElementById(id)
       if (el) el.textContent = '€0,00'
