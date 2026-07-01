@@ -5,10 +5,12 @@ import { initAgenda, loadInterventiPassati, renderInterventiPassati, refreshAgen
 import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
 import { uploadAvatar, applyAvatar } from '../avatar.js'
 import { initCedolini } from './cedolini.js'
+import { initOreOperatore } from './ore.js'
 
 let _currentUserId = null   // auth UUID (session.user.id)
 let _currentProfileId = null  // profili.id (usato come FK in buste_paga, interventi, ecc.)
-let _sezioniAbilitate = { agenda: true, documenti: true, cedolini: true, storico: true }
+let _sezioniAbilitate = { agenda: true, documenti: true, cedolini: true, storico: true, ore: true }
+let _oreLoaded = false
 
 async function loadNotificheBadge(userId) {
   try {
@@ -45,7 +47,7 @@ function showSection(sectionId) {
     if (_sezioniAbilitate[sectionId] === false) sectionId = 'agenda'
   }
 
-  const sections = ['agenda', 'checklist', 'documenti', 'cedolini', 'storico', 'profilo']
+  const sections = ['agenda', 'checklist', 'documenti', 'cedolini', 'storico', 'profilo', 'ore']
   sections.forEach((id) => {
     const el = document.getElementById(id)
     if (!el) return
@@ -62,6 +64,10 @@ function showSection(sectionId) {
   if (sectionId === 'cedolini' && !_cedoliniLoaded && _currentProfileId) {
     _cedoliniLoaded = true
     initCedolini(_currentProfileId)
+  }
+  if (sectionId === 'ore' && !_oreLoaded && _currentProfileId) {
+    _oreLoaded = true
+    initOreOperatore(_currentProfileId)
   }
 }
 
