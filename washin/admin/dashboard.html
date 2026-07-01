@@ -1386,28 +1386,67 @@
               <button id="print-presenze" class="btn btn-secondary btn-sm">🖨 Stampa PDF</button>
             </div>
           </div>
-          <div class="card" style="margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-            <div class="form-group">
-              <label>Mese</label>
-              <input id="presenze-mese" type="month" />
+
+          <!-- Tab switcher -->
+          <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <button id="tab-presenze-interventi" class="btn btn-primary btn-sm" data-ptab="interventi">Interventi</button>
+            <button id="tab-presenze-ore" class="btn btn-secondary btn-sm" data-ptab="ore">Ore dichiarate</button>
+          </div>
+
+          <!-- View: Interventi (existing) -->
+          <div id="presenze-view-interventi">
+            <div class="card" style="margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+              <div class="form-group">
+                <label>Mese</label>
+                <input id="presenze-mese" type="month" />
+              </div>
+              <div class="form-group">
+                <label>Operatore</label>
+                <select id="presenze-operatore"></select>
+              </div>
             </div>
-            <div class="form-group">
-              <label>Operatore</label>
-              <select id="presenze-operatore"></select>
+            <div class="table-container card">
+              <table class="washin-table">
+                <thead>
+                  <tr>
+                    <th>Operatore</th>
+                    <th>Giorni lavorati</th>
+                    <th>Interventi</th>
+                    <th>Ore totali</th>
+                  </tr>
+                </thead>
+                <tbody id="presenze-table-body"></tbody>
+              </table>
             </div>
           </div>
-          <div class="table-container card">
-            <table class="washin-table">
-              <thead>
-                <tr>
-                  <th>Operatore</th>
-                  <th>Giorni lavorati</th>
-                  <th>Interventi</th>
-                  <th>Ore totali</th>
-                </tr>
-              </thead>
-              <tbody id="presenze-table-body"></tbody>
-            </table>
+
+          <!-- View: Ore dichiarate da operatori -->
+          <div id="presenze-view-ore" style="display:none;">
+            <div class="card" style="margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px;">
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:13px;margin-bottom:4px;display:block;">Mese</label>
+                <input id="ore-mese" type="month" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;" />
+              </div>
+              <button id="btn-load-ore" class="btn btn-primary btn-sm" style="margin-top:18px;">Carica</button>
+            </div>
+            <div class="table-container card">
+              <table class="washin-table">
+                <thead>
+                  <tr>
+                    <th>Operatore</th>
+                    <th>Gg lavoro</th>
+                    <th>Ore ordinarie</th>
+                    <th>Straordinario</th>
+                    <th>Ferie</th>
+                    <th>Malattia</th>
+                    <th>Non registrati</th>
+                  </tr>
+                </thead>
+                <tbody id="ore-dichiarate-table-body">
+                  <tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px;">Seleziona un mese e clicca Carica</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 

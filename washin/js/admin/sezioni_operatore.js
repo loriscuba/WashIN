@@ -6,6 +6,7 @@ const SEZIONI = [
   { sezione: 'documenti', etichetta: 'I miei documenti',      fixed: false },
   { sezione: 'cedolini',  etichetta: 'Cedolini',              fixed: false },
   { sezione: 'storico',   etichetta: 'Storico interventi',    fixed: false },
+  { sezione: 'ore',       etichetta: 'Le mie ore',            fixed: false },
 ]
 
 function toggleHtml(sezione, enabled, fixed) {

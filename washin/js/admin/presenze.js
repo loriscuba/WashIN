@@ -141,8 +141,99 @@ export function initPresenze() {
     })
 
     loadOperatoriFilter().then(refresh)
+
+    // Tab switching
+    document.querySelectorAll('[data-ptab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.ptab
+        document.getElementById('presenze-view-interventi').style.display = tab === 'interventi' ? '' : 'none'
+        document.getElementById('presenze-view-ore').style.display       = tab === 'ore' ? '' : 'none'
+        document.querySelector('[data-ptab="interventi"]').className = tab === 'interventi' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'
+        document.querySelector('[data-ptab="ore"]').className        = tab === 'ore' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'
+      })
+    })
+
+    // Ore dichiarate
+    const oreMeseInput = document.getElementById('ore-mese')
+    const oreLoadBtn   = document.getElementById('btn-load-ore')
+    if (oreMeseInput) {
+      oreMeseInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    }
+    oreLoadBtn?.addEventListener('click', () => loadOreDichiarate(oreMeseInput?.value))
   } catch (err) {
     showToast('Errore inizializzazione presenze', 'error')
     console.error(err)
   }
+}
+
+async function loadOreDichiarate(meseStr) {
+  const tbody = document.getElementById('ore-dichiarate-table-body')
+  if (!tbody || !meseStr) return
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;">Caricamento...</td></tr>'
+
+  const [anno, mese] = meseStr.split('-').map(Number)
+  const from = `${anno}-${String(mese).padStart(2,'0')}-01`
+  const giorni = new Date(anno, mese, 0).getDate()
+  const to = `${anno}-${String(mese).padStart(2,'0')}-${String(giorni).padStart(2,'0')}`
+
+  const { data, error } = await supabase
+    .from('presenze_giornaliere')
+    .select('profilo_id, data, tipo, ore_ordinarie, ore_straordinario, profilo:profili!profilo_id(nome, cognome)')
+    .gte('data', from)
+    .lte('data', to)
+
+  if (error) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:24px;">Errore caricamento</td></tr>'
+    return
+  }
+
+  // Count working days in month (Mon-Fri)
+  let ferialiMese = 0
+  for (let g = 1; g <= giorni; g++) {
+    const dow = new Date(anno, mese - 1, g).getDay()
+    if (dow !== 0 && dow !== 6) ferialiMese++
+  }
+
+  // Aggregate by operator
+  const byOp = {}
+  ;(data || []).forEach(r => {
+    const id = r.profilo_id
+    if (!byOp[id]) {
+      const nome = r.profilo ? `${r.profilo.nome || ''} ${r.profilo.cognome || ''}`.trim() : id
+      byOp[id] = { nome, ggLavoro: 0, oreOrd: 0, oreStr: 0, ferie: 0, malattia: 0, registrati: 0 }
+    }
+    byOp[id].registrati++
+    if (r.tipo === 'lavoro') {
+      byOp[id].ggLavoro++
+      byOp[id].oreOrd += parseFloat(r.ore_ordinarie || 0)
+      byOp[id].oreStr += parseFloat(r.ore_straordinario || 0)
+    } else if (r.tipo === 'feria') byOp[id].ferie++
+    else if (r.tipo === 'malattia') byOp[id].malattia++
+  })
+
+  if (!Object.keys(byOp).length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gray-400);padding:24px;">Nessun dato per il periodo selezionato</td></tr>'
+    return
+  }
+
+  function fmtOre(h) {
+    if (!h) return '—'
+    const hh = Math.floor(h), mm = Math.round((h - hh) * 60)
+    return mm ? `${hh}h ${String(mm).padStart(2,'0')}m` : `${hh}h`
+  }
+
+  tbody.innerHTML = Object.values(byOp)
+    .sort((a, b) => a.nome.localeCompare(b.nome))
+    .map(op => {
+      const nonReg = Math.max(0, ferialiMese - op.registrati)
+      return `<tr>
+        <td><strong>${op.nome}</strong></td>
+        <td>${op.ggLavoro}</td>
+        <td>${fmtOre(op.oreOrd)}</td>
+        <td>${op.oreStr ? `<span style="color:#f59e0b;font-weight:600;">${fmtOre(op.oreStr)}</span>` : '—'}</td>
+        <td>${op.ferie || '—'}</td>
+        <td>${op.malattia || '—'}</td>
+        <td>${nonReg ? `<span style="color:#ef4444;">${nonReg}</span>` : '<span style="color:#10b981;">✓</span>'}</td>
+      </tr>`
+    }).join('')
 }

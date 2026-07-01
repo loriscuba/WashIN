@@ -359,6 +359,18 @@
       @media(min-width: 900px){
         .main-content { padding: 24px 40px 90px; max-width: 720px; }
       }
+      /* Ore section */
+      .giorno-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 10px 14px;
+        cursor: pointer;
+        transition: box-shadow .15s;
+        border: 1px solid #f3f4f6;
+      }
+      .giorno-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+      .giorno-oggi { background: #f0fdfa; border-color: #99f6e4; }
+      .giorno-weekend { opacity: .55; cursor: default; }
     </style>
   </head>
   <body>
@@ -569,6 +581,16 @@
           </div>
           <div id="cedolini-list"></div>
         </section>
+
+        <section id="ore" class="section section-card hidden">
+          <div class="section-header">
+            <div>
+              <h2>Le mie ore</h2>
+              <p style="color:var(--gray-500);margin-top:6px;">Registra le ore lavorate giorno per giorno.</p>
+            </div>
+          </div>
+          <div id="ore-section"></div>
+        </section>
       </main>
     </div>
 
@@ -581,13 +603,13 @@
         <span class="bnav-icon">📄</span>
         <span>Documenti</span>
       </a>
+      <a href="#ore" data-section="ore">
+        <span class="bnav-icon">⏱</span>
+        <span>Ore</span>
+      </a>
       <a href="#cedolini" data-section="cedolini">
         <span class="bnav-icon">💰</span>
         <span>Cedolini</span>
-      </a>
-      <a href="#storico" data-section="storico">
-        <span class="bnav-icon">📋</span>
-        <span>Storico</span>
       </a>
       <a href="#profilo" data-section="profilo">
         <span class="bnav-icon">👤</span>
