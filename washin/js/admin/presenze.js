@@ -143,13 +143,21 @@ export function initPresenze() {
     loadOperatoriFilter().then(refresh)
 
     // Tab switching
+    let _mensiliInited = false
     document.querySelectorAll('[data-ptab]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const tab = btn.dataset.ptab
         document.getElementById('presenze-view-interventi').style.display = tab === 'interventi' ? '' : 'none'
-        document.getElementById('presenze-view-ore').style.display       = tab === 'ore' ? '' : 'none'
-        document.querySelector('[data-ptab="interventi"]').className = tab === 'interventi' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'
-        document.querySelector('[data-ptab="ore"]').className        = tab === 'ore' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'
+        document.getElementById('presenze-view-ore').style.display        = tab === 'ore'        ? '' : 'none'
+        document.getElementById('presenze-view-mensili').style.display    = tab === 'mensili'    ? '' : 'none'
+        document.querySelectorAll('[data-ptab]').forEach(b => {
+          b.className = b.dataset.ptab === tab ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'
+        })
+        if (tab === 'mensili' && !_mensiliInited) {
+          _mensiliInited = true
+          const { initPresenzeDettagliate } = await import('./presenze_dettagliate.js')
+          initPresenzeDettagliate()
+        }
       })
     })
 

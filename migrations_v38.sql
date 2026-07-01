@@ -1,10 +1,5 @@
 -- Migration v38: campi aggiuntivi per presenze dettagliate + sezione Ore mensili
 
--- Aggiungi sezione 'presenze-dettagliate' alle sezioni admin toggle
-INSERT INTO sezioni_admin (sezione, etichetta, abilitata) VALUES
-  ('presenze-dettagliate', 'Ore mensili', true)
-ON CONFLICT DO NOTHING;
-
 -- Migration v38: campi aggiuntivi per presenze dettagliate admin
 
 -- presenze_giornaliere: nota cantiere
