@@ -683,16 +683,8 @@ export async function openModalPreventivo(id = null) {
     // Reset lettera panel
     const lettPanel = document.getElementById('prev-lettera-panel')
     if (lettPanel) lettPanel.style.display = 'none'
-    modelloSelect?.addEventListener('change', () => {
-      buildLetteraPanel(modelloSelect.value || null)
-    })
     populateTipoAppaltoSelect(form)
     syncTipoAppaltoVisibility(form)
-
-    // Ricalcola tutti gli operatori quando cambia il tipo appalto
-    form.querySelector('[name="tipo_appalto"]')?.addEventListener('change', () => {
-      form.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
-    })
 
     const [magItems] = await Promise.all([loadMagItems(), loadAziendaGeo()])
 
@@ -731,11 +723,8 @@ export async function openModalPreventivo(id = null) {
         : data.livello_ccnl
           ? [{ livello_ccnl: data.livello_ccnl, ore_stimate: data.ore_stimate, costo_orario: data.costo_orario }]
           : []
-      savedOps.forEach(op => {
-        const r = buildOperatoreRow(form, op)
-        opList?.appendChild(r)
-        r._aggiornaCosto?.()
-      })
+      savedOps.forEach(op => opList?.appendChild(buildOperatoreRow(form, op)))
+      refreshRischioHint(form)
 
       await updateKmHint(form, data.cliente_id)
       calcAll(form)
@@ -851,8 +840,11 @@ export async function printPreventivo(id) {
 
     const clienteLines = [c.ragione_sociale, c.indirizzo, [c.cap, c.citta].filter(Boolean).join(' '), c.email, c.telefono].filter(Boolean).join('<br>')
 
-    // cost breakdown rows
-    const costoOp = (p.n_operatori || 1) * (p.costo_orario || 0) * (p.ore_stimate || 0)
+    // cost breakdown rows — use operatori_json if available, otherwise aggregate fields
+    const _opJson = Array.isArray(p.operatori_json) && p.operatori_json.length ? p.operatori_json : null
+    const costoOp = _opJson
+      ? _opJson.reduce((s, o) => s + (o.costo_totale || (o.ore_stimate || 0) * (o.costo_orario || 0)), 0)
+      : (p.costo_orario || 0) * (p.ore_stimate || 0)
     const costoProd = (Array.isArray(p.prodotti_json) ? p.prodotti_json : []).reduce((s, i) => s + (i.qty || 0) * (i.costo_unitario || 0), 0)
     const costoKm = (p.km_per_intervento || 0) * (p.n_interventi_mese || 0) * (p.costo_km_perkm || 0.35)
     const costoAltri = p.altri_costi || 0
@@ -1133,6 +1125,18 @@ export function initPreventivi() {
     })
 
     if (form) {
+      // Lettera panel — registered once here, not on every modal open
+      const modelloSelGlobal = form.querySelector('[name="modello_id"]')
+      modelloSelGlobal?.addEventListener('change', () => {
+        buildLetteraPanel(modelloSelGlobal.value || null)
+      })
+
+      // Ricalcola tutti gli operatori quando cambia il tipo appalto — once only
+      form.querySelector('[name="tipo_appalto"]')?.addEventListener('change', () => {
+        form.querySelectorAll('.prev-op-row').forEach(r => r._aggiornaCosto?.())
+        refreshRischioHint(form)
+      })
+
       // Margine slider ↔ number sync
       const slider = document.getElementById('prev-margine-slider')
       const numEl  = document.getElementById('prev-margine-num')
