@@ -658,7 +658,7 @@ function exportRiepilogo() {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 export async function initPresenzeDettagliate() {
-  const section = document.getElementById('presenze-dettagliate')
+  const section = document.getElementById('presenze-dettagliate') || document.getElementById('presenze-view-mensili')
   if (!section) return
 
   const now = new Date()
