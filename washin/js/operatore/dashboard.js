@@ -4,8 +4,10 @@ import { checkAuth, logout } from '../auth.js'
 import { initAgenda, loadInterventiPassati, renderInterventiPassati, refreshAgenda } from './agenda.js'
 import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
 import { uploadAvatar, applyAvatar } from '../avatar.js'
+import { initCedolini } from './cedolini.js'
 
 let _currentUserId = null
+let _sezioniAbilitate = { agenda: true, documenti: true, cedolini: true, storico: true }
 
 async function loadNotificheBadge(userId) {
   try {
@@ -34,8 +36,14 @@ async function markNotificheRead(userId) {
 }
 
 let _storicoLoaded = false
+let _cedoliniLoaded = false
 
 function showSection(sectionId) {
+  // Redirect to agenda if section is disabled
+  if (sectionId !== 'agenda' && sectionId !== 'checklist' && sectionId !== 'profilo') {
+    if (_sezioniAbilitate[sectionId] === false) sectionId = 'agenda'
+  }
+
   const sections = ['agenda', 'checklist', 'documenti', 'cedolini', 'storico', 'profilo']
   sections.forEach((id) => {
     const el = document.getElementById(id)
@@ -49,6 +57,10 @@ function showSection(sectionId) {
   if (sectionId === 'storico' && !_storicoLoaded) {
     _storicoLoaded = true
     loadInterventiPassati().then(renderInterventiPassati)
+  }
+  if (sectionId === 'cedolini' && !_cedoliniLoaded && _currentUserId) {
+    _cedoliniLoaded = true
+    initCedolini(_currentUserId)
   }
 }
 
@@ -149,10 +161,25 @@ function initProfilo(profile) {
   })
 }
 
+async function loadSezioniConfig() {
+  try {
+    const { data } = await supabase.from('sezioni_operatore').select('sezione, abilitata')
+    ;(data || []).forEach(r => { _sezioniAbilitate[r.sezione] = r.abilitata })
+  } catch { }
+
+  // Apply visibility to nav items
+  Object.entries(_sezioniAbilitate).forEach(([sezione, abilitata]) => {
+    document.querySelectorAll(`[data-section="${sezione}"]`).forEach(el => {
+      el.style.display = abilitata ? '' : 'none'
+    })
+  })
+}
+
 async function initDashboard() {
   await checkAuth()
   updateTodayDate()
   const profile = await loadOperatorInfo()
+  await loadSezioniConfig()
   bindNavigation()
   document.getElementById('logout')?.addEventListener('click', logout)
   showSection('agenda')

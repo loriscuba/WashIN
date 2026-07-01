@@ -1145,6 +1145,15 @@
               <button class="btn btn-primary btn-sm" type="submit">Salva</button>
             </form>
           </div>
+
+          <!-- Sezioni visibili agli operatori -->
+          <div class="card" style="margin-top:24px;">
+            <h3 style="font-size:15px;font-weight:700;margin:0 0 4px;color:var(--gray-800);">Sezioni dashboard operatore</h3>
+            <p style="font-size:13px;color:var(--gray-500);margin:0 0 16px;">
+              Abilita o disabilita le sezioni visibili agli operatori nella loro app.
+            </p>
+            <div id="sezioni-operatore-panel"></div>
+          </div>
         </section>
 
         <!-- ── Presenze ──────────────────────────────── -->
@@ -2651,6 +2660,7 @@
       import { initModelliContratti } from '../js/admin/modelli_contratti.js'
       import { initModelliPreventivo } from '../js/admin/modelli_preventivo.js'
       import { initImpostazioni } from '../js/admin/impostazioni.js'
+      import { initSezioniOperatore } from '../js/admin/sezioni_operatore.js'
       import { initFornitori } from '../js/admin/fornitori.js'
       import { initGestioneAnagrafica } from '../js/admin/gestione_anagrafica.js'
       import { initToolImport } from '../js/admin/tool_import.js'
@@ -2812,6 +2822,7 @@
         initModelliContratti()
         initModelliPreventivo()
         initImpostazioni()
+        initSezioniOperatore()
         initFornitori()
         initGestioneAnagrafica()
         initToolImport()
