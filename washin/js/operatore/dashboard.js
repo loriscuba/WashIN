@@ -6,7 +6,8 @@ import { initChecklist, loadChecklistPerIntervento } from './checklist.js'
 import { uploadAvatar, applyAvatar } from '../avatar.js'
 import { initCedolini } from './cedolini.js'
 
-let _currentUserId = null
+let _currentUserId = null   // auth UUID (session.user.id)
+let _currentProfileId = null  // profili.id (usato come FK in buste_paga, interventi, ecc.)
 let _sezioniAbilitate = { agenda: true, documenti: true, cedolini: true, storico: true }
 
 async function loadNotificheBadge(userId) {
@@ -58,9 +59,9 @@ function showSection(sectionId) {
     _storicoLoaded = true
     loadInterventiPassati().then(renderInterventiPassati)
   }
-  if (sectionId === 'cedolini' && !_cedoliniLoaded && _currentUserId) {
+  if (sectionId === 'cedolini' && !_cedoliniLoaded && _currentProfileId) {
     _cedoliniLoaded = true
-    initCedolini(_currentUserId)
+    initCedolini(_currentProfileId)
   }
 }
 
@@ -71,6 +72,7 @@ async function loadOperatorInfo() {
     _currentUserId = data.session.user.id
     const profile = await getUserProfile(_currentUserId)
     if (profile) {
+      _currentProfileId = profile.id
       const name = `${profile.nome || ''} ${profile.cognome || ''}`.trim() || 'Operatore'
       const nameEl = document.getElementById('operator-name')
       if (nameEl) nameEl.textContent = name
