@@ -142,7 +142,7 @@ function nScattiEffettivi(op) {
 function buildOperatoreRow(form, item = {}) {
   const row = document.createElement('div')
   row.className = 'prev-op-row'
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 95px 70px 82px 88px 28px;gap:6px;align-items:center;margin-bottom:6px;'
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 62px 70px 82px 88px 28px;gap:6px;align-items:center;margin-bottom:6px;'
 
   const opOpts = _operatoriList.map(op => {
     const sel = item.operatore_id === op.id ? 'selected' : ''
@@ -154,6 +154,8 @@ function buildOperatoreRow(form, item = {}) {
     `<option value="${l.v}" ${item.livello_ccnl === l.v ? 'selected' : ''}>${l.t}</option>`
   ).join('')
 
+  const savedFonte = item.fonte_override || 'auto'
+
   row.innerHTML = `
     <select class="prev-op-select" style="font-size:12px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;width:100%;">
       <option value="">— manuale —</option>${opOpts}
@@ -161,6 +163,14 @@ function buildOperatoreRow(form, item = {}) {
     <select class="prev-op-livello" style="font-size:12px;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px;width:100%;">
       <option value="">— liv. —</option>${livOpts}
     </select>
+    <div class="prev-op-fonte-wrap" style="display:flex;gap:2px;justify-content:center;">
+      <button type="button" class="prev-op-fonte-btn" data-fonte="consuntivo"
+        style="font-size:10px;padding:2px 5px;border:1px solid #d1d5db;border-radius:4px 0 0 4px;cursor:pointer;white-space:nowrap;
+               background:${savedFonte==='consuntivo'?'#0d9488':'#fff'};color:${savedFonte==='consuntivo'?'#fff':'#6b7280'};">C</button>
+      <button type="button" class="prev-op-fonte-btn" data-fonte="busta"
+        style="font-size:10px;padding:2px 5px;border:1px solid #d1d5db;border-left:none;border-radius:0 4px 4px 0;cursor:pointer;white-space:nowrap;
+               background:${savedFonte==='busta'?'#0d9488':'#fff'};color:${savedFonte==='busta'?'#fff':'#6b7280'};">B</button>
+    </div>
     <input class="prev-op-ore" type="number" step="0.5" min="0" value="${item.ore_stimate || ''}" placeholder="ore"
       style="font-size:12px;padding:4px 6px;text-align:center;border:1px solid #d1d5db;border-radius:6px;width:100%;">
     <input class="prev-op-cu" type="number" step="0.0001" min="0" value="${item.costo_orario || ''}" placeholder="€/h"
@@ -169,10 +179,26 @@ function buildOperatoreRow(form, item = {}) {
     <button type="button" class="prev-rm-op" style="padding:2px 6px;font-size:13px;background:#fee2e2;border:none;border-radius:5px;color:#dc2626;cursor:pointer;line-height:1;">✕</button>
   `
 
-  const opSel  = row.querySelector('.prev-op-select')
-  const livSel = row.querySelector('.prev-op-livello')
-  const oreEl  = row.querySelector('.prev-op-ore')
-  const cuEl   = row.querySelector('.prev-op-cu')
+  const opSel   = row.querySelector('.prev-op-select')
+  const livSel  = row.querySelector('.prev-op-livello')
+  const oreEl   = row.querySelector('.prev-op-ore')
+  const cuEl    = row.querySelector('.prev-op-cu')
+  let _fonteOverride = savedFonte
+
+  // Fonte toggle buttons
+  row.querySelectorAll('.prev-op-fonte-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const f = btn.dataset.fonte
+      _fonteOverride = _fonteOverride === f ? 'auto' : f
+      row.querySelectorAll('.prev-op-fonte-btn').forEach(b => {
+        const active = b.dataset.fonte === _fonteOverride
+        b.style.background = active ? '#0d9488' : '#fff'
+        b.style.color = active ? '#fff' : '#6b7280'
+      })
+      aggiornaCostoRiga()
+    })
+  })
+  row._getFonteOverride = () => _fonteOverride
 
   async function aggiornaCostoRiga() {
     const opId = opSel.value
@@ -181,7 +207,10 @@ function buildOperatoreRow(form, item = {}) {
     delete cuEl.dataset.firStima
     delete cuEl.dataset.mancante
 
-    if (op && op.fonte_costo_preventivo === 'consuntivo') {
+    // la fonte effettiva: override manuale → profilo → auto
+    const fonte = _fonteOverride !== 'auto' ? _fonteOverride : (op?.fonte_costo_preventivo || 'auto')
+
+    if (op && fonte === 'consuntivo') {
       if (op.costo_orario_medio > 0) {
         cuEl.value = op.costo_orario_medio.toFixed(4)
         cuEl.dataset.firStima = 'consuntivo'
@@ -189,7 +218,7 @@ function buildOperatoreRow(form, item = {}) {
         cuEl.value = ''
         cuEl.dataset.mancante = 'true'
       }
-    } else if (op && op.fonte_costo_preventivo === 'busta') {
+    } else if (op && fonte === 'busta') {
       // costo_mensile è già il costo totale datore (contributi inclusi) — dividi per le ore
       if (op.costo_mensile > 0) {
         const ore = op.ore_mensili_contratto || 173
@@ -200,7 +229,7 @@ function buildOperatoreRow(form, item = {}) {
         cuEl.dataset.mancante = 'true'
       }
     } else if (op) {
-      // fonte non configurata: fallback automatico (consuntivo se disponibile, poi busta)
+      // auto: consuntivo se disponibile, poi busta
       if (op.costo_orario_medio > 0) {
         cuEl.value = op.costo_orario_medio.toFixed(4)
         cuEl.dataset.firStima = 'auto-consuntivo'
@@ -1181,6 +1210,7 @@ export function initPreventivi() {
               ore_stimate:        ore,
               costo_orario:       cu,
               costo_totale:       Math.round(ore * cu * 100) / 100,
+              fonte_override:     row._getFonteOverride?.() || 'auto',
             })
           }
         })
