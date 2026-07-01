@@ -13,14 +13,18 @@ const SEZIONI = [
 ]
 
 const SOTTOSEZIONI = [
+  { sezione: 'utenti',              etichetta: 'Utenti',               fixed: false },
+  { sezione: 'modelli-contratti',   etichetta: 'Modelli Contratti',    fixed: false },
+  { sezione: 'fornitori',           etichetta: 'Fornitori',            fixed: false },
+  { sezione: 'impostazioni',        etichetta: 'Dati Azienda',         fixed: false },
   { sezione: 'tool-import',         etichetta: 'Tool Import',          fixed: false },
   { sezione: 'parametri-ccnl',      etichetta: 'Parametri CCNL',       fixed: false },
   { sezione: 'tariffe-inail',       etichetta: 'Tariffe INAIL',        fixed: false },
   { sezione: 'coefficienti-rischio',etichetta: 'Coefficienti Appalto', fixed: false },
   { sezione: 'incidenza-reale',     etichetta: 'Incidenza Reale',      fixed: false },
   { sezione: 'algoritmo-costi',     etichetta: 'Algoritmo Costi',      fixed: false },
+  { sezione: 'modelli-preventivo',  etichetta: 'Modelli Preventivo',   fixed: false },
   { sezione: 'email-cedolini',      etichetta: 'Email Cedolini',       fixed: false },
-  { sezione: 'fornitori',           etichetta: 'Fornitori',            fixed: false },
 ]
 
 const TUTTE = [...SEZIONI, ...SOTTOSEZIONI]
