@@ -45,7 +45,10 @@ function showToast(message, type = 'success') {
 export async function getOperatoreId() {
   const { data, error } = await supabase.auth.getSession()
   if (error || !data?.session?.user) return null
-  return data.session.user.id
+  const authId = data.session.user.id
+  // interventi.operatore_id referenzia profili.id, non l'auth UUID
+  const { data: profile } = await supabase.from('profili').select('id').eq('user_id', authId).single()
+  return profile?.id || null
 }
 
 function buildMapsUrl(indirizzo = '', citta = '') {
