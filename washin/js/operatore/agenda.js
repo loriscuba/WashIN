@@ -83,7 +83,7 @@ export async function loadInterventiOperatore(start, end) {
 
     const { data, error } = await supabase
       .from('interventi')
-      .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
+      .select('*, sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
       .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
       .gte('data_pianificata', start)
       .lte('data_pianificata', end)
@@ -107,7 +107,7 @@ export async function loadInterventiPassati() {
     ieri.setDate(ieri.getDate() - 1)
     const { data, error } = await supabase
       .from('interventi')
-      .select('*, sedi_cliente(nome_sede,indirizzo,clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
+      .select('*, sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
       .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
       .lte('data_pianificata', localDateStr(ieri))
       .order('data_pianificata', { ascending: false })
@@ -132,7 +132,7 @@ export function renderInterventiPassati(interventi) {
   interventi.forEach(iv => {
     const card = document.createElement('div')
     card.className = 'intervento-card'
-    const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
+    const cliente = iv.contratti?.clienti?.ragione_sociale || iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
     const sede = iv.sedi_cliente?.nome_sede || ''
     const dataFmt = iv.data_pianificata
       ? new Date(iv.data_pianificata + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -206,7 +206,7 @@ export function renderInterventi(interventi) {
 
     const card = document.createElement('div')
     card.className = 'intervento-card'
-    const cliente = iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
+    const cliente = iv.contratti?.clienti?.ragione_sociale || iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
     const sede = iv.sedi_cliente?.nome_sede || ''
     const indirizzo = iv.sedi_cliente?.indirizzo || ''
     const fmt = t => t ? t.slice(0, 5) : ''
