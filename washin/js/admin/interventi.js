@@ -259,7 +259,7 @@ export async function openModalIntervento(id = null){
     if (!modal || !form) { console.warn('intervento-modal non trovato'); return }
 
     // carica operatori
-    const { data: ops, error: errOps } = await supabase.from('profili').select('id,nome,cognome').eq('ruolo','operatore').eq('attivo', true)
+    const { data: ops, error: errOps } = await supabase.from('profili').select('id,nome,cognome').or('ruolo.eq.operatore,ruolo.is.null').eq('attivo', true)
     if (errOps) throw errOps
     const buildOpOptions = (select, selectedId = null) => {
       if (!select) return

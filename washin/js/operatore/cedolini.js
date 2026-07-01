@@ -19,7 +19,7 @@ export async function initCedolini(userId) {
 
   const { data, error } = await supabase
     .from('buste_paga')
-    .select('id, anno, mese, totale_lordo, totale_netto, stato, file_path')
+    .select('id, anno, mese, ore_lavorate, ore_straordinario, totale_netto, stato, file_path')
     .eq('operatore_id', userId)
     .order('anno', { ascending: false })
     .order('mese', { ascending: false })
@@ -44,7 +44,7 @@ export async function initCedolini(userId) {
         <div>
           <p style="font-weight:700;margin:0 0 4px;">${MESI[b.mese - 1]} ${b.anno}</p>
           <p style="margin:0;color:var(--gray-500);font-size:14px;">
-            Lordo ${fmt(b.totale_lordo)}&nbsp;·&nbsp;Netto ${fmt(b.totale_netto)}
+            Ore ${b.ore_lavorate ?? '—'}${b.ore_straordinario ? ' + ' + b.ore_straordinario + ' str.' : ''}&nbsp;·&nbsp;Netto ${fmt(b.totale_netto)}
           </p>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
