@@ -284,6 +284,7 @@
           <a href="#preventivi" data-target="preventivi" data-tooltip="Preventivi"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" x2="12" y1="18" y2="12"/><line x1="9" x2="15" y1="15" y2="15"/></svg><span class="nav-label">Preventivi</span></a>
           <a href="#fatture" data-target="fatture" data-tooltip="Fatture"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8H8"/><path d="M16 12H8"/><path d="M12 16H8"/></svg><span class="nav-label">Fatture</span></a>
           <a href="#presenze" data-target="presenze" data-tooltip="Presenze"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="nav-label">Presenze</span></a>
+          <a href="#presenze-dettagliate" data-target="presenze-dettagliate" data-tooltip="Ore mensili"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg><span class="nav-label">Ore mensili</span></a>
           <a href="#magazzino" data-target="magazzino" data-tooltip="Magazzino"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" x2="12" y1="22" y2="12"/></svg><span class="nav-label">Magazzino</span></a>
           <a href="#veicoli" data-target="veicoli" data-tooltip="Veicoli"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg><span class="nav-label">Veicoli</span></a>
           <a href="#configurazioni" data-target="configurazioni" data-tooltip="Configurazioni"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg><span class="nav-label">Configurazioni</span></a>
@@ -1447,6 +1448,47 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </section>
+
+        <!-- ── Presenze Dettagliate ──────────────────── -->
+        <section id="presenze-dettagliate" class="section hidden">
+          <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div>
+              <h1>Ore mensili</h1>
+              <p style="color:var(--gray-500);margin-top:8px;">Registro giornaliero ore + note per la commercialista.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button id="pd-refresh-btn" class="btn btn-secondary btn-sm">Aggiorna</button>
+              <button id="pd-export-btn" class="btn btn-primary btn-sm">📋 Riepilogo commercialista</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:20px;padding:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:13px;margin-bottom:4px;display:block;">Mese</label>
+              <input id="pd-mese" type="month" style="padding:9px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;">
+            </div>
+          </div>
+
+          <div class="table-container card">
+            <table class="washin-table">
+              <thead>
+                <tr>
+                  <th>Operatore</th>
+                  <th>Ore lavoro</th>
+                  <th>Notturne</th>
+                  <th>Festive</th>
+                  <th>Ferie (gg)</th>
+                  <th>Malattia (gg)</th>
+                  <th>Note</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="pd-table-body">
+                <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray-400);">Seleziona un mese</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -2887,6 +2929,7 @@
           <button class="menu-sheet-btn" data-sheet-target="gestione-anagrafica"><span class="sheet-icon">👥</span><span>Dipendenti</span></button>
           <button class="menu-sheet-btn" data-sheet-target="preventivi"><span class="sheet-icon">📄</span><span>Preventivi</span></button>
           <button class="menu-sheet-btn" data-sheet-target="presenze"><span class="sheet-icon">🕐</span><span>Presenze</span></button>
+          <button class="menu-sheet-btn" data-sheet-target="presenze-dettagliate"><span class="sheet-icon">📅</span><span>Ore mensili</span></button>
           <button class="menu-sheet-btn" data-sheet-target="magazzino"><span class="sheet-icon">📦</span><span>Magazzino</span></button>
           <button class="menu-sheet-btn" data-sheet-target="veicoli"><span class="sheet-icon">🚐</span><span>Veicoli</span></button>
           <button class="menu-sheet-btn" data-sheet-target="configurazioni"><span class="sheet-icon">⚙️</span><span>Config.</span></button>
@@ -2927,6 +2970,7 @@
       import { initContratti } from '../js/admin/contratti.js'
       import { initSedi } from '../js/admin/sedi.js'
       import { initPresenze } from '../js/admin/presenze.js'
+      import { initPresenzeDettagliate } from '../js/admin/presenze_dettagliate.js'
       import { initPreventivi } from '../js/admin/preventivi.js'
       import { initMagazzino } from '../js/admin/magazzino.js'
       import { initVeicoli } from '../js/admin/veicoli.js'
@@ -3090,6 +3134,7 @@
         initInterventi()
         initFatture()
         initPresenze()
+        initPresenzeDettagliate()
         initPreventivi()
         initMagazzino()
         initVeicoli()

@@ -7,7 +7,8 @@ const SEZIONI = [
   { sezione: 'gestione-anagrafica', etichetta: 'Dipendenti',   fixed: false },
   { sezione: 'preventivi',          etichetta: 'Preventivi',   fixed: false },
   { sezione: 'fatture',             etichetta: 'Fatture',      fixed: false },
-  { sezione: 'presenze',            etichetta: 'Presenze',     fixed: false },
+  { sezione: 'presenze',              etichetta: 'Presenze',         fixed: false },
+  { sezione: 'presenze-dettagliate', etichetta: 'Ore mensili',       fixed: false },
   { sezione: 'magazzino',           etichetta: 'Magazzino',    fixed: false },
   { sezione: 'veicoli',             etichetta: 'Veicoli',      fixed: false },
 ]
