@@ -161,6 +161,7 @@
       .toggle-slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
       .toggle-switch input:checked + .toggle-slider { background:#0d9488; }
       .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
+      body[data-consuntivi="0"] .feat-consuntivi { display:none !important; }
       .back-link {
         display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
         color:var(--gray-500);text-decoration:none;margin-bottom:10px;
@@ -584,6 +585,16 @@
           </div>
           <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;">
             <div>
+              <strong style="font-size:14px;">Modulo Consuntivi</strong>
+              <p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">Se disattivato, nasconde l'importazione consuntivi, le tab consuntivo nelle anagrafiche, la scelta fonte costo nei preventivi e il pannello calibrazione.</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="impost-consuntivi" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;">
+            <div>
               <strong style="font-size:14px;">Mostra tab Anagrafica nel Tool Import</strong>
               <p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">Se disattivato, la tab Anagrafica è nascosta nel Tool Import (utile se gestisci le anagrafiche solo tramite Gestione Anagrafica).</p>
             </div>
@@ -664,7 +675,7 @@
                 INPS datore 31,5% · INAIL ~4% · Ratei 13ª+14ª 16,7% · Ferie/ROL 22% · TFR 8,1%
               </div>
             </div>
-            <div class="card">
+            <div class="card feat-consuntivi">
               <h3 style="font-size:14px;font-weight:700;margin-bottom:8px;">Calibrazione consuntivi (Sanna SRL)</h3>
               <p style="font-size:11px;color:var(--gray-500);margin-bottom:10px;">Fonte: Costo Consuntivo del Periodo — Mar–Mag 2026</p>
               <table style="font-size:12px;width:100%;border-collapse:collapse;">
@@ -990,7 +1001,7 @@
           <div style="display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:24px;">
             <button class="ti-tab-btn" data-tab="anag" id="ti-tab-anag-btn" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Anagrafica</button>
             <button class="ti-tab-btn" data-tab="buste" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--teal,#0d9488);border-bottom:2px solid var(--teal,#0d9488);margin-bottom:-2px;">Buste paga</button>
-            <button class="ti-tab-btn" data-tab="consuntivo" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Consuntivo Costi</button>
+            <button class="ti-tab-btn feat-consuntivi" data-tab="consuntivo" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Consuntivo Costi</button>
           </div>
 
           <!-- ─ Panel: Anagrafica ─ -->
@@ -2276,7 +2287,7 @@
           <button class="hr-tab-btn" data-tab="dati">Dati personali</button>
           <button class="hr-tab-btn" data-tab="retribuzione">Retribuzione</button>
           <button class="hr-tab-btn" data-tab="buste">Buste paga</button>
-          <button class="hr-tab-btn" data-tab="consuntivo">Consuntivo Costo</button>
+          <button class="hr-tab-btn feat-consuntivi" data-tab="consuntivo">Consuntivo Costo</button>
         </div>
 
         <!-- Tab: Dati personali -->
@@ -2359,7 +2370,7 @@
               </div>
               <div class="form-group"><label>Scadenza contratto</label><input name="data_scadenza_contratto" type="date"></div>
             </div>
-            <div class="form-group" style="margin-top:4px;">
+            <div class="form-group feat-consuntivi" style="margin-top:4px;">
               <label>Fonte costo nei preventivi <span style="font-weight:400;color:var(--gray-400);font-size:11px;">(quale valore usare per il costo orario)</span></label>
               <select name="fonte_costo_preventivo" style="font-size:13px;">
                 <option value="">— non configurata —</option>
@@ -2388,7 +2399,7 @@
         </div>
 
         <!-- Tab: Consuntivo Costo -->
-        <div class="hr-tab-content hidden" data-tab="consuntivo">
+        <div class="hr-tab-content feat-consuntivi hidden" data-tab="consuntivo">
           <div id="hr-consuntivo-body">
             <p style="color:var(--gray-400);font-size:13px;">Caricamento...</p>
           </div>
