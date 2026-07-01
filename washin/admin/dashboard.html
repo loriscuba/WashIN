@@ -493,6 +493,11 @@
               <strong>Modelli Preventivo</strong>
               <p>Template lettera per tipo cliente</p>
             </a>
+            <a href="#personalizzazioni" data-target="personalizzazioni" class="config-card group-co">
+              <div class="config-card-icon"><span><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span></div>
+              <strong>Personalizzazioni</strong>
+              <p>Moduli e sezioni visibili per profilo</p>
+            </a>
             <a href="#email-cedolini" data-target="email-cedolini" class="config-card group-hr">
               <div class="config-card-icon"><span><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span></div>
               <strong>Email Cedolini</strong>
@@ -580,26 +585,6 @@
             </div>
             <label class="toggle-switch">
               <input type="checkbox" id="impost-usa-coeff" checked>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;">
-            <div>
-              <strong style="font-size:14px;">Modulo Consuntivi</strong>
-              <p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">Se disattivato, nasconde l'importazione consuntivi, le tab consuntivo nelle anagrafiche, la scelta fonte costo nei preventivi e il pannello calibrazione.</p>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="impost-consuntivi" checked>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;">
-            <div>
-              <strong style="font-size:14px;">Mostra tab Anagrafica nel Tool Import</strong>
-              <p style="font-size:12px;color:var(--gray-500);margin:4px 0 0;">Se disattivato, la tab Anagrafica è nascosta nel Tool Import (utile se gestisci le anagrafiche solo tramite Gestione Anagrafica).</p>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="impost-tool-anag" checked>
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -1347,12 +1332,52 @@
             </form>
           </div>
 
-          <!-- Sezioni visibili agli operatori -->
-          <div class="card" style="margin-top:24px;">
-            <h3 style="font-size:15px;font-weight:700;margin:0 0 4px;color:var(--gray-800);">Sezioni dashboard operatore</h3>
-            <p style="font-size:13px;color:var(--gray-500);margin:0 0 16px;">
-              Abilita o disabilita le sezioni visibili agli operatori nella loro app.
-            </p>
+        </section>
+
+        <!-- ── Personalizzazioni ────────────────────── -->
+        <section id="personalizzazioni" class="section hidden">
+          <div class="page-header">
+            <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+            <h1>Personalizzazioni</h1>
+            <p style="color:var(--gray-500);margin-top:8px;">Abilita o disabilita moduli e sezioni per profilo.</p>
+          </div>
+
+          <!-- Moduli -->
+          <div class="card" style="margin-bottom:24px;">
+            <h3 style="font-size:15px;font-weight:700;margin:0 0 16px;color:var(--gray-800);">Moduli</h3>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
+              <div>
+                <p style="margin:0;font-weight:600;font-size:14px;color:var(--gray-800);">Modulo Consuntivi</p>
+                <p style="margin:2px 0 0;font-size:12px;color:var(--gray-500);">Nasconde importazione consuntivi, tab consuntivo, fonte costo nei preventivi e pannello calibrazione.</p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="impost-consuntivi" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+              <div>
+                <p style="margin:0;font-weight:600;font-size:14px;color:var(--gray-800);">Mostra tab Anagrafica nel Tool Import</p>
+                <p style="margin:2px 0 0;font-size:12px;color:var(--gray-500);">Se disattivato, la tab Anagrafica è nascosta nel Tool Import.</p>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="impost-tool-anag" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Sezioni Admin -->
+          <div class="card" style="margin-bottom:24px;">
+            <h3 style="font-size:15px;font-weight:700;margin:0 0 4px;color:var(--gray-800);">Sezioni profilo Admin</h3>
+            <p style="font-size:13px;color:var(--gray-500);margin:0 0 16px;">Abilita o disabilita le voci di navigazione visibili ai profili admin.</p>
+            <div id="sezioni-admin-panel"></div>
+          </div>
+
+          <!-- Sezioni Operatore -->
+          <div class="card">
+            <h3 style="font-size:15px;font-weight:700;margin:0 0 4px;color:var(--gray-800);">Sezioni profilo Operatore</h3>
+            <p style="font-size:13px;color:var(--gray-500);margin:0 0 16px;">Abilita o disabilita le sezioni visibili agli operatori nella loro app.</p>
             <div id="sezioni-operatore-panel"></div>
           </div>
         </section>
@@ -2881,6 +2906,7 @@
       import { initModelliPreventivo } from '../js/admin/modelli_preventivo.js'
       import { initImpostazioni } from '../js/admin/impostazioni.js'
       import { initSezioniOperatore } from '../js/admin/sezioni_operatore.js'
+      import { initSezioniAdmin } from '../js/admin/sezioni_admin.js'
       import { initFornitori } from '../js/admin/fornitori.js'
       import { initGestioneAnagrafica } from '../js/admin/gestione_anagrafica.js'
       import { initToolImport } from '../js/admin/tool_import.js'
@@ -3043,6 +3069,7 @@
         initModelliPreventivo()
         initImpostazioni()
         initSezioniOperatore()
+        initSezioniAdmin()
         initFornitori()
         initGestioneAnagrafica()
         initToolImport()
