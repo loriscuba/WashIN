@@ -12,6 +12,19 @@ const SEZIONI = [
   { sezione: 'veicoli',             etichetta: 'Veicoli',      fixed: false },
 ]
 
+const SOTTOSEZIONI = [
+  { sezione: 'tool-import',         etichetta: 'Tool Import',          fixed: false },
+  { sezione: 'parametri-ccnl',      etichetta: 'Parametri CCNL',       fixed: false },
+  { sezione: 'tariffe-inail',       etichetta: 'Tariffe INAIL',        fixed: false },
+  { sezione: 'coefficienti-rischio',etichetta: 'Coefficienti Appalto', fixed: false },
+  { sezione: 'incidenza-reale',     etichetta: 'Incidenza Reale',      fixed: false },
+  { sezione: 'algoritmo-costi',     etichetta: 'Algoritmo Costi',      fixed: false },
+  { sezione: 'email-cedolini',      etichetta: 'Email Cedolini',       fixed: false },
+  { sezione: 'fornitori',           etichetta: 'Fornitori',            fixed: false },
+]
+
+const TUTTE = [...SEZIONI, ...SOTTOSEZIONI]
+
 function toggleHtml(sezione, etichetta, enabled, fixed) {
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;
@@ -38,21 +51,34 @@ function toggleHtml(sezione, etichetta, enabled, fixed) {
 }
 
 export function applySezioniAdmin(map) {
+  // Main nav sections — hide sidebar link
   SEZIONI.forEach(({ sezione }) => {
     const abilitata = map[sezione] !== false
-    document.querySelectorAll(`[data-target="${sezione}"], a[href="#${sezione}"]`).forEach(el => {
-      if (!el.closest('#sidebar-nav') && !el.closest('.nav-bottom')) return
+    document.querySelectorAll(`#sidebar-nav a[data-target="${sezione}"], .nav-bottom a[data-target="${sezione}"]`).forEach(el => {
       el.style.display = abilitata ? '' : 'none'
     })
-    // hide sidebar nav link
-    document.querySelectorAll(`#sidebar-nav a[data-target="${sezione}"]`).forEach(el => {
+  })
+
+  // Config sub-sections — hide the config card and the section element
+  SOTTOSEZIONI.forEach(({ sezione }) => {
+    const abilitata = map[sezione] !== false
+    document.querySelectorAll(`a.config-card[data-target="${sezione}"]`).forEach(el => {
       el.style.display = abilitata ? '' : 'none'
     })
+    const sec = document.getElementById(sezione)
+    if (sec && !abilitata) {
+      // if currently viewing this section, redirect to configurazioni
+      if (!sec.classList.contains('hidden')) {
+        sec.classList.add('hidden')
+        document.getElementById('configurazioni')?.classList.remove('hidden')
+      }
+    }
   })
 }
 
 export async function initSezioniAdmin() {
   const container = document.getElementById('sezioni-admin-panel')
+  const subContainer = document.getElementById('sottosezioni-admin-panel')
   if (!container) return
 
   const { data } = await supabase.from('sezioni_admin').select('sezione, abilitata')
@@ -63,12 +89,18 @@ export async function initSezioniAdmin() {
     toggleHtml(sezione, etichetta, map[sezione] !== false, fixed)
   ).join('')
 
+  if (subContainer) {
+    subContainer.innerHTML = SOTTOSEZIONI.map(({ sezione, etichetta, fixed }) =>
+      toggleHtml(sezione, etichetta, map[sezione] !== false, fixed)
+    ).join('')
+  }
+
   applySezioniAdmin(map)
 
-  container.addEventListener('change', async e => {
+  const handleChange = async e => {
     const cb = e.target
     if (cb.tagName !== 'INPUT' || !cb.dataset.sezioneAdmin) return
-    const meta = SEZIONI.find(s => s.sezione === cb.dataset.sezioneAdmin)
+    const meta = TUTTE.find(s => s.sezione === cb.dataset.sezioneAdmin)
     if (!meta) return
 
     const { error } = await supabase.from('sezioni_admin').upsert({
@@ -90,8 +122,11 @@ export async function initSezioniAdmin() {
       if (knob) knob.style.left = cb.checked ? '23px' : '3px'
     }
 
-    applySezioniAdmin({ ...Object.fromEntries(SEZIONI.map(s => [s.sezione, map[s.sezione] !== false])), [cb.dataset.sezioneAdmin]: cb.checked })
     map[cb.dataset.sezioneAdmin] = cb.checked
+    applySezioniAdmin({ ...Object.fromEntries(TUTTE.map(s => [s.sezione, map[s.sezione] !== false])), [cb.dataset.sezioneAdmin]: cb.checked })
     showToast(cb.checked ? 'Sezione abilitata' : 'Sezione disabilitata', 'success')
-  })
+  }
+
+  container.addEventListener('change', handleChange)
+  subContainer?.addEventListener('change', handleChange)
 }
