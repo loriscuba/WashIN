@@ -14,14 +14,18 @@ INSERT INTO sezioni_admin (sezione, etichetta, abilitata) VALUES
   ('presenze',              'Presenze',               true),
   ('magazzino',             'Magazzino',              true),
   ('veicoli',               'Veicoli',                true),
+  ('utenti',                'Utenti',                 true),
+  ('modelli-contratti',     'Modelli Contratti',      true),
+  ('fornitori',             'Fornitori',              true),
+  ('impostazioni',          'Dati Azienda',           true),
   ('tool-import',           'Tool Import',            true),
   ('parametri-ccnl',        'Parametri CCNL',         true),
   ('tariffe-inail',         'Tariffe INAIL',          true),
   ('coefficienti-rischio',  'Coefficienti Appalto',   true),
   ('incidenza-reale',       'Incidenza Reale',        true),
   ('algoritmo-costi',       'Algoritmo Costi',        true),
-  ('email-cedolini',        'Email Cedolini',         true),
-  ('fornitori',             'Fornitori',              true)
+  ('modelli-preventivo',    'Modelli Preventivo',     true),
+  ('email-cedolini',        'Email Cedolini',         true)
 ON CONFLICT DO NOTHING;
 
 ALTER TABLE sezioni_admin ENABLE ROW LEVEL SECURITY;
