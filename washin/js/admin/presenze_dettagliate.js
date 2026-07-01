@@ -677,7 +677,7 @@ export async function initPresenzeDettagliate() {
     document.getElementById('pd-table-body').innerHTML =
       '<tr><td colspan="8" style="text-align:center;padding:24px;color:#9ca3af;">Caricamento...</td></tr>'
     await loadOperatori()
-    await loadMese()
+    try { await loadMese() } catch (err) { console.warn('Tabelle presenze non disponibili:', err) }
     renderLista()
   }
 
