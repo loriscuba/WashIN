@@ -560,39 +560,14 @@
           </div>
         </section>
 
-        <section id="cedolini" class="section section-card hidden" style="display:none!important;">
+        <section id="cedolini" class="section section-card hidden">
           <div class="section-header">
             <div>
               <h2>Cedolini</h2>
-              <p style="color:var(--gray-500);margin-top:6px;">Scarica i cedolini mese per mese.</p>
+              <p style="color:var(--gray-500);margin-top:6px;">Scarica le tue buste paga mese per mese.</p>
             </div>
           </div>
-
-          <div class="cedolino-row" style="display:grid;gap:12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div>
-                <p style="font-weight:700;margin-bottom:4px;">Maggio 2026</p>
-                <p style="margin:0;color:var(--gray-500);font-size:14px;">Lordo 2.400€, Netto 1.900€</p>
-              </div>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span class="badge badge-success">Pagato</span>
-                <a class="btn btn-secondary btn-sm" href="#">Download PDF</a>
-              </div>
-            </div>
-          </div>
-
-          <div class="cedolino-row" style="display:grid;gap:12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div>
-                <p style="font-weight:700;margin-bottom:4px;">Aprile 2026</p>
-                <p style="margin:0;color:var(--gray-500);font-size:14px;">Lordo 2.350€, Netto 1.860€</p>
-              </div>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span class="badge badge-warning">In attesa</span>
-                <a class="btn btn-secondary btn-sm" href="#">Download PDF</a>
-              </div>
-            </div>
-          </div>
+          <div id="cedolini-list"></div>
         </section>
       </main>
     </div>
@@ -606,9 +581,17 @@
         <span class="bnav-icon">📄</span>
         <span>Documenti</span>
       </a>
+      <a href="#cedolini" data-section="cedolini">
+        <span class="bnav-icon">💰</span>
+        <span>Cedolini</span>
+      </a>
       <a href="#storico" data-section="storico">
         <span class="bnav-icon">📋</span>
         <span>Storico</span>
+      </a>
+      <a href="#profilo" data-section="profilo">
+        <span class="bnav-icon">👤</span>
+        <span>Profilo</span>
       </a>
     </nav>
 
