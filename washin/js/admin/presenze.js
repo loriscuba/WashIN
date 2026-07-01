@@ -92,7 +92,7 @@ export function initPresenze() {
 
     async function loadOperatoriFilter() {
       if (!opFilter) return
-      const { data } = await supabase.from('profili').select('id,nome,cognome').eq('ruolo', 'operatore').eq('attivo', true)
+      const { data } = await supabase.from('profili').select('id,nome,cognome').or('ruolo.eq.operatore,ruolo.is.null').eq('attivo', true)
       opFilter.innerHTML = '<option value="">Tutti gli operatori</option>'
       ;(data || []).forEach(op => {
         const o = document.createElement('option')
