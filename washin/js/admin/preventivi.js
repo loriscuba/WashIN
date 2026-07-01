@@ -164,7 +164,7 @@ function buildOperatoreRow(form, item = {}) {
       <option value="">— liv. —</option>${livOpts}
     </select>
     <div class="prev-op-fonte-wrap" style="display:flex;gap:2px;justify-content:center;">
-      <button type="button" class="prev-op-fonte-btn" data-fonte="consuntivo"
+      <button type="button" class="prev-op-fonte-btn feat-consuntivi" data-fonte="consuntivo"
         style="font-size:10px;padding:2px 5px;border:1px solid #d1d5db;border-radius:4px 0 0 4px;cursor:pointer;white-space:nowrap;
                background:${savedFonte==='consuntivo'?'#0d9488':'#fff'};color:${savedFonte==='consuntivo'?'#fff':'#6b7280'};">C</button>
       <button type="button" class="prev-op-fonte-btn" data-fonte="busta"

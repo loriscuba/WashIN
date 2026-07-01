@@ -582,6 +582,20 @@ export function initConfigurazioni() {
   document.getElementById('coeff-add-btn')?.addEventListener('click', addNewCoefficientiRow)
   document.getElementById('impost-usa-coeff')?.addEventListener('change', e => saveImpostUseCoeff(e.target.checked))
 
+  // ── Modulo Consuntivi ────────────────────────────────────────────────────────
+  supabase.from('impostazioni').select('valore').eq('chiave', 'consuntivi_abilitati').maybeSingle().then(({ data }) => {
+    const val = data ? data.valore !== 'false' : true
+    const el = document.getElementById('impost-consuntivi')
+    if (el) el.checked = val
+    document.body.dataset.consuntivi = val ? '1' : '0'
+  })
+  document.getElementById('impost-consuntivi')?.addEventListener('change', async e => {
+    const val = e.target.checked
+    await supabase.from('impostazioni').upsert({ chiave: 'consuntivi_abilitati', valore: val ? 'true' : 'false', aggiornato_a: new Date().toISOString() })
+    document.body.dataset.consuntivi = val ? '1' : '0'
+    showToast(val ? 'Modulo Consuntivi abilitato' : 'Modulo Consuntivi disabilitato', 'success')
+  })
+
   // Toggle visibilità tab Anagrafica nel Tool Import
   supabase.from('impostazioni').select('valore').eq('chiave', 'tool_show_anag_tab').maybeSingle().then(({ data }) => {
     const el = document.getElementById('impost-tool-anag')
