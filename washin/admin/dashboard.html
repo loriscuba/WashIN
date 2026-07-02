@@ -972,6 +972,7 @@
             <button class="ti-tab-btn" data-tab="anag" id="ti-tab-anag-btn" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Anagrafica</button>
             <button class="ti-tab-btn" data-tab="buste" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--teal,#0d9488);border-bottom:2px solid var(--teal,#0d9488);margin-bottom:-2px;">Buste paga</button>
             <button class="ti-tab-btn feat-consuntivi" data-tab="consuntivo" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">Consuntivo Costi</button>
+            <button class="ti-tab-btn" data-tab="check" style="padding:10px 22px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-500);">✓ Check Presenze</button>
           </div>
 
           <!-- ─ Panel: Anagrafica ─ -->
@@ -1123,6 +1124,28 @@
                 </table>
               </div>
             </div>
+          </div>
+
+          <!-- ─ Panel: Check Presenze ─ -->
+          <div id="ti-panel-check" style="display:none;">
+            <div class="card" style="padding:20px;margin-bottom:20px;">
+              <h3 style="margin:0 0 6px;font-size:15px;">Check buste paga vs presenze inserite</h3>
+              <p style="font-size:13px;color:var(--gray-500);margin:0 0 14px;">
+                Carica i PDF dei cedolini: il sistema li confronta con le presenze inserite manualmente per il mese corrispondente
+                e mostra le discrepanze su ore ordinarie, straordinario, ferie e malattia.
+              </p>
+              <div id="check-pdf-dropzone" style="border:2px dashed var(--gray-300);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:border-color .15s;background:var(--gray-50,#f8fafc);margin-bottom:12px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 12v6"/><path d="m9 15 3-3 3 3"/></svg>
+                <p style="margin:0;font-size:14px;color:var(--gray-500);">Trascina i PDF cedolini qui oppure <span style="color:var(--teal,#0d9488);font-weight:600;">seleziona file</span></p>
+                <input type="file" id="check-pdf-input" accept=".pdf" multiple style="display:none;">
+              </div>
+              <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <button class="btn btn-primary btn-sm" id="check-run-btn" disabled>▶ Avvia check</button>
+                <div id="check-progress" style="font-size:13px;color:var(--gray-500);display:none;"></div>
+              </div>
+            </div>
+
+            <div id="check-presenze-results"></div>
           </div>
         </section>
 
@@ -2975,6 +2998,7 @@
       import { initFornitori } from '../js/admin/fornitori.js'
       import { initGestioneAnagrafica } from '../js/admin/gestione_anagrafica.js'
       import { initToolImport } from '../js/admin/tool_import.js'
+      import { initCheckPresenze } from '../js/admin/check_presenze.js'
       import { initConfigurazioni } from '../js/admin/configurazioni.js'
 
       const sections = document.querySelectorAll('.section')
@@ -3138,6 +3162,7 @@
         initFornitori()
         initGestioneAnagrafica()
         initToolImport()
+        initCheckPresenze()
         initConfigurazioni()
       })
     </script>
