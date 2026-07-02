@@ -79,7 +79,7 @@ async function loadOperatori() {
 
 // ── Format detection ──────────────────────────────────────────────────────────
 
-function detectPayslipFormat(text) {
+export function detectPayslipFormat(text) {
   // CED/Teamsystem keywords take priority — these don't appear in INAIL scanned payslips
   const cedHits = [
     /CONTRIBUTO\s*[1-5]\b/i,
@@ -123,7 +123,7 @@ function pickValue(text, patterns, minVal = 0) {
   return null
 }
 
-function parseInailPayslip(text) {
+export function parseInailPayslip(text) {
   console.log('[INAIL parser] OCR (prime 800 char):\n', text.substring(0, 800))
 
   const anag = { ccnl: 'Pulizie e Multiservizi' }
@@ -298,7 +298,7 @@ function parseInailPayslip(text) {
 
 // ── CED / Teamsystem payslip parser ──────────────────────────────────────────
 
-function parseCedolino(text) {
+export function parseCedolino(text) {
   console.log('[CED parser] (prime 600 char):\n', text.substring(0, 600))
 
   const anag = {}
@@ -467,10 +467,49 @@ function parseCedolino(text) {
     if (ore8002) { const v = parseInt(ore8002[1]); if (v >= 1 && v <= 31) busta.giorni_lavorati = v }
   }
 
-  // 8025 = straordinario
+  // 8025 = straordinario (importo €)
   let straordTot = 0
   for (const m of text.matchAll(/8025[\s\S]{0,120}?([\d.]+,\d{2})/g)) straordTot += pd(m[1])
   if (straordTot) busta.straordinari_imp = Math.round(straordTot * 100) / 100
+
+  // 8025 = ore straordinario (quantità — appare prima dell'importo come NN,NN ore)
+  let straordOre = 0
+  for (const m of text.matchAll(/8025[\s\S]{0,60}?(\d{1,3})[,.](\d{2})\s*(?:h|ore|H)?[\s\S]{0,60}?[\d.,]+,\d{2}/g)) {
+    const v = parseInt(m[1]) + parseInt(m[2]) / 60
+    if (v > 0 && v <= 80) { straordOre += v }
+  }
+  // Fallback: cerca "ORE STR" o "STRAORD" con quantità
+  if (!straordOre) {
+    const strOreM = text.match(/(?:ORE\s+STR|STRAORD\w*)\s+(\d{1,3})[,.](\d{2})/i)
+    if (strOreM) { const v = parseInt(strOreM[1]) + parseInt(strOreM[2])/60; if (v > 0 && v <= 80) straordOre = v }
+  }
+  if (straordOre) busta.ore_straordinario = Math.round(straordOre * 100) / 100
+
+  // Ferie: voce 8050/8051/8052 oppure label FERIE/FERIE GODUTE
+  let ferieOre = 0
+  for (const code of ['8050','8051','8052']) {
+    for (const m of text.matchAll(new RegExp(`${code}[\\s\\S]{0,80}?(\\d{1,3})[,.](\\d{2})`, 'g'))) {
+      const v = parseInt(m[1]) + parseInt(m[2])/60; if (v > 0 && v <= 200) ferieOre += v
+    }
+  }
+  if (!ferieOre) {
+    const ferieM = text.match(/FERIE\s+(?:GODUTE|MATURATE)?[^0-9\n]{0,20}(\d{1,3})[,.](\d{2})/i)
+    if (ferieM) { const v = parseInt(ferieM[1]) + parseInt(ferieM[2])/60; if (v > 0 && v <= 200) ferieOre = v }
+  }
+  if (ferieOre) busta.ferie_ore = Math.round(ferieOre * 100) / 100
+
+  // Malattia: voce 8100/8101/8102 oppure label MALATTIA
+  let malatOre = 0
+  for (const code of ['8100','8101','8102','8105']) {
+    for (const m of text.matchAll(new RegExp(`${code}[\\s\\S]{0,80}?(\\d{1,3})[,.](\\d{2})`, 'g'))) {
+      const v = parseInt(m[1]) + parseInt(m[2])/60; if (v > 0 && v <= 200) malatOre += v
+    }
+  }
+  if (!malatOre) {
+    const malatM = text.match(/MALATTIA[^0-9\n]{0,20}(\d{1,3})[,.](\d{2})/i)
+    if (malatM) { const v = parseInt(malatM[1]) + parseInt(malatM[2])/60; if (v > 0 && v <= 200) malatOre = v }
+  }
+  if (malatOre) busta.malattia_ore = Math.round(malatOre * 100) / 100
 
   // 8122 = quattordicesima, 9835/9837/9838 = incentivo L.199/25
   let altriTot = 0
@@ -1290,6 +1329,8 @@ export function initToolImport() {
   document.getElementById('ti-panel-anag').style.display       = 'none'
   document.getElementById('ti-panel-buste').style.display      = ''
   document.getElementById('ti-panel-consuntivo').style.display = 'none'
+  const _checkPanel = document.getElementById('ti-panel-check')
+  if (_checkPanel) _checkPanel.style.display = 'none'
 
   // Tab switching
   document.querySelectorAll('.ti-tab-btn').forEach(btn => {
@@ -1304,6 +1345,8 @@ export function initToolImport() {
       document.getElementById('ti-panel-anag').style.display       = tab === 'anag'       ? '' : 'none'
       document.getElementById('ti-panel-buste').style.display      = tab === 'buste'      ? '' : 'none'
       document.getElementById('ti-panel-consuntivo').style.display = tab === 'consuntivo' ? '' : 'none'
+      const checkPanel = document.getElementById('ti-panel-check')
+      if (checkPanel) checkPanel.style.display = tab === 'check' ? '' : 'none'
     })
   })
 
