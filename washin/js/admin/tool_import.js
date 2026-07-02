@@ -466,13 +466,18 @@ export function parseCedolino(text) {
   // 8001 = ore lavoro ordinario
   const ore8001 = text.match(/8001[\s\S]{0,100}?(\d{2,3})[,.](\d{2})/)
   if (ore8001) { const v = parseInt(ore8001[1]) + parseInt(ore8001[2])/60; if (v >= 1 && v <= 250) busta.ore_lavorate = Math.round(v*100)/100 }
-  // 8002 = ore lavoro (variante) o giorni
+  // 8002 = ore lavoro (variante) o giorni (impiegati)
   if (!busta.ore_lavorate) {
-    const ore8002 = text.match(/8002[\s\S]{0,100}?(\d{2,3})[,.](\d{2})/)
+    const ore8002 = text.match(/8002([\s\S]{0,100}?)(\d{2,3})[,.](\d{2})/)
     if (ore8002) {
-      const v = parseInt(ore8002[1]) + parseInt(ore8002[2])/60
-      if (v >= 20 && v <= 250) busta.ore_lavorate = Math.round(v*100)/100
-      else if (v >= 1 && v <= 31) busta.giorni_lavorati = Math.floor(v)
+      const desc = ore8002[1]
+      const v = parseInt(ore8002[2]) + parseInt(ore8002[3])/60
+      if (/giorni/i.test(desc)) {
+        if (v >= 1 && v <= 31) busta.giorni_lavorati = Math.floor(v)
+      } else {
+        if (v >= 20 && v <= 250) busta.ore_lavorate = Math.round(v*100)/100
+        else if (v >= 1 && v <= 31) busta.giorni_lavorati = Math.floor(v)
+      }
     }
   }
   // Fallback: ORE INPS / ORE LAVORATE / ORE ORDINARIE nel testo
