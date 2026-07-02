@@ -222,11 +222,13 @@ function renderOreGiornaliere() {
     <div style="margin-bottom:16px;font-size:13px;color:#6b7280;">
       Registra le ore per ogni giorno lavorativo. Per i weekend puoi comunque inserire ore (straordinari, turni).
     </div>
-    <div style="display:grid;grid-template-columns:auto 80px 80px 80px 1fr;gap:4px;align-items:center;margin-bottom:8px;padding:0 4px;">
+    <div style="display:grid;grid-template-columns:auto 80px 80px 80px 80px 80px 1fr;gap:4px;align-items:center;margin-bottom:8px;padding:0 4px;">
       <span style="font-size:11px;color:#9ca3af;">Giorno</span>
       <span style="font-size:11px;color:#9ca3af;text-align:center;">Tipo</span>
       <span style="font-size:11px;color:#9ca3af;text-align:center;">Ore</span>
       <span style="font-size:11px;color:#9ca3af;text-align:center;">Min</span>
+      <span style="font-size:11px;color:#f59e0b;text-align:center;">Str.h</span>
+      <span style="font-size:11px;color:#f59e0b;text-align:center;">Str.m</span>
       <span style="font-size:11px;color:#9ca3af;">Cantiere/nota</span>
     </div>
   `
@@ -241,10 +243,14 @@ function renderOreGiornaliere() {
     const oreH = p ? Math.floor(parseFloat(p.ore_ordinarie||0)) : ''
     const oreM = p ? Math.round((parseFloat(p.ore_ordinarie||0)-Math.floor(parseFloat(p.ore_ordinarie||0)))*60) : ''
     const oreMFmt = oreM ? pad(oreM) : (oreH !== '' ? '00' : '')
+    const strH = p ? Math.floor(parseFloat(p.ore_straordinario||0)) : ''
+    const strM = p ? Math.round((parseFloat(p.ore_straordinario||0)-Math.floor(parseFloat(p.ore_straordinario||0)))*60) : ''
+    const strMFmt = strM ? pad(strM) : (strH !== '' ? '00' : '')
+    const disabledStyle = !tipo||tipo==='lavoro' ? '' : 'opacity:.4;pointer-events:none;'
 
     html += `
       <div class="pg-row" data-key="${key}" style="
-        display:grid;grid-template-columns:auto 80px 80px 80px 1fr;
+        display:grid;grid-template-columns:auto 80px 80px 80px 80px 80px 1fr;
         gap:6px;align-items:center;padding:6px 4px;
         border-radius:8px;margin-bottom:2px;
         background:${meta ? meta.bg : (wd ? '#f9fafb' : '#fff')};
@@ -262,10 +268,16 @@ function renderOreGiornaliere() {
         </select>
         <input class="pg-ore" data-key="${key}" type="number" min="0" max="24" placeholder="0"
           value="${oreH}"
-          style="padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:13px;text-align:center;width:100%;box-sizing:border-box;${!tipo||tipo==='lavoro'?'':'opacity:.4;pointer-events:none;'}">
+          style="padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:13px;text-align:center;width:100%;box-sizing:border-box;${disabledStyle}">
         <input class="pg-min" data-key="${key}" type="number" min="0" max="59" placeholder="00"
           value="${oreMFmt}"
-          style="padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:13px;text-align:center;width:100%;box-sizing:border-box;${!tipo||tipo==='lavoro'?'':'opacity:.4;pointer-events:none;'}">
+          style="padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:13px;text-align:center;width:100%;box-sizing:border-box;${disabledStyle}">
+        <input class="pg-str-ore" data-key="${key}" type="number" min="0" max="24" placeholder="0"
+          value="${strH}"
+          style="padding:5px 8px;border:1.5px solid #fde68a;border-radius:6px;font-size:13px;text-align:center;width:100%;box-sizing:border-box;${disabledStyle}">
+        <input class="pg-str-min" data-key="${key}" type="number" min="0" max="59" placeholder="00"
+          value="${strMFmt}"
+          style="padding:5px 8px;border:1.5px solid #fde68a;border-radius:6px;font-size:13px;text-align:center;width:100%;box-sizing:border-box;${disabledStyle}">
         <input class="pg-nota" data-key="${key}" type="text" placeholder="cantiere..."
           value="${p?.nota_cantiere||''}"
           style="padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:12px;width:100%;box-sizing:border-box;">
@@ -287,20 +299,18 @@ function bindOreGiornaliereEvents() {
       sel.style.background = meta ? meta.bg : '#fff'
       sel.style.color = meta ? meta.color : '#374151'
 
-      // Disable ore/min if not lavoro
-      const oreEl = row.querySelector('.pg-ore')
-      const minEl = row.querySelector('.pg-min')
+      // Disable ore/min/str if not lavoro
       const isLavoro = !tipo || tipo==='lavoro'
-      oreEl.style.opacity = isLavoro ? '1' : '.4'
-      oreEl.style.pointerEvents = isLavoro ? '' : 'none'
-      minEl.style.opacity = isLavoro ? '1' : '.4'
-      minEl.style.pointerEvents = isLavoro ? '' : 'none'
+      ;['.pg-ore','.pg-min','.pg-str-ore','.pg-str-min'].forEach(cls => {
+        const el = row.querySelector(cls)
+        if (el) { el.style.opacity = isLavoro ? '1' : '.4'; el.style.pointerEvents = isLavoro ? '' : 'none' }
+      })
 
       if (!_drawerGiornalieri[key]) _drawerGiornalieri[key] = { data: key, profilo_id: _drawerOpId }
       _drawerGiornalieri[key].tipo = tipo || null
     })
   })
-  ;['pg-ore','pg-min','pg-nota'].forEach(cls => {
+  ;['pg-ore','pg-min','pg-str-ore','pg-str-min','pg-nota'].forEach(cls => {
     document.querySelectorAll(`.${cls}`).forEach(el => {
       el.addEventListener('change', () => {
         const key = el.dataset.key
@@ -308,7 +318,10 @@ function bindOreGiornaliereEvents() {
         const row = el.closest('.pg-row')
         const ore = parseFloat(row.querySelector('.pg-ore').value||0)
         const min = parseFloat(row.querySelector('.pg-min').value||0)
+        const strOre = parseFloat(row.querySelector('.pg-str-ore').value||0)
+        const strMin = parseFloat(row.querySelector('.pg-str-min').value||0)
         _drawerGiornalieri[key].ore_ordinarie = ore + min/60
+        _drawerGiornalieri[key].ore_straordinario = strOre + strMin/60
         _drawerGiornalieri[key].nota_cantiere = row.querySelector('.pg-nota').value.trim() || null
       })
     })
@@ -331,14 +344,18 @@ function renderRiepilogo() {
   }
 
   return `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
       <div style="background:#f0fdfa;border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:24px;font-weight:700;color:#0d9488;">${fmtOre(t.oreOrd)}</div>
-        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Ore lavoro (calcolate)</div>
+        <div style="font-size:22px;font-weight:700;color:#0d9488;">${fmtOre(t.oreOrd)}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Ore ordinarie</div>
       </div>
       <div style="background:#fffbeb;border-radius:10px;padding:14px;text-align:center;">
-        <div style="font-size:24px;font-weight:700;color:#f59e0b;">${t.ferie || 0} gg</div>
-        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Ferie (da giornaliero)</div>
+        <div style="font-size:22px;font-weight:700;color:#f59e0b;">${t.straord ? fmtOre(t.straord) : '—'}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Straordinario</div>
+      </div>
+      <div style="background:#eff6ff;border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:22px;font-weight:700;color:#3b82f6;">${t.ferie || 0} gg</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px;">Ferie</div>
       </div>
     </div>
 
@@ -361,13 +378,15 @@ function renderRiepilogo() {
 }
 
 function calcolaTotaliDaDrawer() {
-  let oreOrd=0, ferie=0, malattia=0
+  let oreOrd=0, straord=0, ferie=0, malattia=0
   Object.values(_drawerGiornalieri).forEach(r => {
-    if (r.tipo==='lavoro') oreOrd+=parseFloat(r.ore_ordinarie||0)
-    else if (r.tipo==='feria') ferie++
+    if (r.tipo==='lavoro') {
+      oreOrd+=parseFloat(r.ore_ordinarie||0)
+      straord+=parseFloat(r.ore_straordinario||0)
+    } else if (r.tipo==='feria') ferie++
     else if (r.tipo==='malattia') malattia++
   })
-  return { oreOrd, ferie, malattia }
+  return { oreOrd, straord, ferie, malattia }
 }
 
 // ─── Tab: Note Commercialista ─────────────────────────────────────────────────
