@@ -35,19 +35,34 @@ export async function parseCedoliniPerCheck(files, onProgress) {
 
       // Estrai anno/mese dal testo se non già nel busta
       let anno = busta.anno, mese = busta.mese
+      const MESI_IT = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+                       'luglio','agosto','settembre','ottobre','novembre','dicembre']
       if (!anno || !mese) {
-        const meseM = text.match(/(?:Competenza|Periodo|Mese)[:\s]+(\w+)\s+(\d{4})/i)
-        if (meseM) {
-          const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
-                        'luglio','agosto','settembre','ottobre','novembre','dicembre']
-          mese = MESI.indexOf(meseM[1].toLowerCase()) + 1 || null
-          anno = parseInt(meseM[2])
+        // 1. Etichetta esplicita: "Competenza MAGGIO 2026", "Periodo Maggio 2026", "Mese: 05/2026"
+        const labelM = text.match(/(?:Competenza|Periodo\s+(?:di\s+)?paga|Mese\s+(?:di\s+)?competenza|Cedolino)[:\s]+([A-Za-zàèéìòù]+)\s+(\d{4})/i)
+        if (labelM) {
+          const m = MESI_IT.indexOf(labelM[1].toLowerCase()) + 1
+          if (m && parseInt(labelM[2]) > 2000) { mese = m; anno = parseInt(labelM[2]) }
         }
-        // Fallback: cerca MM/YYYY o YYYY-MM
+        // 2. "MAGGIO 2026" standalone (mese in maiuscolo vicino a anno plausibile)
         if (!anno) {
-          const dmM = text.match(/\b(\d{2})\/(\d{4})\b/)
-          if (dmM) { mese = parseInt(dmM[1]); anno = parseInt(dmM[2]) }
+          for (const m of text.matchAll(/\b(GENNAIO|FEBBRAIO|MARZO|APRILE|MAGGIO|GIUGNO|LUGLIO|AGOSTO|SETTEMBRE|OTTOBRE|NOVEMBRE|DICEMBRE)\s+(20\d{2})\b/gi)) {
+            const mi = MESI_IT.indexOf(m[1].toLowerCase()) + 1
+            if (mi) { mese = mi; anno = parseInt(m[2]); break }
+          }
         }
+        // 3. MM/YYYY strettamente con anno >= 2020 e mese 01-12
+        if (!anno) {
+          for (const m of text.matchAll(/\b(0[1-9]|1[0-2])\/(20[2-9]\d)\b/g)) {
+            mese = parseInt(m[1]); anno = parseInt(m[2]); break
+          }
+        }
+        // 4. YYYY-MM (ISO)
+        if (!anno) {
+          const isoM = text.match(/\b(20[2-9]\d)-(0[1-9]|1[0-2])\b/)
+          if (isoM) { anno = parseInt(isoM[1]); mese = parseInt(isoM[2]) }
+        }
+        console.log('[check periodo]', anag.cognome, anag.nome, '→', mese, anno)
       }
 
       _parsed.push({
