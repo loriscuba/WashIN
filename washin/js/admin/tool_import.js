@@ -458,13 +458,32 @@ export function parseCedolino(text) {
   if (ibanM) anag.iban_dipendente = ibanM[1].toUpperCase()
 
   // ── Voce codes ───────────────────────────────────────────────────────────────
+  // Log tutte le voci 8xxx trovate nel testo per diagnostica
+  const voci8xxx = [...text.matchAll(/\b(8\d{3})\b[\s\S]{0,120}?([\d.]+,\d{2})/g)]
+    .map(m => `${m[1]}→${m[2]}`).slice(0, 30)
+  console.log('[CED voci]', anag.cognome, anag.nome, '|', voci8xxx.join(' | '))
+
   // 8001 = ore lavoro ordinario
-  const ore8001 = text.match(/8001[\s\S]{0,100}?(\d{2,3})[,.]00/)
-  if (ore8001) { const v = parseInt(ore8001[1]); if (v >= 1 && v <= 250) busta.ore_lavorate = v }
-  // 8002 = giorni (fallback)
+  const ore8001 = text.match(/8001[\s\S]{0,100}?(\d{2,3})[,.](\d{2})/)
+  if (ore8001) { const v = parseInt(ore8001[1]) + parseInt(ore8001[2])/60; if (v >= 1 && v <= 250) busta.ore_lavorate = Math.round(v*100)/100 }
+  // 8002 = ore lavoro (variante) o giorni (impiegati)
   if (!busta.ore_lavorate) {
-    const ore8002 = text.match(/8002[\s\S]{0,100}?(\d{1,2})[,.]00/)
-    if (ore8002) { const v = parseInt(ore8002[1]); if (v >= 1 && v <= 31) busta.giorni_lavorati = v }
+    const ore8002 = text.match(/8002([\s\S]{0,100}?)(\d{2,3})[,.](\d{2})/)
+    if (ore8002) {
+      const desc = ore8002[1]
+      const v = parseInt(ore8002[2]) + parseInt(ore8002[3])/60
+      if (/giorni/i.test(desc)) {
+        if (v >= 1 && v <= 31) busta.giorni_lavorati = Math.floor(v)
+      } else {
+        if (v >= 20 && v <= 250) busta.ore_lavorate = Math.round(v*100)/100
+        else if (v >= 1 && v <= 31) busta.giorni_lavorati = Math.floor(v)
+      }
+    }
+  }
+  // Fallback: ORE INPS / ORE LAVORATE / ORE ORDINARIE nel testo
+  if (!busta.ore_lavorate) {
+    const oreLabM = text.match(/(?:ORE\s+INPS|ORE\s+(?:LAV\w*|ORD\w*))\s+(\d{2,3})[,.](\d{2})/i)
+    if (oreLabM) { const v = parseInt(oreLabM[1]) + parseInt(oreLabM[2])/60; if (v >= 1 && v <= 250) busta.ore_lavorate = Math.round(v*100)/100 }
   }
 
   // 8025 = straordinario (importo €)
