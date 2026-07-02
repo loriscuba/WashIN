@@ -228,6 +228,34 @@ const STATUS_BADGE = {
 const MESI_NOMI = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                    'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
 
+// Stato spunte: index → true (corretto manualmente)
+const _spunte = {}
+
+function rowDiscr(r) {
+  const b = r.busta, p = r.presenze
+  // Mostra sempre i 4 campi con busta / gestionale, evidenziando le discrepanze
+  const campi = [
+    { label: 'Ore ordinarie',  busta: b.ore_lavorate,      pres: p?.oreOrd,    soglia: SOGLIA_ORE },
+    { label: 'Straordinario',  busta: b.ore_straordinario, pres: p?.oreStr,    soglia: SOGLIA_ORE },
+    { label: 'Ferie',          busta: b.ferie_ore,         pres: p?.ferieOre,  soglia: SOGLIA_ORE },
+    { label: 'Malattia',       busta: b.malattia_ore,      pres: p?.malatOre,  soglia: SOGLIA_ORE },
+  ]
+  return campi.map(c => {
+    const hasBusta = c.busta != null
+    const hasPres  = c.pres  != null
+    const diff     = hasBusta && hasPres ? Math.abs(c.pres - c.busta) : 0
+    const discr    = hasBusta && hasPres && diff >= c.soglia
+    const col      = discr ? (diff >= 4 ? '#ef4444' : '#f59e0b') : '#6b7280'
+    const bVal     = hasBusta ? fmtH(c.busta) : '?'
+    const pVal     = hasPres  ? fmtH(c.pres)  : '—'
+    const delta    = discr ? ` (${c.pres - c.busta > 0 ? '+' : ''}${fmtH(c.pres - c.busta)})` : ''
+    return `<div style="font-size:12px;margin-bottom:3px;${discr ? `color:${col};font-weight:600;` : 'color:#6b7280;'}">
+      <span style="display:inline-block;width:90px;">${c.label}:</span>
+      <span>busta <strong>${bVal}</strong> / gest. <strong>${pVal}</strong>${discr ? `<span style="color:${col};">${delta}</span>` : ''}</span>
+    </div>`
+  }).join('')
+}
+
 export function renderCheckResults(results, containerId = 'check-presenze-results') {
   const el = document.getElementById(containerId)
   if (!el) return
@@ -237,111 +265,214 @@ export function renderCheckResults(results, containerId = 'check-presenze-result
     return
   }
 
-  const totOk      = results.filter(r => r.status === 'ok').length
-  const totErr     = results.filter(r => r.status === 'errore').length
-  const totWarn    = results.filter(r => r.status === 'warning').length
-  const totNoMatch = results.filter(r => r.status === 'no_match').length
-  const totNoPres  = results.filter(r => r.status === 'no_presenze').length
+  const totOk   = results.filter(r => r.status === 'ok').length
+  const totErr  = results.filter(r => r.status === 'errore').length
+  const totWarn = results.filter(r => r.status === 'warning').length
+  const totNV   = results.filter(r => ['no_match','no_presenze','no_periodo'].includes(r.status)).length
 
   el.innerHTML = `
-    <!-- Riepilogo -->
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
-      <div style="background:#d1fae5;border-radius:10px;padding:12px 20px;text-align:center;">
-        <div style="font-size:24px;font-weight:700;color:#065f46;">${totOk}</div>
-        <div style="font-size:12px;color:#065f46;">Corrispondenti</div>
+    <!-- Riepilogo + azioni -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div style="background:#d1fae5;border-radius:10px;padding:12px 20px;text-align:center;">
+          <div style="font-size:24px;font-weight:700;color:#065f46;">${totOk}</div>
+          <div style="font-size:12px;color:#065f46;">Corretti</div>
+        </div>
+        <div style="background:#fee2e2;border-radius:10px;padding:12px 20px;text-align:center;">
+          <div style="font-size:24px;font-weight:700;color:#991b1b;">${totErr}</div>
+          <div style="font-size:12px;color:#991b1b;">Errori</div>
+        </div>
+        <div style="background:#fef3c7;border-radius:10px;padding:12px 20px;text-align:center;">
+          <div style="font-size:24px;font-weight:700;color:#92400e;">${totWarn}</div>
+          <div style="font-size:12px;color:#92400e;">Avvisi</div>
+        </div>
+        <div style="background:#f3f4f6;border-radius:10px;padding:12px 20px;text-align:center;">
+          <div style="font-size:24px;font-weight:700;color:#6b7280;">${totNV}</div>
+          <div style="font-size:12px;color:#6b7280;">Non verificabili</div>
+        </div>
       </div>
-      <div style="background:#fee2e2;border-radius:10px;padding:12px 20px;text-align:center;">
-        <div style="font-size:24px;font-weight:700;color:#991b1b;">${totErr}</div>
-        <div style="font-size:12px;color:#991b1b;">Errori</div>
-      </div>
-      <div style="background:#fef3c7;border-radius:10px;padding:12px 20px;text-align:center;">
-        <div style="font-size:24px;font-weight:700;color:#92400e;">${totWarn}</div>
-        <div style="font-size:12px;color:#92400e;">Avvisi</div>
-      </div>
-      <div style="background:#f3f4f6;border-radius:10px;padding:12px 20px;text-align:center;">
-        <div style="font-size:24px;font-weight:700;color:#6b7280;">${totNoMatch + totNoPres}</div>
-        <div style="font-size:12px;color:#6b7280;">Non verificabili</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span style="font-size:13px;color:#6b7280;">Spunta le buste corrette →</span>
+        <button id="check-report-btn" class="btn btn-primary btn-sm">📋 Report commercialista</button>
+        <button id="check-export-csv" class="btn btn-secondary btn-sm">📥 CSV</button>
       </div>
     </div>
 
-    <!-- Tabella dettaglio -->
+    <!-- Legenda -->
+    <p style="font-size:12px;color:#9ca3af;margin:0 0 12px;">
+      Per ogni riga: <strong>busta</strong> = valore estratto dal PDF cedolino · <strong>gest.</strong> = valore inserito nel gestionale.
+      Metti la spunta ✓ sulle righe già verificate e corrette — il report commercialista includerà solo quelle <em>senza</em> spunta.
+    </p>
+
+    <!-- Tabella -->
     <div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
           <tr style="background:#f9fafb;">
+            <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #e5e7eb;width:40px;">✓</th>
             <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e5e7eb;">Operatore</th>
             <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e5e7eb;">Periodo</th>
             <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #e5e7eb;">Stato</th>
-            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e5e7eb;">Discrepanze</th>
-            <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #e5e7eb;">Ore ord. (busta / pres.)</th>
-            <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #e5e7eb;">Straord.</th>
-            <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #e5e7eb;">Ferie</th>
-            <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #e5e7eb;">Malattia</th>
+            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e5e7eb;">Busta vs Gestionale</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="check-tbody">
           ${results.map((r, i) => {
             const b = r.busta
-            const p = r.presenze
             const nome = `${b.cognome || '?'} ${b.nome || ''}`.trim()
             const periodo = b.anno && b.mese ? `${MESI_NOMI[b.mese]} ${b.anno}` : '—'
-            const bgRow = i % 2 === 0 ? '#fff' : '#fafafa'
+            const checked = _spunte[i] ? 'checked' : ''
+            const bgRow = _spunte[i] ? '#f0fdf4' : (i % 2 === 0 ? '#fff' : '#fafafa')
 
-            const discr = r.flags.map(f => {
-              const col = GRAVITA_COLOR[f.gravita]
-              const delta = f.delta > 0 ? `+${fmtH(f.delta)}` : fmtH(f.delta)
-              return `<div style="color:${col};font-weight:600;font-size:12px;">▸ ${f.campo}: ${delta}</div>`
-            }).join('') || (r.status === 'no_match' ? '<span style="color:#9ca3af;">Operatore non trovato in DB</span>'
-                          : r.status === 'no_presenze' ? '<span style="color:#9ca3af;">Nessuna presenza inserita</span>'
-                          : r.status === 'no_periodo' ? '<span style="color:#9ca3af;">Periodo non rilevato nel PDF</span>'
-                          : '<span style="color:#6b7280;">—</span>')
+            const detail = r.status === 'no_match'    ? '<span style="color:#9ca3af;font-size:12px;">Operatore non trovato nel gestionale</span>'
+                         : r.status === 'no_presenze' ? '<span style="color:#9ca3af;font-size:12px;">Nessuna presenza inserita per questo mese</span>'
+                         : r.status === 'no_periodo'  ? '<span style="color:#9ca3af;font-size:12px;">Periodo non rilevato nel PDF</span>'
+                         : rowDiscr(r)
 
-            const oreOrdBusta = b.ore_lavorate != null ? fmtH(b.ore_lavorate) : '?'
-            const oreOrdPres  = p ? fmtH(p.oreOrd) : '—'
-            const strBusta    = b.ore_straordinario != null ? fmtH(b.ore_straordinario) : '?'
-            const strPres     = p ? fmtH(p.oreStr) : '—'
-            const ferieBusta  = b.ferie_ore != null ? fmtH(b.ferie_ore) : '?'
-            const feriePres   = p ? fmtH(p.ferieOre) : '—'
-            const malatBusta  = b.malattia_ore != null ? fmtH(b.malattia_ore) : '?'
-            const malatPres   = p ? fmtH(p.malatOre) : '—'
-
-            return `<tr style="background:${bgRow};border-bottom:1px solid #f3f4f6;">
+            return `<tr data-idx="${i}" style="background:${bgRow};border-bottom:1px solid #f3f4f6;transition:background .1s;">
+              <td style="padding:10px 12px;text-align:center;">
+                <input type="checkbox" class="check-spunta" data-idx="${i}" ${checked}
+                  style="width:18px;height:18px;accent-color:#0d9488;cursor:pointer;">
+              </td>
               <td style="padding:10px 12px;font-weight:600;">${nome}<br><span style="font-size:11px;color:#9ca3af;font-weight:400;">${b.filename || ''}</span></td>
-              <td style="padding:10px 12px;">${periodo}</td>
+              <td style="padding:10px 12px;white-space:nowrap;">${periodo}</td>
               <td style="padding:10px 12px;text-align:center;">${STATUS_BADGE[r.status] || ''}</td>
-              <td style="padding:10px 12px;">${discr}</td>
-              <td style="padding:10px 12px;text-align:center;font-family:monospace;">${oreOrdBusta} / ${oreOrdPres}</td>
-              <td style="padding:10px 12px;text-align:center;font-family:monospace;">${strBusta} / ${strPres}</td>
-              <td style="padding:10px 12px;text-align:center;font-family:monospace;">${ferieBusta} / ${feriePres}</td>
-              <td style="padding:10px 12px;text-align:center;font-family:monospace;">${malatBusta} / ${malatPres}</td>
+              <td style="padding:10px 12px;">${detail}</td>
             </tr>`
           }).join('')}
         </tbody>
       </table>
     </div>
-
-    <div style="margin-top:16px;display:flex;gap:12px;">
-      <button id="check-export-csv" class="btn btn-secondary btn-sm">📥 Esporta discrepanze CSV</button>
-    </div>
   `
 
+  // Spunte
+  el.querySelectorAll('.check-spunta').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const i = parseInt(cb.dataset.idx)
+      _spunte[i] = cb.checked
+      const tr = cb.closest('tr')
+      tr.style.background = cb.checked ? '#f0fdf4' : (i % 2 === 0 ? '#fff' : '#fafafa')
+    })
+  })
+
   document.getElementById('check-export-csv')?.addEventListener('click', () => exportCsv(results))
+  document.getElementById('check-report-btn')?.addEventListener('click', () => exportReportCommercialista(results))
+}
+
+function exportReportCommercialista(results) {
+  // Solo le righe senza spunta (non confermate come corrette) e con discrepanze o non verificabili
+  const daInviare = results.filter((r, i) => !_spunte[i] && r.status !== 'ok')
+  if (!daInviare.length) {
+    alert('Tutte le buste sono state spuntate come corrette. Nessuna discrepanza da segnalare.')
+    return
+  }
+
+  const oggi = new Date().toLocaleDateString('it-IT')
+
+  const righe = daInviare.map(r => {
+    const b    = r.busta
+    const p    = r.presenze
+    const nome = `${b.cognome || ''} ${b.nome || ''}`.trim()
+    const periodo = b.anno && b.mese ? `${MESI_NOMI[b.mese]} ${b.anno}` : '—'
+
+    const campi = [
+      { label: 'Ore ordinarie', busta: b.ore_lavorate,      pres: p?.oreOrd   },
+      { label: 'Straordinario', busta: b.ore_straordinario, pres: p?.oreStr   },
+      { label: 'Ferie',         busta: b.ferie_ore,         pres: p?.ferieOre },
+      { label: 'Malattia',      busta: b.malattia_ore,      pres: p?.malatOre },
+    ].filter(c => c.busta != null || c.pres != null)
+
+    const dettaglio = campi.map(c => {
+      const bVal = c.busta != null ? fmtH(c.busta) : '?'
+      const pVal = c.pres  != null ? fmtH(c.pres)  : '—'
+      const diff = (c.busta != null && c.pres != null) ? c.pres - c.busta : null
+      const diffStr = diff != null && Math.abs(diff) >= SOGLIA_ORE
+        ? ` → scarto <strong style="color:#ef4444;">${diff > 0 ? '+' : ''}${fmtH(diff)}</strong>`
+        : ''
+      return `<tr>
+        <td style="padding:6px 12px;border:1px solid #e5e7eb;">${c.label}</td>
+        <td style="padding:6px 12px;border:1px solid #e5e7eb;text-align:center;font-family:monospace;">${bVal}</td>
+        <td style="padding:6px 12px;border:1px solid #e5e7eb;text-align:center;font-family:monospace;">${pVal}</td>
+        <td style="padding:6px 12px;border:1px solid #e5e7eb;">${diffStr || '—'}</td>
+      </tr>`
+    }).join('')
+
+    const statusLabel = r.status === 'errore'  ? '⚠ DISCREPANZA'
+                      : r.status === 'warning'  ? '⚠ ATTENZIONE'
+                      : r.status === 'no_presenze' ? '– Dati assenti'
+                      : r.status === 'no_match' ? '? Operatore non trovato'
+                      : r.status
+
+    return `
+      <div style="margin-bottom:28px;page-break-inside:avoid;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #111827;padding-bottom:6px;margin-bottom:10px;">
+          <span style="font-size:16px;font-weight:700;">${nome}</span>
+          <span style="font-size:13px;color:#6b7280;">${periodo} · ${statusLabel}</span>
+        </div>
+        ${campi.length ? `
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:#f9fafb;">
+              <th style="padding:6px 12px;border:1px solid #e5e7eb;text-align:left;">Voce</th>
+              <th style="padding:6px 12px;border:1px solid #e5e7eb;text-align:center;">Busta paga</th>
+              <th style="padding:6px 12px;border:1px solid #e5e7eb;text-align:center;">Gestionale</th>
+              <th style="padding:6px 12px;border:1px solid #e5e7eb;text-align:left;">Scarto</th>
+            </tr>
+          </thead>
+          <tbody>${dettaglio}</tbody>
+        </table>` : `<p style="color:#6b7280;font-size:13px;">${
+          r.status === 'no_match'    ? 'Operatore non trovato nel gestionale — verificare manualmente.' :
+          r.status === 'no_presenze' ? 'Nessuna presenza inserita per questo periodo nel gestionale.' :
+          'Nessun dettaglio disponibile.'
+        }</p>`}
+      </div>`
+  }).join('')
+
+  const html = `<!DOCTYPE html><html lang="it"><head>
+    <meta charset="utf-8">
+    <title>Report discrepanze presenze — ${oggi}</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 32px 40px; font-size: 14px; color: #111827; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .sub { color: #6b7280; font-size: 13px; margin: 0 0 32px; }
+      @media print { body { padding: 16px 24px; } }
+    </style>
+  </head><body>
+    <h1>Report discrepanze presenze vs buste paga</h1>
+    <p class="sub">Generato il ${oggi} · ${daInviare.length} cedolini con discrepanze da verificare</p>
+    ${righe}
+    <p style="margin-top:40px;font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:12px;">
+      Documento generato da WashIN · Busta paga = valori estratti dal PDF cedolino · Gestionale = presenze inserite manualmente
+    </p>
+  </body></html>`
+
+  const win = window.open('', '_blank', 'width=900,height=700')
+  if (!win) return
+  win.document.write(html)
+  win.document.close()
+  win.print()
 }
 
 function exportCsv(results) {
-  const cols = ['operatore','cf','periodo','status','campo','busta','presenze','delta']
+  const cols = ['operatore','cf','periodo','status','voce','busta','gestionale','scarto']
   const rows = []
-  results.forEach(r => {
-    const nome = `${r.busta.cognome||''} ${r.busta.nome||''}`.trim()
+  results.forEach((r, i) => {
+    const nome    = `${r.busta.cognome||''} ${r.busta.nome||''}`.trim()
     const periodo = r.busta.anno && r.busta.mese ? `${pad(r.busta.mese)}/${r.busta.anno}` : ''
-    if (!r.flags.length) {
-      rows.push({ operatore: nome, cf: r.busta.codice_fiscale||'', periodo, status: r.status, campo:'', busta:'', presenze:'', delta:'' })
-    } else {
-      r.flags.forEach(f => {
-        rows.push({ operatore: nome, cf: r.busta.codice_fiscale||'', periodo, status: r.status,
-          campo: f.campo, busta: f.busta, presenze: f.presenze, delta: f.delta })
-      })
-    }
+    const cf      = r.busta.codice_fiscale || ''
+    const status  = _spunte[i] ? 'confermato_ok' : r.status
+    const b = r.busta, p = r.presenze
+    const campi = [
+      { voce: 'Ore ordinarie', busta: b.ore_lavorate,      gest: p?.oreOrd   },
+      { voce: 'Straordinario', busta: b.ore_straordinario, gest: p?.oreStr   },
+      { voce: 'Ferie',         busta: b.ferie_ore,         gest: p?.ferieOre },
+      { voce: 'Malattia',      busta: b.malattia_ore,      gest: p?.malatOre },
+    ]
+    campi.forEach(c => {
+      const sc = (c.busta != null && c.gest != null) ? c.gest - c.busta : ''
+      rows.push({ operatore: nome, cf, periodo, status,
+        voce: c.voce, busta: c.busta ?? '', gestionale: c.gest ?? '', scarto: sc })
+    })
   })
   const bom = '﻿'
   const header = cols.join(';')
