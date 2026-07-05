@@ -1363,7 +1363,7 @@
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gray-100);">
               <div>
                 <p style="margin:0;font-weight:600;font-size:14px;color:var(--gray-800);">Mostra tab Anagrafica nel Tool Import</p>
                 <p style="margin:2px 0 0;font-size:12px;color:var(--gray-500);">Se disattivato, la tab Anagrafica è nascosta nel Tool Import.</p>
@@ -1372,6 +1372,28 @@
                 <input type="checkbox" id="impost-tool-anag" checked>
                 <span class="toggle-slider"></span>
               </label>
+            </div>
+            <div style="padding:12px 0;">
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                  <p style="margin:0;font-weight:600;font-size:14px;color:var(--gray-800);">Modalità interventi operatrice</p>
+                  <p style="margin:2px 0 0;font-size:12px;color:var(--gray-500);">Scegli come l'operatrice gestisce gli interventi dall'agenda.</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="impost-modalita-orario">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div id="mode-classica-card" style="padding:12px;border-radius:10px;border:2px solid #0d9488;background:#f0fdfa;">
+                  <p style="margin:0 0 2px;font-size:13px;font-weight:700;color:#0d9488;">🔘 Classica</p>
+                  <p style="margin:0;font-size:11px;color:var(--gray-500);">Avvia intervento + geolocalizzazione + checklist</p>
+                </div>
+                <div id="mode-orario-card" style="padding:12px;border-radius:10px;border:2px solid var(--gray-200);background:#fafafa;">
+                  <p style="margin:0 0 2px;font-size:13px;font-weight:700;color:var(--gray-500);">⏱ Inserimento orario</p>
+                  <p style="margin:0;font-size:11px;color:var(--gray-500);">Registra ore ordinarie e straordinarie per intervento</p>
+                </div>
+              </div>
             </div>
           </div>
 

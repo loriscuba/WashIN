@@ -1,5 +1,12 @@
 import supabase from '../supabase.js'
 
+let _modalitaOrario = false   // true = inserimento ore, false = classica
+
+async function loadModalita() {
+  const { data } = await supabase.from('impostazioni').select('valore').eq('chiave', 'modalita_intervento').maybeSingle()
+  _modalitaOrario = data?.valore === 'orario'
+}
+
 function createToastContainer() {
   let container = document.getElementById('toast-container')
   if (!container) {
@@ -227,6 +234,13 @@ export function renderInterventi(interventi) {
     const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
     const operatori = [op1, op2].filter(Boolean).join(' + ')
 
+    const actionsHtml = _modalitaOrario
+      ? `<a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
+         <button class="btn btn-primary btn-sm" data-action="inserisci-ore" data-id="${iv.id}" data-data="${iv.data_pianificata}" type="button">⏱ Inserisci orario</button>`
+      : `<a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
+         <button class="btn btn-secondary btn-sm" data-action="checklist" data-id="${iv.id}" type="button" style="text-align:center;">Checklist</button>
+         ${!actionDone ? `<button class="btn btn-primary btn-sm btn-avvia" data-action="status" data-id="${iv.id}" data-newstate="${newState}" type="button">${actionLabel}</button>` : ''}`
+
     card.innerHTML = `
       <div style="height:4px;background:${borderColor};"></div>
       <div class="iv-inner">
@@ -238,11 +252,7 @@ export function renderInterventi(interventi) {
         <p class="iv-orario">⏱ ${orario}</p>
         ${tempiEffettivi}
         ${location ? `<p class="iv-location">📍 ${location}</p>` : '<div style="margin-bottom:14px;"></div>'}
-        <div class="iv-actions">
-          <a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
-          <button class="btn btn-secondary btn-sm" data-action="checklist" data-id="${iv.id}" type="button" style="text-align:center;">Checklist</button>
-          ${!actionDone ? `<button class="btn btn-primary btn-sm btn-avvia" data-action="status" data-id="${iv.id}" data-newstate="${newState}" type="button">${actionLabel}</button>` : ''}
-        </div>
+        <div class="iv-actions">${actionsHtml}</div>
       </div>
     `
     container.appendChild(card)
@@ -321,6 +331,127 @@ export async function cambiaStatoIntervento(id, stato) {
   }
 }
 
+async function apriModaleOre(interventoId, dataPianificata) {
+  const operatoreId = await getOperatoreId()
+  if (!operatoreId) return
+
+  // Carica eventuale presenza già registrata per quel giorno
+  const { data: esistente } = await supabase
+    .from('presenze_giornaliere')
+    .select('ore_ordinarie,ore_straordinario,note')
+    .eq('profilo_id', operatoreId)
+    .eq('data', dataPianificata)
+    .maybeSingle()
+
+  const oreOrdEx  = esistente?.ore_ordinarie   || 0
+  const oreStrEx  = esistente?.ore_straordinario || 0
+  const noteEx    = esistente?.note || ''
+
+  function toHM(dec) {
+    const h = Math.floor(dec), m = Math.round((dec - h) * 60)
+    return { h, m }
+  }
+  const { h: ohOrd, m: omOrd } = toHM(oreOrdEx)
+  const { h: ohStr, m: omStr } = toHM(oreStrEx)
+
+  const dataFmt = new Date(dataPianificata + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  // Crea overlay
+  const overlay = document.createElement('div')
+  overlay.id = 'ore-modal-overlay'
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9500;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45);'
+  overlay.innerHTML = `
+    <div style="
+      background:#fff;border-radius:20px 20px 0 0;padding:24px 20px 36px;
+      width:100%;max-width:480px;box-shadow:0 -8px 40px rgba(0,0,0,.15);
+      animation:slideUp .25s ease;
+    ">
+      <style>@keyframes slideUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}</style>
+      <div style="width:40px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 20px;"></div>
+      <h3 style="margin:0 0 4px;font-size:17px;font-weight:700;">Inserisci orario</h3>
+      <p style="margin:0 0 20px;font-size:13px;color:#6b7280;">${dataFmt}</p>
+
+      <div style="margin-bottom:18px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#374151;">Ore ordinarie</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Ore</label>
+            <input id="ore-modal-ord-h" type="number" min="0" max="24" value="${ohOrd}"
+              style="width:100%;padding:11px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Minuti</label>
+            <input id="ore-modal-ord-m" type="number" min="0" max="59" value="${omOrd}"
+              style="width:100%;padding:11px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#f59e0b;">Ore straordinarie</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Ore</label>
+            <input id="ore-modal-str-h" type="number" min="0" max="24" value="${ohStr}"
+              style="width:100%;padding:11px 12px;border:1.5px solid #fde68a;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Minuti</label>
+            <input id="ore-modal-str-m" type="number" min="0" max="59" value="${omStr}"
+              style="width:100%;padding:11px 12px;border:1.5px solid #fde68a;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:22px;">
+        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Note</label>
+        <textarea id="ore-modal-note" rows="2" placeholder="Cantiere, note speciali…"
+          style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:none;">${noteEx}</textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <button id="ore-modal-cancel" style="padding:13px;background:#f3f4f6;color:#374151;border:none;border-radius:12px;font-size:15px;cursor:pointer;">Annulla</button>
+        <button id="ore-modal-save"   style="padding:13px;background:#0d9488;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Salva</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+
+  function chiudi() { overlay.remove() }
+
+  overlay.getElementById?.('ore-modal-cancel')
+  document.getElementById('ore-modal-cancel').addEventListener('click', chiudi)
+  overlay.addEventListener('click', e => { if (e.target === overlay) chiudi() })
+
+  document.getElementById('ore-modal-save').addEventListener('click', async () => {
+    const ordH = parseInt(document.getElementById('ore-modal-ord-h').value) || 0
+    const ordM = parseInt(document.getElementById('ore-modal-ord-m').value) || 0
+    const strH = parseInt(document.getElementById('ore-modal-str-h').value) || 0
+    const strM = parseInt(document.getElementById('ore-modal-str-m').value) || 0
+    const note = document.getElementById('ore-modal-note').value.trim() || null
+
+    const ore_ordinarie   = ordH + ordM / 60
+    const ore_straordinario = strH + strM / 60
+
+    const { error } = await supabase.from('presenze_giornaliere').upsert({
+      profilo_id: operatoreId,
+      data: dataPianificata,
+      tipo: 'lavoro',
+      ore_ordinarie:    Math.round(ore_ordinarie * 100) / 100,
+      ore_straordinario: Math.round(ore_straordinario * 100) / 100,
+      nota_cantiere: note,
+    }, { onConflict: 'profilo_id,data' })
+
+    if (error) {
+      showToast('Errore salvataggio ore', 'error')
+      console.error(error)
+    } else {
+      showToast('Orario salvato', 'success')
+      chiudi()
+    }
+  })
+}
+
 let _vistaSettimana = false
 
 export function refreshAgenda() {
@@ -331,6 +462,8 @@ export function refreshAgenda() {
 }
 
 export async function initAgenda() {
+  await loadModalita()
+
   const btnOggi = document.getElementById('btn-vista-oggi')
   const btnSett = document.getElementById('btn-vista-settimana')
   const subtitle = document.getElementById('agenda-subtitle')
@@ -368,14 +501,16 @@ export async function initAgenda() {
     if (action === 'status') {
       const newState = button.dataset.newstate
       const ok = await cambiaStatoIntervento(id, newState)
-      if (ok) {
-        await refresh()
-      }
+      if (ok) await refresh()
     }
 
     if (action === 'checklist') {
       const eventDetail = new CustomEvent('operatore:open-checklist', { detail: { interventoId: id } })
       window.dispatchEvent(eventDetail)
+    }
+
+    if (action === 'inserisci-ore') {
+      await apriModaleOre(id, button.dataset.data)
     }
   })
 

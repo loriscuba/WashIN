@@ -24,6 +24,38 @@ async function saveAzienda(fields) {
   }
 }
 
+async function setImpostazione(chiave, valore) {
+  const { error } = await supabase.from('impostazioni')
+    .upsert({ chiave, valore: String(valore) }, { onConflict: 'chiave' })
+  if (error) throw error
+}
+
+async function getImpostazione(chiave) {
+  const { data } = await supabase.from('impostazioni').select('valore').eq('chiave', chiave).maybeSingle()
+  return data?.valore ?? null
+}
+
+function updateModalitaCards(isOrario) {
+  const classicaCard = document.getElementById('mode-classica-card')
+  const orarioCard   = document.getElementById('mode-orario-card')
+  if (!classicaCard || !orarioCard) return
+  if (isOrario) {
+    classicaCard.style.border = '2px solid var(--gray-200)'
+    classicaCard.style.background = '#fafafa'
+    classicaCard.querySelector('p').style.color = 'var(--gray-500)'
+    orarioCard.style.border = '2px solid #0d9488'
+    orarioCard.style.background = '#f0fdfa'
+    orarioCard.querySelector('p').style.color = '#0d9488'
+  } else {
+    classicaCard.style.border = '2px solid #0d9488'
+    classicaCard.style.background = '#f0fdfa'
+    classicaCard.querySelector('p').style.color = '#0d9488'
+    orarioCard.style.border = '2px solid var(--gray-200)'
+    orarioCard.style.background = '#fafafa'
+    orarioCard.querySelector('p').style.color = 'var(--gray-500)'
+  }
+}
+
 export function initImpostazioni() {
   const form = document.getElementById('azienda-form')
   if (!form) return
@@ -49,4 +81,25 @@ export function initImpostazioni() {
       iban:            fd.get('iban') || null,
     })
   })
+
+  // Modalità interventi operatrice
+  const toggleOrario = document.getElementById('impost-modalita-orario')
+  if (toggleOrario) {
+    getImpostazione('modalita_intervento').then(val => {
+      const isOrario = val === 'orario'
+      toggleOrario.checked = isOrario
+      updateModalitaCards(isOrario)
+    })
+    toggleOrario.addEventListener('change', async () => {
+      const val = toggleOrario.checked ? 'orario' : 'classica'
+      try {
+        await setImpostazione('modalita_intervento', val)
+        updateModalitaCards(toggleOrario.checked)
+        showToast(`Modalità impostata: ${val}`, 'success')
+      } catch (err) {
+        showToast('Errore salvataggio modalità', 'error')
+        console.error(err)
+      }
+    })
+  }
 }
