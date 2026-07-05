@@ -33,8 +33,16 @@ function _getCostoOrario(op, opId, busteMap) {
   return { costoOrario: 0, fonte: null }
 }
 
-// Ore intervento: 1) inizio/fine effettivo  2) orario pianificato
-function _getOreIntervento(iv) {
+// Ore intervento: 1) presenze_giornaliere (modalità orario)  2) inizio/fine effettivo  3) orario pianificato
+function _getOreIntervento(iv, presenzeMap = {}) {
+  // Cerca presenza per ogni operatore dell'intervento; prende la prima trovata
+  for (const opId of [iv.operatore_id, iv.operatore2_id].filter(Boolean)) {
+    const p = presenzeMap[`${opId}|${iv.data_pianificata}`]
+    if (p) {
+      const ore = (p.ore_ordinarie || 0) + (p.ore_straordinario || 0)
+      if (ore > 0) return { ore, anomalo: false, fonte: 'presenze' }
+    }
+  }
   if (iv.inizio_effettivo && iv.fine_effettivo) {
     const ore = (new Date(iv.fine_effettivo) - new Date(iv.inizio_effettivo)) / 3_600_000
     if (ore > 24) return { ore, anomalo: true, fonte: 'effettivo' }
@@ -54,6 +62,7 @@ const FONTE_BADGE = {
   consuntivo: '<span title="Da consuntivo costi" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#eff6ff;color:#1e40af;">consuntivo</span>',
   profilo:    '<span title="Da costo mensile profilo" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#f3f4f6;color:#374151;">profilo</span>',
   pianificato:'<span title="Ore pianificate (no timbrature)" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e;">pianif.</span>',
+  presenze:   '<span title="Ore inserite dall\'operatrice" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#f0fdf4;color:#15803d;">ore ins.</span>',
 }
 
 export async function calcolaContoEconomico(contratto_id, mese, anno) {
@@ -103,6 +112,18 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     ;(buste || []).forEach(b => { busteMap[b.operatore_id] = b })
   }
 
+  // Presenze giornaliere (modalità orario) — chiave: "profilo_id|data"
+  let presenzeMap = {}
+  if (opIds.length > 0) {
+    const { data: presenze } = await supabase
+      .from('presenze_giornaliere')
+      .select('profilo_id, data, ore_ordinarie, ore_straordinario')
+      .in('profilo_id', opIds)
+      .gte('data', startDate)
+      .lte('data', endDate)
+    ;(presenze || []).forEach(p => { presenzeMap[`${p.profilo_id}|${p.data}`] = p })
+  }
+
   // Materiali
   let matsByIntervento = {}
   if (rows.length > 0) {
@@ -130,7 +151,7 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
   let totaleForzaLavoro = 0, totaleMateriali = 0, totaleVeicoli = 0
 
   const interventiCalcolati = rows.map(iv => {
-    const { ore, anomalo, fonte: fonteOre } = _getOreIntervento(iv)
+    const { ore, anomalo, fonte: fonteOre } = _getOreIntervento(iv, presenzeMap)
     if (fonteOre === 'pianificato') usaDatiStimati = true
 
     if (anomalo) {
@@ -275,7 +296,7 @@ async function calcolaEMostra() {
           const oreCell = iv.anomalo
             ? `<span style="color:#dc2626;font-weight:700;" title="Durata anomala: verifica inizio/fine effettivo nel pannello Interventi">${iv.ore.toFixed(1)}h ⚠</span>`
             : `${iv.ore.toFixed(1)}h`
-          const oreBadge = (!iv.anomalo && iv.fonteOre && iv.fonteOre !== 'effettivo') ? ' ' + (FONTE_BADGE[iv.fonteOre] || '') : ''
+          const oreBadge = (!iv.anomalo && iv.fonteOre && iv.fonteOre !== 'effettivo' && iv.fonteOre !== 'presenze') ? ' ' + (FONTE_BADGE[iv.fonteOre] || '') : ''
           const costoBadge = (!iv.anomalo && iv.fonteCosto) ? (FONTE_BADGE[iv.fonteCosto] || '') : ''
           tr.innerHTML = `
             <td>${iv.data ? new Date(iv.data + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : '-'}</td>
