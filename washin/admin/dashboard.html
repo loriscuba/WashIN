@@ -2781,11 +2781,19 @@
           <button id="ce-calcola" class="btn btn-primary btn-sm">Calcola</button>
         </div>
 
-        <!-- Banner dati parziali -->
+        <!-- Banner dati stimati (ore pianificate usate al posto di timbrature) -->
+        <div id="ce-banner-stimati" style="display:none;align-items:flex-start;gap:10px;background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+          <span style="font-size:18px;flex-shrink:0;">ℹ️</span>
+          <span style="font-size:13px;color:#1e40af;line-height:1.4;">
+            <strong>Ore stimate:</strong> alcuni interventi non hanno timbrature (inizio/fine effettivo), le ore sono calcolate dall'orario pianificato. Il costo potrebbe non riflettere il tempo reale.
+          </span>
+        </div>
+
+        <!-- Banner dati parziali (operatori senza costo configurato) -->
         <div id="ce-banner-parziale" style="display:none;align-items:flex-start;gap:10px;background:#fefce8;border:1px solid #fde047;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
           <span style="font-size:18px;flex-shrink:0;">⚠️</span>
-          <span style="font-size:13px;color:#92400e;line-height:1.4;">
-            <strong>Dati parziali:</strong> alcuni operatori hanno <code>costo_mensile = 0</code> o non ci sono interventi completati nel periodo selezionato. I valori potrebbero essere incompleti.
+          <span id="ce-banner-parziale-text" style="font-size:13px;color:#92400e;line-height:1.4;">
+            <strong>Dati parziali:</strong> costo non configurato per alcuni operatori. I valori potrebbero essere incompleti.
           </span>
         </div>
 
@@ -2821,6 +2829,7 @@
                     <th>Materiali</th>
                     <th>Veicoli</th>
                     <th>Totale</th>
+                    <th>Fonte</th>
                   </tr>
                 </thead>
                 <tbody id="ce-interventi-tbody"></tbody>
