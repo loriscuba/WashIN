@@ -19,6 +19,43 @@ function marginColor(pct) {
   return '#dc2626'
 }
 
+// Costo orario: 1) busta paga del mese  2) costo_orario_medio da consuntivi  3) costo_mensile/ore_mensili
+function _getCostoOrario(op, opId, busteMap) {
+  const busta = busteMap[opId]
+  if (busta?.costo_aziendale > 0 && busta?.ore_lavorate > 0)
+    return { costoOrario: busta.costo_aziendale / busta.ore_lavorate, fonte: 'busta' }
+  if (op?.costo_orario_medio > 0)
+    return { costoOrario: op.costo_orario_medio, fonte: 'consuntivo' }
+  const cm = op?.costo_mensile || 0
+  const om = op?.ore_mensili_contratto || 160
+  if (cm > 0)
+    return { costoOrario: cm / om, fonte: 'profilo' }
+  return { costoOrario: 0, fonte: null }
+}
+
+// Ore intervento: 1) inizio/fine effettivo  2) orario pianificato
+function _getOreIntervento(iv) {
+  if (iv.inizio_effettivo && iv.fine_effettivo) {
+    const ore = (new Date(iv.fine_effettivo) - new Date(iv.inizio_effettivo)) / 3_600_000
+    if (ore > 24) return { ore, anomalo: true, fonte: 'effettivo' }
+    if (ore > 0)  return { ore, anomalo: false, fonte: 'effettivo' }
+  }
+  if (iv.ora_inizio_pianificata && iv.ora_fine_pianificata) {
+    const [hi, mi] = iv.ora_inizio_pianificata.split(':').map(Number)
+    const [hf, mf] = iv.ora_fine_pianificata.split(':').map(Number)
+    const ore = (hf * 60 + mf - hi * 60 - mi) / 60
+    if (ore > 0 && ore <= 24) return { ore, anomalo: false, fonte: 'pianificato' }
+  }
+  return { ore: 0, anomalo: false, fonte: null }
+}
+
+const FONTE_BADGE = {
+  busta:      '<span title="Da busta paga importata" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46;">busta</span>',
+  consuntivo: '<span title="Da consuntivo costi" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#eff6ff;color:#1e40af;">consuntivo</span>',
+  profilo:    '<span title="Da costo mensile profilo" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#f3f4f6;color:#374151;">profilo</span>',
+  pianificato:'<span title="Ore pianificate (no timbrature)" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e;">pianif.</span>',
+}
+
 export async function calcolaContoEconomico(contratto_id, mese, anno) {
   const startDate = `${anno}-${String(mese).padStart(2, '0')}-01`
   const endDate = new Date(anno, mese, 0).toISOString().slice(0, 10)
@@ -30,25 +67,43 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     .single()
   if (ce || !contratto) return null
 
+  // Tutti gli interventi non annullati del periodo (inclusi pianificato, per modalità orario)
   const { data: interventiRaw, error: ie } = await supabase
     .from('interventi')
     .select(`
       id, data_pianificata, ora_inizio_pianificata, ora_fine_pianificata,
-      inizio_effettivo, fine_effettivo, km_percorsi,
-      operatore:profili!operatore_id(nome, cognome, costo_mensile, ore_mensili_contratto),
-      operatore2:profili!operatore2_id(nome, cognome, costo_mensile, ore_mensili_contratto)
+      inizio_effettivo, fine_effettivo, km_percorsi, stato,
+      operatore_id, operatore2_id,
+      operatore:profili!operatore_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio),
+      operatore2:profili!operatore2_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio)
     `)
     .eq('contratto_id', contratto_id)
-    .in('stato', ['completato', 'approvato'])
+    .neq('stato', 'annullato')
     .gte('data_pianificata', startDate)
     .lte('data_pianificata', endDate)
-    .not('fine_effettivo', 'is', null)
-    .not('inizio_effettivo', 'is', null)
+    .order('data_pianificata', { ascending: true })
   if (ie) throw ie
 
   const rows = interventiRaw || []
 
-  // Materials for all interventions
+  // Carica buste_paga del mese per tutti gli operatori coinvolti
+  const opIds = [...new Set([
+    ...rows.map(r => r.operatore_id),
+    ...rows.map(r => r.operatore2_id),
+  ].filter(Boolean))]
+
+  let busteMap = {}
+  if (opIds.length > 0) {
+    const { data: buste } = await supabase
+      .from('buste_paga')
+      .select('operatore_id, costo_aziendale, ore_lavorate')
+      .in('operatore_id', opIds)
+      .eq('anno', anno)
+      .eq('mese', mese)
+    ;(buste || []).forEach(b => { busteMap[b.operatore_id] = b })
+  }
+
+  // Materiali
   let matsByIntervento = {}
   if (rows.length > 0) {
     const ids = rows.map(r => r.id)
@@ -62,74 +117,68 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     })
   }
 
-  // Fleet average for vehicle cost
+  // Fleet
   const { data: veicoli } = await supabase
     .from('veicoli').select('consumo_per_100km, costo_carburante_litro').eq('attivo', true)
   const vCount = (veicoli || []).length
   const avgConsumo = vCount ? veicoli.reduce((s, v) => s + (v.consumo_per_100km || 8), 0) / vCount : 8
-  const avgCarbL = vCount ? veicoli.reduce((s, v) => s + (v.costo_carburante_litro || 1.8), 0) / vCount : 1.8
+  const avgCarbL   = vCount ? veicoli.reduce((s, v) => s + (v.costo_carburante_litro || 1.8), 0) / vCount : 1.8
 
   let hasDatiParziali = rows.length === 0
-  let totaleForzaLavoro = 0
-  let totaleMateriali = 0
-  let totaleVeicoli = 0
+  let opSenzaCosto    = []
+  let usaDatiStimati  = false
+  let totaleForzaLavoro = 0, totaleMateriali = 0, totaleVeicoli = 0
 
   const interventiCalcolati = rows.map(iv => {
-    const ore = Math.max(0, (new Date(iv.fine_effettivo) - new Date(iv.inizio_effettivo)) / 3_600_000)
-    // durate >24h indicano timestamp sbagliato (es. timbratura dimenticata del giorno prima)
-    const anomalo = ore > 24
+    const { ore, anomalo, fonte: fonteOre } = _getOreIntervento(iv)
+    if (fonteOre === 'pianificato') usaDatiStimati = true
 
-    let costoForzaLavoro = 0
-    if (!anomalo) {
-      ;[iv.operatore, iv.operatore2].filter(Boolean).forEach(op => {
-        const costoMensile = op.costo_mensile || 0
-        const oreMensili = op.ore_mensili_contratto || 160
-        if (!costoMensile) hasDatiParziali = true
-        const costoOrario = oreMensili > 0 ? costoMensile / oreMensili : 0
-        costoForzaLavoro += costoOrario * ore
-      })
+    if (anomalo) {
+      return { id: iv.id, data: iv.data_pianificata, ore, anomalo: true, stato: iv.stato,
+               costoForzaLavoro: 0, costoMateriali: 0, costoVeicolo: 0, fonteOre, fonteCosto: null }
+    }
+
+    let costoForzaLavoro = 0, fonteCosto = null
+    const operatori = [
+      iv.operatore  ? { op: iv.operatore,  id: iv.operatore_id  } : null,
+      iv.operatore2 ? { op: iv.operatore2, id: iv.operatore2_id } : null,
+    ].filter(Boolean)
+
+    for (const { op, id } of operatori) {
+      const { costoOrario, fonte: fc } = _getCostoOrario(op, id, busteMap)
+      if (!fc) {
+        hasDatiParziali = true
+        const cognome = op?.cognome || 'operatore'
+        if (!opSenzaCosto.includes(cognome)) opSenzaCosto.push(cognome)
+      }
+      if (!fonteCosto && fc) fonteCosto = fc
+      costoForzaLavoro += costoOrario * ore
     }
 
     const mats = matsByIntervento[iv.id] || []
-    const costoMateriali = anomalo ? 0 : mats.reduce((s, m) => s + (m.quantita || 0) * (m.costo_unitario_snapshot || 0), 0)
-
+    const costoMateriali = mats.reduce((s, m) => s + (m.quantita || 0) * (m.costo_unitario_snapshot || 0), 0)
     const km = iv.km_percorsi || 0
-    const costoVeicolo = (!anomalo && km > 0) ? km * (avgConsumo / 100) * avgCarbL : 0
+    const costoVeicolo = km > 0 ? km * (avgConsumo / 100) * avgCarbL : 0
 
-    if (!anomalo) {
-      totaleForzaLavoro += costoForzaLavoro
-      totaleMateriali += costoMateriali
-      totaleVeicoli += costoVeicolo
-    }
+    totaleForzaLavoro += costoForzaLavoro
+    totaleMateriali   += costoMateriali
+    totaleVeicoli     += costoVeicolo
 
-    return {
-      id: iv.id,
-      data: iv.data_pianificata,
-      ore,
-      anomalo,
-      costoForzaLavoro,
-      costoMateriali,
-      costoVeicolo,
-    }
+    return { id: iv.id, data: iv.data_pianificata, ore, anomalo: false, stato: iv.stato,
+             costoForzaLavoro, costoMateriali, costoVeicolo, fonteOre, fonteCosto }
   })
 
-  const hasAnomalies = interventiCalcolati.some(iv => iv.anomalo)
-  const ricavo = contratto.importo_mensile || 0
-  const costoTotale = totaleForzaLavoro + totaleMateriali + totaleVeicoli
+  const ricavo       = contratto.importo_mensile || 0
+  const costoTotale  = totaleForzaLavoro + totaleMateriali + totaleVeicoli
   const margineLordo = ricavo - costoTotale
-  const marginePct = ricavo > 0 ? (margineLordo / ricavo) * 100 : null
+  const marginePct   = ricavo > 0 ? (margineLordo / ricavo) * 100 : null
 
   return {
-    contratto,
-    ricavo,
-    totaleForzaLavoro,
-    totaleMateriali,
-    totaleVeicoli,
-    costoTotale,
-    margineLordo,
-    marginePct,
-    hasDatiParziali,
-    hasAnomalies,
+    contratto, ricavo,
+    totaleForzaLavoro, totaleMateriali, totaleVeicoli,
+    costoTotale, margineLordo, marginePct,
+    hasDatiParziali, opSenzaCosto, usaDatiStimati,
+    hasAnomalies: interventiCalcolati.some(iv => iv.anomalo),
     interventi: interventiCalcolati,
   }
 }
@@ -180,12 +229,15 @@ async function calcolaEMostra() {
   const loadingEl = document.getElementById('ce-loading')
   const kpiEl = document.getElementById('ce-kpi')
   const bannerEl = document.getElementById('ce-banner-parziale')
+  const bannerTextEl = document.getElementById('ce-banner-parziale-text')
+  const bannerStimatiEl = document.getElementById('ce-banner-stimati')
   const anomalieEl = document.getElementById('ce-banner-anomalie')
   const sectionEl = document.getElementById('ce-interventi-section')
 
   if (loadingEl) loadingEl.style.display = 'flex'
   if (kpiEl) kpiEl.innerHTML = ''
   if (bannerEl) bannerEl.style.display = 'none'
+  if (bannerStimatiEl) bannerStimatiEl.style.display = 'none'
   if (anomalieEl) anomalieEl.style.display = 'none'
   if (sectionEl) sectionEl.style.display = 'none'
 
@@ -198,7 +250,16 @@ async function calcolaEMostra() {
       return
     }
 
-    if (bannerEl) bannerEl.style.display = result.hasDatiParziali ? 'flex' : 'none'
+    if (bannerEl) {
+      bannerEl.style.display = result.hasDatiParziali ? 'flex' : 'none'
+      if (result.hasDatiParziali && bannerTextEl) {
+        const nomi = result.opSenzaCosto.length
+          ? ` (${result.opSenzaCosto.join(', ')})`
+          : ''
+        bannerTextEl.innerHTML = `<strong>Dati parziali:</strong> costo non configurato per alcuni operatori${nomi}. Importa le buste paga o imposta il costo mensile nel profilo. I valori potrebbero essere incompleti.`
+      }
+    }
+    if (bannerStimatiEl) bannerStimatiEl.style.display = result.usaDatiStimati ? 'flex' : 'none'
     if (anomalieEl) anomalieEl.style.display = result.hasAnomalies ? 'flex' : 'none'
 
     renderKPICards(result)
@@ -214,13 +275,16 @@ async function calcolaEMostra() {
           const oreCell = iv.anomalo
             ? `<span style="color:#dc2626;font-weight:700;" title="Durata anomala: verifica inizio/fine effettivo nel pannello Interventi">${iv.ore.toFixed(1)}h ⚠</span>`
             : `${iv.ore.toFixed(1)}h`
+          const oreBadge = (!iv.anomalo && iv.fonteOre && iv.fonteOre !== 'effettivo') ? ' ' + (FONTE_BADGE[iv.fonteOre] || '') : ''
+          const costoBadge = (!iv.anomalo && iv.fonteCosto) ? (FONTE_BADGE[iv.fonteCosto] || '') : ''
           tr.innerHTML = `
             <td>${iv.data ? new Date(iv.data + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : '-'}</td>
-            <td>${oreCell}</td>
+            <td>${oreCell}${oreBadge}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro)}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoMateriali)}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoVeicolo)}</td>
             <td><strong>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro + iv.costoMateriali + iv.costoVeicolo)}</strong></td>
+            <td>${costoBadge}</td>
           `
           tbody.appendChild(tr)
         })
@@ -328,6 +392,8 @@ export function initContoEconomico() {
     if (kpiEl) kpiEl.innerHTML = ''
     const bannerEl = document.getElementById('ce-banner-parziale')
     if (bannerEl) bannerEl.style.display = 'none'
+    const bannerStimatiEl = document.getElementById('ce-banner-stimati')
+    if (bannerStimatiEl) bannerStimatiEl.style.display = 'none'
     const sectionEl = document.getElementById('ce-interventi-section')
     if (sectionEl) sectionEl.style.display = 'none'
     modal.classList.add('active')
