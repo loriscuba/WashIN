@@ -33,13 +33,11 @@ function _getCostoOrario(op, opId, busteMap) {
   return { costoOrario: 0, fonte: null }
 }
 
-// Ore intervento: 1) inizio/fine effettivo  2) orario pianificato
-// Nota: presenze_giornaliere registra ore giornaliere totali (non per-intervento), non usarle qui
+// Ore intervento: 1) ore inserite (ore_ordinarie + ore_straordinario)  2) orario pianificato
 function _getOreIntervento(iv) {
-  if (iv.inizio_effettivo && iv.fine_effettivo) {
-    const ore = (new Date(iv.fine_effettivo) - new Date(iv.inizio_effettivo)) / 3_600_000
-    if (ore > 24) return { ore, anomalo: true, fonte: 'effettivo' }
-    if (ore > 0)  return { ore, anomalo: false, fonte: 'effettivo' }
+  if (iv.ore_ordinarie != null) {
+    const ore = (iv.ore_ordinarie || 0) + (iv.ore_straordinario || 0)
+    return { ore, anomalo: false, fonte: 'inserite' }
   }
   if (iv.ora_inizio_pianificata && iv.ora_fine_pianificata) {
     const [hi, mi] = iv.ora_inizio_pianificata.split(':').map(Number)
@@ -54,7 +52,8 @@ const FONTE_BADGE = {
   busta:      '<span title="Da busta paga importata" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46;">busta</span>',
   consuntivo: '<span title="Da consuntivo costi" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#eff6ff;color:#1e40af;">consuntivo</span>',
   profilo:    '<span title="Da costo mensile profilo" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#f3f4f6;color:#374151;">profilo</span>',
-  pianificato:'<span title="Ore pianificate (no timbrature)" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e;">pianif.</span>',
+  inserite:   '<span title="Ore inserite dall\'operatore" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46;">✓ ins.</span>',
+  pianificato:'<span title="Ore pianificate (stima)" style="font-size:10px;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e;">pianif.</span>',
 }
 
 export async function calcolaContoEconomico(contratto_id, mese, anno) {
@@ -74,6 +73,7 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     .select(`
       id, data_pianificata, ora_inizio_pianificata, ora_fine_pianificata,
       inizio_effettivo, fine_effettivo, km_percorsi, stato,
+      ore_ordinarie, ore_straordinario, note_ore,
       operatore_id, operatore2_id,
       operatore:profili!operatore_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio),
       operatore2:profili!operatore2_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio)
@@ -165,8 +165,14 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     totaleMateriali   += costoMateriali
     totaleVeicoli     += costoVeicolo
 
-    return { id: iv.id, data: iv.data_pianificata, ore, anomalo: false, stato: iv.stato,
-             costoForzaLavoro, costoMateriali, costoVeicolo, fonteOre, fonteCosto }
+    const op1Name = iv.operatore  ? `${iv.operatore.nome||''} ${iv.operatore.cognome||''}`.trim() : null
+    const op2Name = iv.operatore2 ? `${iv.operatore2.nome||''} ${iv.operatore2.cognome||''}`.trim() : null
+    return {
+      id: iv.id, data: iv.data_pianificata, ore, anomalo: false, stato: iv.stato,
+      ore_ordinarie: iv.ore_ordinarie, ore_straordinario: iv.ore_straordinario, note_ore: iv.note_ore,
+      op1Name, op2Name, operatore_id: iv.operatore_id, operatore2_id: iv.operatore2_id,
+      costoForzaLavoro, costoMateriali, costoVeicolo, fonteOre, fonteCosto,
+    }
   })
 
   const ricavo       = contratto.importo_mensile || 0
@@ -181,6 +187,7 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     hasDatiParziali, opSenzaCosto, usaDatiStimati,
     hasAnomalies: interventiCalcolati.some(iv => iv.anomalo),
     interventi: interventiCalcolati,
+    rawRows: rows,
   }
 }
 
@@ -273,24 +280,35 @@ async function calcolaEMostra() {
         result.interventi.forEach(iv => {
           const tr = document.createElement('tr')
           if (iv.anomalo) tr.style.background = '#fef2f2'
-          const oreCell = iv.anomalo
-            ? `<span style="color:#dc2626;font-weight:700;" title="Durata anomala: verifica inizio/fine effettivo nel pannello Interventi">${iv.ore.toFixed(1)}h ⚠</span>`
-            : `${iv.ore.toFixed(1)}h`
-          const oreBadge = (!iv.anomalo && iv.fonteOre && iv.fonteOre !== 'effettivo') ? ' ' + (FONTE_BADGE[iv.fonteOre] || '') : ''
-          const costoBadge = (!iv.anomalo && iv.fonteCosto) ? (FONTE_BADGE[iv.fonteCosto] || '') : ''
+          if (iv.fonteOre === 'inserite') tr.style.borderLeft = '3px solid #10b981'
+          const dateFmt = iv.data ? new Date(iv.data + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : '-'
+          const oreCell = `${iv.ore.toFixed(1)}h`
+          const oreBadge = iv.fonteOre ? ' ' + (FONTE_BADGE[iv.fonteOre] || '') : ''
+          const costoBadge = iv.fonteCosto ? (FONTE_BADGE[iv.fonteCosto] || '') : ''
+          const operatori = [iv.op1Name, iv.op2Name].filter(Boolean).join(', ') || '-'
           tr.innerHTML = `
-            <td>${iv.data ? new Date(iv.data + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : '-'}</td>
+            <td>${dateFmt}</td>
+            <td style="font-size:12px;color:var(--gray-600);">${operatori}</td>
             <td>${oreCell}${oreBadge}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro)}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoMateriali)}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoVeicolo)}</td>
             <td><strong>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro + iv.costoMateriali + iv.costoVeicolo)}</strong></td>
             <td>${costoBadge}</td>
+            <td><button style="font-size:11px;padding:3px 8px;background:#f3f4f6;border:none;border-radius:6px;cursor:pointer;" data-ce-edit="${iv.id}" data-op1="${iv.operatore_id||''}" data-op1name="${iv.op1Name||''}" data-op2="${iv.operatore2_id||''}" data-op2name="${iv.op2Name||''}" data-data="${iv.data}">✏️</button></td>
           `
           tbody.appendChild(tr)
         })
       }
     }
+
+    // Bottone stampa resoconto
+    const stampaBtn = document.getElementById('ce-stampa-btn')
+    if (stampaBtn) {
+      stampaBtn.onclick = () => stampaResoconto(result, mese, anno)
+      stampaBtn.style.display = result.interventi.length > 0 ? 'inline-flex' : 'none'
+    }
+
   } catch (err) {
     if (loadingEl) loadingEl.style.display = 'none'
     showToast('Errore: ' + err.message, 'error')
@@ -363,6 +381,77 @@ export async function loadWidgetMarginalita() {
   }
 }
 
+function stampaResoconto(result, mese, anno) {
+  const MESI_LABEL = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+  const cliente = result.contratto.clienti?.ragione_sociale || ''
+  const contratto = result.contratto.numero_contratto || result.contratto.id
+  const periodo = `${MESI_LABEL[mese-1]} ${anno}`
+
+  const righe = result.interventi
+    .filter(iv => !iv.anomalo && iv.ore > 0)
+    .map(iv => {
+      const dateFmt = new Date(iv.data + 'T00:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short' })
+      const operatori = [iv.op1Name, iv.op2Name].filter(Boolean).join(', ')
+      const oreOrd = iv.ore_ordinarie != null ? iv.ore_ordinarie.toFixed(2) : '—'
+      const oreStr = iv.ore_straordinario != null ? iv.ore_straordinario.toFixed(2) : '0.00'
+      const totOre = iv.ore.toFixed(2)
+      return `<tr>
+        <td>${dateFmt}</td>
+        <td>${operatori}</td>
+        <td style="text-align:right;">${oreOrd}</td>
+        <td style="text-align:right;">${oreStr}</td>
+        <td style="text-align:right;font-weight:600;">${totOre}</td>
+        <td style="font-size:11px;color:#6b7280;">${iv.note_ore || ''}</td>
+      </tr>`
+    }).join('')
+
+  const totOrd = result.interventi.filter(iv=>!iv.anomalo).reduce((s,iv)=>s+(iv.ore_ordinarie||0),0)
+  const totStr = result.interventi.filter(iv=>!iv.anomalo).reduce((s,iv)=>s+(iv.ore_straordinario||0),0)
+  const totOre = totOrd + totStr
+
+  const win = window.open('', '_blank', 'width=800,height=600')
+  win.document.write(`<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">
+  <title>Resoconto ${cliente} — ${periodo}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #111; margin: 32px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .sub { color: #6b7280; font-size: 13px; margin: 0 0 24px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th { background: #f3f4f6; padding: 8px 10px; text-align: left; font-size: 12px; border-bottom: 2px solid #e5e7eb; }
+    td { padding: 7px 10px; border-bottom: 1px solid #e5e7eb; }
+    .footer { margin-top: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .totali { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; }
+    .totali td { border: none; padding: 4px 12px; }
+    .importo { font-size: 15px; font-weight: 700; color: #059669; }
+    @media print { body { margin: 16px; } button { display: none; } }
+  </style></head><body>
+  <h1>Resoconto prestazioni — ${cliente}</h1>
+  <p class="sub">Contratto: ${contratto} &nbsp;|&nbsp; Periodo: ${periodo}</p>
+  <table>
+    <thead><tr>
+      <th>Data</th><th>Operatore</th>
+      <th style="text-align:right;">Ore ord.</th>
+      <th style="text-align:right;">Ore str.</th>
+      <th style="text-align:right;">Totale</th>
+      <th>Note</th>
+    </tr></thead>
+    <tbody>${righe}</tbody>
+  </table>
+  <div class="footer">
+    <table class="totali">
+      <tr><td>Ore ordinarie totali</td><td style="text-align:right;font-weight:700;">${totOrd.toFixed(2)}</td></tr>
+      <tr><td>Ore straordinarie totali</td><td style="text-align:right;font-weight:700;">${totStr.toFixed(2)}</td></tr>
+      <tr><td style="font-weight:700;">Totale ore</td><td class="importo" style="text-align:right;">${totOre.toFixed(2)}</td></tr>
+      <tr><td>Importo contratto mensile</td><td class="importo" style="text-align:right;">${eur(result.ricavo)}</td></tr>
+    </table>
+  </div>
+  <div style="margin-top:28px;text-align:right;">
+    <button onclick="window.print()" style="padding:10px 24px;background:#0d9488;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Stampa / Salva PDF</button>
+  </div>
+  </body></html>`)
+  win.document.close()
+}
+
 export function initContoEconomico() {
   const modal = document.getElementById('conto-economico-modal')
   if (!modal) return
@@ -398,6 +487,16 @@ export function initContoEconomico() {
     const sectionEl = document.getElementById('ce-interventi-section')
     if (sectionEl) sectionEl.style.display = 'none'
     modal.classList.add('active')
+    calcolaEMostra()
+  })
+
+  // Edit ore per riga nella tabella dettaglio
+  document.getElementById('ce-interventi-tbody')?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-ce-edit]')
+    if (!btn) return
+    const { default: { apriModaleOreAdmin } } = await import('./interventi.js')
+    await apriModaleOreAdmin(btn.dataset.ceEdit, btn.dataset.data,
+      btn.dataset.op1, btn.dataset.op1name, btn.dataset.op2, btn.dataset.op2name)
     calcolaEMostra()
   })
 
