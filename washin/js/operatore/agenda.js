@@ -444,7 +444,7 @@ async function apriModaleOre(interventoId, dataPianificata) {
       ore_ordinarie,
       ore_straordinario,
       note_ore: note,
-      stato: 'concluso',
+      stato: 'completato',
     }).eq('id', interventoId)
 
     if (error) {

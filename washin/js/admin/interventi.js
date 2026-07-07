@@ -911,7 +911,7 @@ export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, o
     const ore_straordinario = Math.round((strH + strM / 60) * 100) / 100
 
     const { error } = await supabase.from('interventi').update({
-      ore_ordinarie, ore_straordinario, note_ore: note, stato: 'concluso',
+      ore_ordinarie, ore_straordinario, note_ore: note, stato: 'completato',
     }).eq('id', interventoId)
 
     if (error) { showToast('Errore salvataggio ore', 'error'); console.error(error); return }
