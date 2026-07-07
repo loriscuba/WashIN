@@ -33,10 +33,13 @@ function _getCostoOrario(op, opId, busteMap) {
   return { costoOrario: 0, fonte: null }
 }
 
-// Ore intervento: 1) ore inserite (ore_ordinarie + ore_straordinario)  2) orario pianificato
-function _getOreIntervento(iv) {
-  if (iv.ore_ordinarie != null) {
-    const ore = (iv.ore_ordinarie || 0) + (iv.ore_straordinario || 0)
+// Ore intervento per un operatore: isOp2=false → ore_ordinarie, isOp2=true → ore_ordinarie_op2
+// Fallback: orario pianificato
+function _getOreIntervento(iv, isOp2 = false) {
+  const oreOrd = isOp2 ? iv.ore_ordinarie_op2 : iv.ore_ordinarie
+  const oreStr = isOp2 ? iv.ore_straordinario_op2 : iv.ore_straordinario
+  if (oreOrd != null) {
+    const ore = (oreOrd || 0) + (oreStr || 0)
     return { ore, anomalo: false, fonte: 'inserite' }
   }
   if (iv.ora_inizio_pianificata && iv.ora_fine_pianificata) {
@@ -73,7 +76,7 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     .select(`
       id, data_pianificata, ora_inizio_pianificata, ora_fine_pianificata,
       inizio_effettivo, fine_effettivo, km_percorsi, stato,
-      ore_ordinarie, ore_straordinario, note_ore,
+      ore_ordinarie, ore_straordinario, ore_ordinarie_op2, ore_straordinario_op2, note_ore,
       operatore_id, operatore2_id,
       operatore:profili!operatore_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio),
       operatore2:profili!operatore2_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio)
@@ -131,21 +134,16 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
   let totaleForzaLavoro = 0, totaleMateriali = 0, totaleVeicoli = 0
 
   const interventiCalcolati = rows.map(iv => {
-    const { ore, anomalo, fonte: fonteOre } = _getOreIntervento(iv)
-    if (fonteOre === 'pianificato') usaDatiStimati = true
-
-    if (anomalo) {
-      return { id: iv.id, data: iv.data_pianificata, ore, anomalo: true, stato: iv.stato,
-               costoForzaLavoro: 0, costoMateriali: 0, costoVeicolo: 0, fonteOre, fonteCosto: null }
-    }
-
-    let costoForzaLavoro = 0, fonteCosto = null
+    let costoForzaLavoro = 0, fonteCosto = null, fonteOre = null
     const operatori = [
-      iv.operatore  ? { op: iv.operatore,  id: iv.operatore_id  } : null,
-      iv.operatore2 ? { op: iv.operatore2, id: iv.operatore2_id } : null,
+      iv.operatore  ? { op: iv.operatore,  id: iv.operatore_id,  isOp2: false } : null,
+      iv.operatore2 ? { op: iv.operatore2, id: iv.operatore2_id, isOp2: true  } : null,
     ].filter(Boolean)
 
-    for (const { op, id } of operatori) {
+    for (const { op, id, isOp2 } of operatori) {
+      const { ore, anomalo, fonte: fo } = _getOreIntervento(iv, isOp2)
+      if (fo === 'pianificato') usaDatiStimati = true
+      if (!fonteOre && fo) fonteOre = fo
       const { costoOrario, fonte: fc } = _getCostoOrario(op, id, busteMap)
       if (!fc) {
         hasDatiParziali = true
@@ -155,6 +153,11 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
       if (!fonteCosto && fc) fonteCosto = fc
       costoForzaLavoro += costoOrario * ore
     }
+
+    const ore = operatori.reduce((s, { isOp2 }) => {
+      const { ore: o } = _getOreIntervento(iv, isOp2)
+      return s + o
+    }, 0)
 
     const mats = matsByIntervento[iv.id] || []
     const costoMateriali = mats.reduce((s, m) => s + (m.quantita || 0) * (m.costo_unitario_snapshot || 0), 0)
@@ -167,10 +170,15 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
 
     const op1Name = iv.operatore  ? `${iv.operatore.nome||''} ${iv.operatore.cognome||''}`.trim() : null
     const op2Name = iv.operatore2 ? `${iv.operatore2.nome||''} ${iv.operatore2.cognome||''}`.trim() : null
+    const op1Ore = _getOreIntervento(iv, false)
+    const op2Ore = iv.operatore2 ? _getOreIntervento(iv, true) : null
     return {
       id: iv.id, data: iv.data_pianificata, ore, anomalo: false, stato: iv.stato,
-      ore_ordinarie: iv.ore_ordinarie, ore_straordinario: iv.ore_straordinario, note_ore: iv.note_ore,
+      ore_ordinarie: iv.ore_ordinarie, ore_straordinario: iv.ore_straordinario,
+      ore_ordinarie_op2: iv.ore_ordinarie_op2, ore_straordinario_op2: iv.ore_straordinario_op2,
+      note_ore: iv.note_ore,
       op1Name, op2Name, operatore_id: iv.operatore_id, operatore2_id: iv.operatore2_id,
+      op1Ore: op1Ore.ore, op2Ore: op2Ore?.ore ?? null,
       costoForzaLavoro, costoMateriali, costoVeicolo, fonteOre, fonteCosto,
     }
   })

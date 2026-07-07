@@ -825,12 +825,10 @@ export function initInterventi(){
 export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, op1Name, op2Id, op2Name) {
   const { data: iv } = await supabase
     .from('interventi')
-    .select('ore_ordinarie,ore_straordinario,note_ore')
+    .select('ore_ordinarie,ore_straordinario,ore_ordinarie_op2,ore_straordinario_op2,note_ore')
     .eq('id', interventoId)
     .maybeSingle()
 
-  const oreOrd = iv?.ore_ordinarie ?? ''
-  const oreStr = iv?.ore_straordinario ?? 0
   const noteEx = iv?.note_ore || ''
   const dataFmt = new Date(dataPianificata + 'T00:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })
 
@@ -840,7 +838,10 @@ export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, o
     op2Id ? { id: op2Id, name: op2Name } : null,
   ].filter(Boolean)
 
-  const opRows = operatori.map(op => `
+  const opRows = operatori.map((op, idx) => {
+    const oreOrd = idx === 0 ? (iv?.ore_ordinarie ?? '') : (iv?.ore_ordinarie_op2 ?? '')
+    const oreStr = idx === 0 ? (iv?.ore_straordinario ?? 0) : (iv?.ore_straordinario_op2 ?? 0)
+    return `
     <div style="background:#f9fafb;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
       <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#374151;">👤 ${op.name}</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -855,7 +856,8 @@ export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, o
             style="width:100%;padding:10px;border:1.5px solid #fde68a;border-radius:8px;font-size:20px;font-weight:700;text-align:center;box-sizing:border-box;">
         </div>
       </div>
-    </div>`).join('')
+    </div>`
+  }).join('')
 
   const overlay = document.createElement('div')
   overlay.id = 'ore-adm-overlay'
@@ -885,35 +887,49 @@ export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, o
   document.getElementById('ore-adm-save').addEventListener('click', async () => {
     const note = document.getElementById('ore-adm-note').value.trim() || null
 
-    // Leggi ore dal primo operatore (le ore sull'intervento sono condivise)
-    const op1OrdEl = overlay.querySelector(`[data-op="${operatori[0].id}"][data-tipo="ord"]`)
-    const op1StrEl = overlay.querySelector(`[data-op="${operatori[0].id}"][data-tipo="str"]`)
-    const ore_ordinarie    = Math.round((parseFloat(op1OrdEl?.value) || 0) * 100) / 100
-    const ore_straordinario = Math.round((parseFloat(op1StrEl?.value) || 0) * 100) / 100
+    // Leggi ore per ogni operatore — op1 → ore_ordinarie, op2 → ore_ordinarie_op2
+    const readOre = (op) => {
+      const ord = overlay.querySelector(`[data-op="${op.id}"][data-tipo="ord"]`)
+      const str = overlay.querySelector(`[data-op="${op.id}"][data-tipo="str"]`)
+      return {
+        ord: Math.round((parseFloat(ord?.value) || 0) * 100) / 100,
+        str: Math.round((parseFloat(str?.value) || 0) * 100) / 100,
+      }
+    }
+    const op1Ore = readOre(operatori[0])
+    const updatePayload = {
+      ore_ordinarie: op1Ore.ord, ore_straordinario: op1Ore.str,
+      note_ore: note, stato: 'completato',
+    }
+    if (operatori[1]) {
+      const op2Ore = readOre(operatori[1])
+      updatePayload.ore_ordinarie_op2 = op2Ore.ord
+      updatePayload.ore_straordinario_op2 = op2Ore.str
+    }
 
-    const { error } = await supabase.from('interventi').update({
-      ore_ordinarie, ore_straordinario, note_ore: note, stato: 'completato',
-    }).eq('id', interventoId)
+    const { error } = await supabase.from('interventi').update(updatePayload).eq('id', interventoId)
 
     if (error) { showToast('Errore salvataggio ore', 'error'); console.error(error); return }
 
     // Aggiorna presenze_giornaliere per TUTTI gli operatori dell'intervento
-    for (const op of operatori) {
-      // Leggi le ore specifiche per questo operatore se presenti (supporto ore diverse per op)
-      const opOrdEl = overlay.querySelector(`[data-op="${op.id}"][data-tipo="ord"]`)
-      const opStrEl = overlay.querySelector(`[data-op="${op.id}"][data-tipo="str"]`)
-      const opOrd = Math.round((parseFloat(opOrdEl?.value) || 0) * 100) / 100
-      const opStr = Math.round((parseFloat(opStrEl?.value) || 0) * 100) / 100
+    for (let i = 0; i < operatori.length; i++) {
+      const op = operatori[i]
+      const opOre = i === 0 ? op1Ore : (operatori[1] ? readOre(operatori[1]) : op1Ore)
       try {
         const { data: dayIv } = await supabase
           .from('interventi')
-          .select('ore_ordinarie,ore_straordinario')
+          .select('operatore_id,operatore2_id,ore_ordinarie,ore_straordinario,ore_ordinarie_op2,ore_straordinario_op2')
           .or(`operatore_id.eq.${op.id},operatore2_id.eq.${op.id}`)
           .eq('data_pianificata', dataPianificata)
-          .not('ore_ordinarie', 'is', null)
           .neq('id', interventoId)
-        const totOrd = opOrd + (dayIv||[]).reduce((s,i)=>s+(i.ore_ordinarie||0),0)
-        const totStr = opStr + (dayIv||[]).reduce((s,i)=>s+(i.ore_straordinario||0),0)
+        const totOrd = opOre.ord + (dayIv||[]).reduce((s,r) => {
+          const isSecondo = r.operatore2_id === op.id
+          return s + ((isSecondo ? r.ore_ordinarie_op2 : r.ore_ordinarie) || 0)
+        }, 0)
+        const totStr = opOre.str + (dayIv||[]).reduce((s,r) => {
+          const isSecondo = r.operatore2_id === op.id
+          return s + ((isSecondo ? r.ore_straordinario_op2 : r.ore_straordinario) || 0)
+        }, 0)
         await supabase.from('presenze_giornaliere').upsert({
           profilo_id: op.id, data: dataPianificata, tipo: 'lavoro',
           ore_ordinarie: Math.round(totOrd*100)/100,
