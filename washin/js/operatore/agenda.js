@@ -90,7 +90,7 @@ export async function loadInterventiOperatore(start, end) {
 
     const { data, error } = await supabase
       .from('interventi')
-      .select('*, sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
+      .select('*, ore_ordinarie_op2, ore_straordinario_op2, sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
       .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
       .gte('data_pianificata', start)
       .lte('data_pianificata', end)
@@ -114,7 +114,7 @@ export async function loadInterventiPassati() {
     ieri.setDate(ieri.getDate() - 1)
     const { data, error } = await supabase
       .from('interventi')
-      .select('*, sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
+      .select('*, ore_ordinarie_op2, ore_straordinario_op2, sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
       .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
       .lte('data_pianificata', localDateStr(ieri))
       .order('data_pianificata', { ascending: false })
@@ -234,9 +234,12 @@ export function renderInterventi(interventi) {
     const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
     const operatori = [op1, op2].filter(Boolean).join(' + ')
 
-    const oreCompilate = iv.ore_ordinarie != null
+    const isOp2 = _myOperatoreId && iv.operatore2_id === _myOperatoreId
+    const myOreOrd = isOp2 ? iv.ore_ordinarie_op2 : iv.ore_ordinarie
+    const myOreStr = isOp2 ? iv.ore_straordinario_op2 : iv.ore_straordinario
+    const oreCompilate = myOreOrd != null
     const oreLabel = oreCompilate
-      ? `✅ ${iv.ore_ordinarie}h ord${iv.ore_straordinario ? ' + ' + iv.ore_straordinario + 'h str' : ''}`
+      ? `✅ ${myOreOrd}h ord${myOreStr ? ' + ' + myOreStr + 'h str' : ''}`
       : null
     const oreBorderColor = oreCompilate ? '#10b981' : borderColor
 
@@ -342,16 +345,17 @@ async function apriModaleOre(interventoId, dataPianificata) {
   const operatoreId = await getOperatoreId()
   if (!operatoreId) return
 
-  // Carica ore già salvate sull'intervento
+  // Carica ore già salvate sull'intervento — usa colonna op1 o op2 in base a chi è loggato
   const { data: ivEsistente } = await supabase
     .from('interventi')
-    .select('ore_ordinarie,ore_straordinario,note_ore')
+    .select('operatore_id,operatore2_id,ore_ordinarie,ore_straordinario,ore_ordinarie_op2,ore_straordinario_op2,note_ore')
     .eq('id', interventoId)
     .maybeSingle()
 
-  const oreOrdEx  = ivEsistente?.ore_ordinarie    || 0
-  const oreStrEx  = ivEsistente?.ore_straordinario || 0
-  const noteEx    = ivEsistente?.note_ore          || ''
+  const isOp2 = ivEsistente?.operatore2_id === operatoreId
+  const oreOrdEx  = isOp2 ? (ivEsistente?.ore_ordinarie_op2    || 0) : (ivEsistente?.ore_ordinarie    || 0)
+  const oreStrEx  = isOp2 ? (ivEsistente?.ore_straordinario_op2 || 0) : (ivEsistente?.ore_straordinario || 0)
+  const noteEx    = ivEsistente?.note_ore || ''
 
   function toHM(dec) {
     const h = Math.floor(dec), m = Math.round((dec - h) * 60)
@@ -439,13 +443,12 @@ async function apriModaleOre(interventoId, dataPianificata) {
     const ore_ordinarie    = Math.round((ordH + ordM / 60) * 100) / 100
     const ore_straordinario = Math.round((strH + strM / 60) * 100) / 100
 
-    // Salva sull'intervento (fonte principale per conto economico e resoconto)
-    const { error } = await supabase.from('interventi').update({
-      ore_ordinarie,
-      ore_straordinario,
-      note_ore: note,
-      stato: 'completato',
-    }).eq('id', interventoId)
+    // Salva sull'intervento nella colonna giusta (op1 o op2)
+    const updatePayload = isOp2
+      ? { ore_ordinarie_op2: ore_ordinarie, ore_straordinario_op2: ore_straordinario, note_ore: note, stato: 'completato' }
+      : { ore_ordinarie, ore_straordinario, note_ore: note, stato: 'completato' }
+
+    const { error } = await supabase.from('interventi').update(updatePayload).eq('id', interventoId)
 
     if (error) {
       showToast('Errore salvataggio ore', 'error')
@@ -453,16 +456,21 @@ async function apriModaleOre(interventoId, dataPianificata) {
       return
     }
 
-    // Aggiorna presenze_giornaliere (cartellino) sommando tutti gli interventi del giorno
+    // Aggiorna presenze_giornaliere (cartellino) sommando tutti gli interventi del giorno per questo operatore
     try {
       const { data: dayIv } = await supabase
         .from('interventi')
-        .select('ore_ordinarie,ore_straordinario')
-        .eq('operatore_id', operatoreId)
+        .select('operatore_id,operatore2_id,ore_ordinarie,ore_straordinario,ore_ordinarie_op2,ore_straordinario_op2')
+        .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
         .eq('data_pianificata', dataPianificata)
-        .not('ore_ordinarie', 'is', null)
-      const totOrd = (dayIv || []).reduce((s, i) => s + (i.ore_ordinarie || 0), 0)
-      const totStr = (dayIv || []).reduce((s, i) => s + (i.ore_straordinario || 0), 0)
+      const totOrd = (dayIv || []).reduce((s, i) => {
+        const isSecondo = i.operatore2_id === operatoreId
+        return s + ((isSecondo ? i.ore_ordinarie_op2 : i.ore_ordinarie) || 0)
+      }, 0)
+      const totStr = (dayIv || []).reduce((s, i) => {
+        const isSecondo = i.operatore2_id === operatoreId
+        return s + ((isSecondo ? i.ore_straordinario_op2 : i.ore_straordinario) || 0)
+      }, 0)
       await supabase.from('presenze_giornaliere').upsert({
         profilo_id: operatoreId,
         data: dataPianificata,
@@ -479,6 +487,7 @@ async function apriModaleOre(interventoId, dataPianificata) {
 }
 
 let _vistaSettimana = false
+let _myOperatoreId = null
 
 export function refreshAgenda() {
   const oggi = new Date()
@@ -489,6 +498,7 @@ export function refreshAgenda() {
 
 export async function initAgenda() {
   await loadModalita()
+  _myOperatoreId = await getOperatoreId()
 
   const btnOggi = document.getElementById('btn-vista-oggi')
   const btnSett = document.getElementById('btn-vista-settimana')
