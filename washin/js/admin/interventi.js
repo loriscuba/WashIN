@@ -138,14 +138,16 @@ export function renderListaInterventi(interventi){
       const operatorName = [op1, op2].filter(Boolean).join(' + ') || '-'
       const cliente = iv.contratti?.clienti?.ragione_sociale || '-'
       const badgeClass = STATO_BADGE[iv.stato] || 'badge-warning'
+      const oreOk = iv.ore_ordinarie != null
       const avviaBtn = iv.stato === 'pianificato'
         ? `<button class="btn btn-sm btn-primary" data-action="avvia-intervento" data-id="${iv.id}">▶ Avvia</button>`
         : ''
       const stopBtn = iv.stato === 'in_corso'
         ? `<button class="btn btn-sm btn-danger" data-action="stop-intervento" data-id="${iv.id}">■ Stop</button>`
         : ''
+      if (oreOk) tr.style.borderLeft = '3px solid #10b981'
       tr.innerHTML = `
-        <td style="white-space:nowrap;">${iv.data_pianificata}${iv.ora_inizio_pianificata ? '<br><span style="font-size:11px;color:var(--gray-500);">P: ' + iv.ora_inizio_pianificata.slice(0,5) + (iv.ora_fine_pianificata ? '–' + iv.ora_fine_pianificata.slice(0,5) : '') + '</span>' : ''}${iv.inizio_effettivo ? '<br><span style="font-size:11px;color:#059669;">▶ ' + new Date(iv.inizio_effettivo).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) + (iv.fine_effettivo ? '–' + new Date(iv.fine_effettivo).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '') + '</span>' : ''}</td>
+        <td style="white-space:nowrap;">${iv.data_pianificata}${iv.ora_inizio_pianificata ? '<br><span style="font-size:11px;color:var(--gray-500);">P: ' + iv.ora_inizio_pianificata.slice(0,5) + (iv.ora_fine_pianificata ? '–' + iv.ora_fine_pianificata.slice(0,5) : '') + '</span>' : ''}</td>
         <td>${operatorName}</td>
         <td>
           <strong>${cliente}</strong><br>
@@ -155,11 +157,11 @@ export function renderListaInterventi(interventi){
         <td>${iv.tipo_pulizia || '-'}</td>
         <td>
           <span class="badge ${badgeClass}">${iv.stato}</span>
-          ${geoTag(iv.geo_inizio_lat, iv.geo_inizio_lng, iv.inizio_effettivo, '▶')}
-          ${geoTag(iv.geo_fine_lat, iv.geo_fine_lng, iv.fine_effettivo, '■')}
+          ${oreOk ? `<span style="display:block;font-size:11px;color:#059669;font-weight:600;margin-top:3px;">✅ ${iv.ore_ordinarie}h ord${iv.ore_straordinario ? ' +' + iv.ore_straordinario + 'h str' : ''}</span>` : ''}
         </td>
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-secondary" data-action="edit-intervento" data-id="${iv.id}">Modifica</button>
+          <button class="btn btn-sm ${oreOk ? 'btn-secondary' : 'btn-primary'}" data-action="inserisci-ore-admin" data-id="${iv.id}" data-op1="${iv.operatore_id || ''}" data-op1name="${op1}" data-op2="${iv.operatore2_id || ''}" data-op2name="${op2}" data-data="${iv.data_pianificata}">⏱ ${oreOk ? 'Ore' : 'Inserisci ore'}</button>
           ${avviaBtn}${stopBtn}
         </td>
       `
@@ -803,7 +805,12 @@ export function initInterventi(){
       if (action === 'edit-intervento') await openModalIntervento(id)
       if (action === 'avvia-intervento'){ await avviaIntervento(id); refreshView() }
       if (action === 'stop-intervento'){ await stopIntervento(id); refreshView() }
+      if (action === 'inserisci-ore-admin') {
+        await apriModaleOreAdmin(id, t.dataset.data, t.dataset.op1, t.dataset.op1name, t.dataset.op2, t.dataset.op2name)
+      }
     })
+
+    window.addEventListener('interventi:refresh', refreshView)
 
     // initial load
     setView('today')
@@ -813,5 +820,127 @@ export function initInterventi(){
     console.error(err)
   }
 }
-// admin/interventi.js - placeholder
-// Funzioni per gestione interventi
+// ── Modal ore admin ───────────────────────────────────────────────────────────
+
+export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, op1Name, op2Id, op2Name) {
+  // Carica ore già salvate sull'intervento
+  const { data: iv } = await supabase
+    .from('interventi')
+    .select('ore_ordinarie,ore_straordinario,note_ore,operatore_id')
+    .eq('id', interventoId)
+    .maybeSingle()
+
+  function toHM(dec) { const h = Math.floor(dec||0), m = Math.round(((dec||0)-h)*60); return { h, m } }
+  const { h: ohOrd, m: omOrd } = toHM(iv?.ore_ordinarie)
+  const { h: ohStr, m: omStr } = toHM(iv?.ore_straordinario)
+  const noteEx = iv?.note_ore || ''
+
+  const dataFmt = new Date(dataPianificata + 'T00:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })
+
+  // Selettore operatore (solo se ci sono due operatori)
+  const opSelectHtml = op2Id
+    ? `<div style="margin-bottom:16px;">
+        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Operatore</label>
+        <select id="ore-adm-op" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;">
+          <option value="${op1Id}">${op1Name}</option>
+          <option value="${op2Id}">${op2Name}</option>
+          <option value="entrambi">Entrambi</option>
+        </select>
+      </div>`
+    : `<input type="hidden" id="ore-adm-op" value="${op1Id}">`
+
+  const overlay = document.createElement('div')
+  overlay.id = 'ore-adm-overlay'
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);'
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px 20px;width:100%;max-width:420px;box-shadow:0 8px 40px rgba(0,0,0,.18);">
+      <h3 style="margin:0 0 4px;font-size:17px;font-weight:700;">Inserisci orario</h3>
+      <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">${dataFmt}</p>
+      ${opSelectHtml}
+      <div style="margin-bottom:14px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#374151;">Ore ordinarie</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Ore</label>
+            <input id="ore-adm-ord-h" type="number" min="0" max="24" value="${ohOrd}" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Minuti</label>
+            <input id="ore-adm-ord-m" type="number" min="0" max="59" value="${omOrd}" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
+          </div>
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#f59e0b;">Ore straordinarie</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Ore</label>
+            <input id="ore-adm-str-h" type="number" min="0" max="24" value="${ohStr}" style="width:100%;padding:10px;border:1.5px solid #fde68a;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Minuti</label>
+            <input id="ore-adm-str-m" type="number" min="0" max="59" value="${omStr}" style="width:100%;padding:10px;border:1.5px solid #fde68a;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
+          </div>
+        </div>
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Note</label>
+        <textarea id="ore-adm-note" rows="2" placeholder="Note cantiere…" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:none;">${noteEx}</textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <button id="ore-adm-cancel" style="padding:12px;background:#f3f4f6;color:#374151;border:none;border-radius:12px;font-size:15px;cursor:pointer;">Annulla</button>
+        <button id="ore-adm-save" style="padding:12px;background:#0d9488;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Salva</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+
+  const chiudi = () => overlay.remove()
+  document.getElementById('ore-adm-cancel').addEventListener('click', chiudi)
+  overlay.addEventListener('click', e => { if (e.target === overlay) chiudi() })
+
+  document.getElementById('ore-adm-save').addEventListener('click', async () => {
+    const ordH = parseInt(document.getElementById('ore-adm-ord-h').value) || 0
+    const ordM = parseInt(document.getElementById('ore-adm-ord-m').value) || 0
+    const strH = parseInt(document.getElementById('ore-adm-str-h').value) || 0
+    const strM = parseInt(document.getElementById('ore-adm-str-m').value) || 0
+    const note = document.getElementById('ore-adm-note').value.trim() || null
+    const opSel = document.getElementById('ore-adm-op').value
+
+    const ore_ordinarie    = Math.round((ordH + ordM / 60) * 100) / 100
+    const ore_straordinario = Math.round((strH + strM / 60) * 100) / 100
+
+    const { error } = await supabase.from('interventi').update({
+      ore_ordinarie, ore_straordinario, note_ore: note, stato: 'concluso',
+    }).eq('id', interventoId)
+
+    if (error) { showToast('Errore salvataggio ore', 'error'); console.error(error); return }
+
+    // Aggiorna presenze_giornaliere per gli operatori selezionati
+    const opIds = opSel === 'entrambi'
+      ? [op1Id, op2Id].filter(Boolean)
+      : [opSel].filter(Boolean)
+
+    for (const opId of opIds) {
+      try {
+        const { data: dayIv } = await supabase
+          .from('interventi')
+          .select('ore_ordinarie,ore_straordinario')
+          .or(`operatore_id.eq.${opId},operatore2_id.eq.${opId}`)
+          .eq('data_pianificata', dataPianificata)
+          .not('ore_ordinarie', 'is', null)
+        const totOrd = (dayIv||[]).reduce((s,i)=>s+(i.ore_ordinarie||0),0)
+        const totStr = (dayIv||[]).reduce((s,i)=>s+(i.ore_straordinario||0),0)
+        await supabase.from('presenze_giornaliere').upsert({
+          profilo_id: opId, data: dataPianificata, tipo: 'lavoro',
+          ore_ordinarie: Math.round(totOrd*100)/100,
+          ore_straordinario: Math.round(totStr*100)/100,
+        }, { onConflict: 'profilo_id,data' })
+      } catch { /* non bloccante */ }
+    }
+
+    showToast('Orario salvato', 'success')
+    chiudi()
+    window.dispatchEvent(new CustomEvent('interventi:refresh'))
+  })
+}

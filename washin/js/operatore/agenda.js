@@ -234,15 +234,21 @@ export function renderInterventi(interventi) {
     const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
     const operatori = [op1, op2].filter(Boolean).join(' + ')
 
+    const oreCompilate = iv.ore_ordinarie != null
+    const oreLabel = oreCompilate
+      ? `✅ ${iv.ore_ordinarie}h ord${iv.ore_straordinario ? ' + ' + iv.ore_straordinario + 'h str' : ''}`
+      : null
+    const oreBorderColor = oreCompilate ? '#10b981' : borderColor
+
     const actionsHtml = _modalitaOrario
       ? `<a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
-         <button class="btn btn-primary btn-sm" data-action="inserisci-ore" data-id="${iv.id}" data-data="${iv.data_pianificata}" type="button">⏱ Inserisci orario</button>`
+         <button class="btn ${oreCompilate ? 'btn-secondary' : 'btn-primary'} btn-sm" data-action="inserisci-ore" data-id="${iv.id}" data-data="${iv.data_pianificata}" type="button">⏱ ${oreCompilate ? 'Modifica orario' : 'Inserisci orario'}</button>`
       : `<a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
          <button class="btn btn-secondary btn-sm" data-action="checklist" data-id="${iv.id}" type="button" style="text-align:center;">Checklist</button>
          ${!actionDone ? `<button class="btn btn-primary btn-sm btn-avvia" data-action="status" data-id="${iv.id}" data-newstate="${newState}" type="button">${actionLabel}</button>` : ''}`
 
     card.innerHTML = `
-      <div style="height:4px;background:${borderColor};"></div>
+      <div style="height:4px;background:${oreBorderColor};"></div>
       <div class="iv-inner">
         <div class="iv-header">
           <span class="iv-cliente">${cliente}</span>
@@ -250,6 +256,7 @@ export function renderInterventi(interventi) {
         </div>
         ${operatori ? `<p style="margin:0 0 4px;font-size:12px;color:var(--gray-500);">👤 ${operatori}</p>` : ''}
         <p class="iv-orario">⏱ ${orario}</p>
+        ${oreLabel ? `<p style="margin:2px 0 0;font-size:12px;color:#059669;font-weight:600;">${oreLabel}</p>` : ''}
         ${tempiEffettivi}
         ${location ? `<p class="iv-location">📍 ${location}</p>` : '<div style="margin-bottom:14px;"></div>'}
         <div class="iv-actions">${actionsHtml}</div>
@@ -335,17 +342,16 @@ async function apriModaleOre(interventoId, dataPianificata) {
   const operatoreId = await getOperatoreId()
   if (!operatoreId) return
 
-  // Carica eventuale presenza già registrata per quel giorno
-  const { data: esistente } = await supabase
-    .from('presenze_giornaliere')
-    .select('ore_ordinarie,ore_straordinario,note')
-    .eq('profilo_id', operatoreId)
-    .eq('data', dataPianificata)
+  // Carica ore già salvate sull'intervento
+  const { data: ivEsistente } = await supabase
+    .from('interventi')
+    .select('ore_ordinarie,ore_straordinario,note_ore')
+    .eq('id', interventoId)
     .maybeSingle()
 
-  const oreOrdEx  = esistente?.ore_ordinarie   || 0
-  const oreStrEx  = esistente?.ore_straordinario || 0
-  const noteEx    = esistente?.note || ''
+  const oreOrdEx  = ivEsistente?.ore_ordinarie    || 0
+  const oreStrEx  = ivEsistente?.ore_straordinario || 0
+  const noteEx    = ivEsistente?.note_ore          || ''
 
   function toHM(dec) {
     const h = Math.floor(dec), m = Math.round((dec - h) * 60)
@@ -430,25 +436,45 @@ async function apriModaleOre(interventoId, dataPianificata) {
     const strM = parseInt(document.getElementById('ore-modal-str-m').value) || 0
     const note = document.getElementById('ore-modal-note').value.trim() || null
 
-    const ore_ordinarie   = ordH + ordM / 60
-    const ore_straordinario = strH + strM / 60
+    const ore_ordinarie    = Math.round((ordH + ordM / 60) * 100) / 100
+    const ore_straordinario = Math.round((strH + strM / 60) * 100) / 100
 
-    const { error } = await supabase.from('presenze_giornaliere').upsert({
-      profilo_id: operatoreId,
-      data: dataPianificata,
-      tipo: 'lavoro',
-      ore_ordinarie:    Math.round(ore_ordinarie * 100) / 100,
-      ore_straordinario: Math.round(ore_straordinario * 100) / 100,
-      nota_cantiere: note,
-    }, { onConflict: 'profilo_id,data' })
+    // Salva sull'intervento (fonte principale per conto economico e resoconto)
+    const { error } = await supabase.from('interventi').update({
+      ore_ordinarie,
+      ore_straordinario,
+      note_ore: note,
+      stato: 'concluso',
+    }).eq('id', interventoId)
 
     if (error) {
       showToast('Errore salvataggio ore', 'error')
       console.error(error)
-    } else {
-      showToast('Orario salvato', 'success')
-      chiudi()
+      return
     }
+
+    // Aggiorna presenze_giornaliere (cartellino) sommando tutti gli interventi del giorno
+    try {
+      const { data: dayIv } = await supabase
+        .from('interventi')
+        .select('ore_ordinarie,ore_straordinario')
+        .eq('operatore_id', operatoreId)
+        .eq('data_pianificata', dataPianificata)
+        .not('ore_ordinarie', 'is', null)
+      const totOrd = (dayIv || []).reduce((s, i) => s + (i.ore_ordinarie || 0), 0)
+      const totStr = (dayIv || []).reduce((s, i) => s + (i.ore_straordinario || 0), 0)
+      await supabase.from('presenze_giornaliere').upsert({
+        profilo_id: operatoreId,
+        data: dataPianificata,
+        tipo: 'lavoro',
+        ore_ordinarie: Math.round(totOrd * 100) / 100,
+        ore_straordinario: Math.round(totStr * 100) / 100,
+      }, { onConflict: 'profilo_id,data' })
+    } catch { /* cartellino non bloccante */ }
+
+    showToast('Orario salvato', 'success')
+    chiudi()
+    window.dispatchEvent(new CustomEvent('agenda:refresh'))
   })
 }
 
@@ -513,6 +539,8 @@ export async function initAgenda() {
       await apriModaleOre(id, button.dataset.data)
     }
   })
+
+  window.addEventListener('agenda:refresh', refresh)
 
   await refresh()
 }
