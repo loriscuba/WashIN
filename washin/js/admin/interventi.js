@@ -823,73 +823,56 @@ export function initInterventi(){
 // ── Modal ore admin ───────────────────────────────────────────────────────────
 
 export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, op1Name, op2Id, op2Name) {
-  // Carica ore già salvate sull'intervento
   const { data: iv } = await supabase
     .from('interventi')
-    .select('ore_ordinarie,ore_straordinario,note_ore,operatore_id')
+    .select('ore_ordinarie,ore_straordinario,note_ore')
     .eq('id', interventoId)
     .maybeSingle()
 
-  function toHM(dec) { const h = Math.floor(dec||0), m = Math.round(((dec||0)-h)*60); return { h, m } }
-  const { h: ohOrd, m: omOrd } = toHM(iv?.ore_ordinarie)
-  const { h: ohStr, m: omStr } = toHM(iv?.ore_straordinario)
+  const oreOrd = iv?.ore_ordinarie ?? ''
+  const oreStr = iv?.ore_straordinario ?? 0
   const noteEx = iv?.note_ore || ''
-
   const dataFmt = new Date(dataPianificata + 'T00:00:00').toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long' })
 
-  // Selettore operatore (solo se ci sono due operatori)
-  const opSelectHtml = op2Id
-    ? `<div style="margin-bottom:16px;">
-        <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Operatore</label>
-        <select id="ore-adm-op" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;">
-          <option value="${op1Id}">${op1Name}</option>
-          <option value="${op2Id}">${op2Name}</option>
-          <option value="entrambi">Entrambi</option>
-        </select>
-      </div>`
-    : `<input type="hidden" id="ore-adm-op" value="${op1Id}">`
+  // Sezione per ogni operatore presente
+  const operatori = [
+    op1Id ? { id: op1Id, name: op1Name } : null,
+    op2Id ? { id: op2Id, name: op2Name } : null,
+  ].filter(Boolean)
+
+  const opRows = operatori.map(op => `
+    <div style="background:#f9fafb;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#374151;">👤 ${op.name}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">Ore ordinarie</label>
+          <input data-op="${op.id}" data-tipo="ord" type="number" min="0" max="24" step="0.25" value="${oreOrd}"
+            style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:20px;font-weight:700;text-align:center;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:11px;color:#f59e0b;display:block;margin-bottom:4px;">Ore straordinarie</label>
+          <input data-op="${op.id}" data-tipo="str" type="number" min="0" max="24" step="0.25" value="${oreStr}"
+            style="width:100%;padding:10px;border:1.5px solid #fde68a;border-radius:8px;font-size:20px;font-weight:700;text-align:center;box-sizing:border-box;">
+        </div>
+      </div>
+    </div>`).join('')
 
   const overlay = document.createElement('div')
   overlay.id = 'ore-adm-overlay'
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);'
   overlay.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:24px 20px;width:100%;max-width:420px;box-shadow:0 8px 40px rgba(0,0,0,.18);">
+    <div style="background:#fff;border-radius:16px;padding:24px 20px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18);">
       <h3 style="margin:0 0 4px;font-size:17px;font-weight:700;">Inserisci orario</h3>
       <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">${dataFmt}</p>
-      ${opSelectHtml}
-      <div style="margin-bottom:14px;">
-        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#374151;">Ore ordinarie</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div>
-            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Ore</label>
-            <input id="ore-adm-ord-h" type="number" min="0" max="24" value="${ohOrd}" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Minuti</label>
-            <input id="ore-adm-ord-m" type="number" min="0" max="59" value="${omOrd}" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
-          </div>
-        </div>
-      </div>
-      <div style="margin-bottom:14px;">
-        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#f59e0b;">Ore straordinarie</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div>
-            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Ore</label>
-            <input id="ore-adm-str-h" type="number" min="0" max="24" value="${ohStr}" style="width:100%;padding:10px;border:1.5px solid #fde68a;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:11px;color:#9ca3af;display:block;margin-bottom:4px;">Minuti</label>
-            <input id="ore-adm-str-m" type="number" min="0" max="59" value="${omStr}" style="width:100%;padding:10px;border:1.5px solid #fde68a;border-radius:10px;font-size:18px;font-weight:700;text-align:center;box-sizing:border-box;">
-          </div>
-        </div>
-      </div>
-      <div style="margin-bottom:20px;">
+      ${opRows}
+      <div style="margin-bottom:18px;">
         <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px;">Note</label>
-        <textarea id="ore-adm-note" rows="2" placeholder="Note cantiere…" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:none;">${noteEx}</textarea>
+        <textarea id="ore-adm-note" rows="2" placeholder="Note cantiere…"
+          style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:none;">${noteEx}</textarea>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <button id="ore-adm-cancel" style="padding:12px;background:#f3f4f6;color:#374151;border:none;border-radius:12px;font-size:15px;cursor:pointer;">Annulla</button>
-        <button id="ore-adm-save" style="padding:12px;background:#0d9488;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Salva</button>
+        <button id="ore-adm-cancel" style="padding:13px;background:#f3f4f6;color:#374151;border:none;border-radius:12px;font-size:15px;cursor:pointer;">Annulla</button>
+        <button id="ore-adm-save" style="padding:13px;background:#0d9488;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Salva</button>
       </div>
     </div>
   `
@@ -900,15 +883,13 @@ export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, o
   overlay.addEventListener('click', e => { if (e.target === overlay) chiudi() })
 
   document.getElementById('ore-adm-save').addEventListener('click', async () => {
-    const ordH = parseInt(document.getElementById('ore-adm-ord-h').value) || 0
-    const ordM = parseInt(document.getElementById('ore-adm-ord-m').value) || 0
-    const strH = parseInt(document.getElementById('ore-adm-str-h').value) || 0
-    const strM = parseInt(document.getElementById('ore-adm-str-m').value) || 0
     const note = document.getElementById('ore-adm-note').value.trim() || null
-    const opSel = document.getElementById('ore-adm-op').value
 
-    const ore_ordinarie    = Math.round((ordH + ordM / 60) * 100) / 100
-    const ore_straordinario = Math.round((strH + strM / 60) * 100) / 100
+    // Leggi ore dal primo operatore (le ore sull'intervento sono condivise)
+    const op1OrdEl = overlay.querySelector(`[data-op="${operatori[0].id}"][data-tipo="ord"]`)
+    const op1StrEl = overlay.querySelector(`[data-op="${operatori[0].id}"][data-tipo="str"]`)
+    const ore_ordinarie    = Math.round((parseFloat(op1OrdEl?.value) || 0) * 100) / 100
+    const ore_straordinario = Math.round((parseFloat(op1StrEl?.value) || 0) * 100) / 100
 
     const { error } = await supabase.from('interventi').update({
       ore_ordinarie, ore_straordinario, note_ore: note, stato: 'completato',
@@ -916,23 +897,25 @@ export async function apriModaleOreAdmin(interventoId, dataPianificata, op1Id, o
 
     if (error) { showToast('Errore salvataggio ore', 'error'); console.error(error); return }
 
-    // Aggiorna presenze_giornaliere per gli operatori selezionati
-    const opIds = opSel === 'entrambi'
-      ? [op1Id, op2Id].filter(Boolean)
-      : [opSel].filter(Boolean)
-
-    for (const opId of opIds) {
+    // Aggiorna presenze_giornaliere per TUTTI gli operatori dell'intervento
+    for (const op of operatori) {
+      // Leggi le ore specifiche per questo operatore se presenti (supporto ore diverse per op)
+      const opOrdEl = overlay.querySelector(`[data-op="${op.id}"][data-tipo="ord"]`)
+      const opStrEl = overlay.querySelector(`[data-op="${op.id}"][data-tipo="str"]`)
+      const opOrd = Math.round((parseFloat(opOrdEl?.value) || 0) * 100) / 100
+      const opStr = Math.round((parseFloat(opStrEl?.value) || 0) * 100) / 100
       try {
         const { data: dayIv } = await supabase
           .from('interventi')
           .select('ore_ordinarie,ore_straordinario')
-          .or(`operatore_id.eq.${opId},operatore2_id.eq.${opId}`)
+          .or(`operatore_id.eq.${op.id},operatore2_id.eq.${op.id}`)
           .eq('data_pianificata', dataPianificata)
           .not('ore_ordinarie', 'is', null)
-        const totOrd = (dayIv||[]).reduce((s,i)=>s+(i.ore_ordinarie||0),0)
-        const totStr = (dayIv||[]).reduce((s,i)=>s+(i.ore_straordinario||0),0)
+          .neq('id', interventoId)
+        const totOrd = opOrd + (dayIv||[]).reduce((s,i)=>s+(i.ore_ordinarie||0),0)
+        const totStr = opStr + (dayIv||[]).reduce((s,i)=>s+(i.ore_straordinario||0),0)
         await supabase.from('presenze_giornaliere').upsert({
-          profilo_id: opId, data: dataPianificata, tipo: 'lavoro',
+          profilo_id: op.id, data: dataPianificata, tipo: 'lavoro',
           ore_ordinarie: Math.round(totOrd*100)/100,
           ore_straordinario: Math.round(totStr*100)/100,
         }, { onConflict: 'profilo_id,data' })
