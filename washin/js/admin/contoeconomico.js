@@ -33,22 +33,24 @@ function _getCostoOrario(op, opId, busteMap) {
   return { costoOrario: 0, fonte: null }
 }
 
+// Maggiorazione straordinario per CCNL Multiservizi (feriale diurno = +25%)
+const MAGGIORAZIONE_STR = 0.25
+
 // Ore intervento per un operatore: isOp2=false → ore_ordinarie, isOp2=true → ore_ordinarie_op2
-// Fallback: orario pianificato
+// Restituisce oreOrd e oreStr separatamente per applicare la maggiorazione
 function _getOreIntervento(iv, isOp2 = false) {
   const oreOrd = isOp2 ? iv.ore_ordinarie_op2 : iv.ore_ordinarie
-  const oreStr = isOp2 ? iv.ore_straordinario_op2 : iv.ore_straordinario
+  const oreStr = isOp2 ? (iv.ore_straordinario_op2 || 0) : (iv.ore_straordinario || 0)
   if (oreOrd != null) {
-    const ore = (oreOrd || 0) + (oreStr || 0)
-    return { ore, anomalo: false, fonte: 'inserite' }
+    return { oreOrd: oreOrd || 0, oreStr, ore: (oreOrd || 0) + oreStr, anomalo: false, fonte: 'inserite' }
   }
   if (iv.ora_inizio_pianificata && iv.ora_fine_pianificata) {
     const [hi, mi] = iv.ora_inizio_pianificata.split(':').map(Number)
     const [hf, mf] = iv.ora_fine_pianificata.split(':').map(Number)
     const ore = (hf * 60 + mf - hi * 60 - mi) / 60
-    if (ore > 0 && ore <= 24) return { ore, anomalo: false, fonte: 'pianificato' }
+    if (ore > 0 && ore <= 24) return { oreOrd: ore, oreStr: 0, ore, anomalo: false, fonte: 'pianificato' }
   }
-  return { ore: 0, anomalo: false, fonte: null }
+  return { oreOrd: 0, oreStr: 0, ore: 0, anomalo: false, fonte: null }
 }
 
 const FONTE_BADGE = {
@@ -140,10 +142,12 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
       iv.operatore2 ? { op: iv.operatore2, id: iv.operatore2_id, isOp2: true  } : null,
     ].filter(Boolean)
 
+    let ore = 0
     for (const { op, id, isOp2 } of operatori) {
-      const { ore, anomalo, fonte: fo } = _getOreIntervento(iv, isOp2)
+      const { oreOrd, oreStr, ore: oreTot, fonte: fo } = _getOreIntervento(iv, isOp2)
       if (fo === 'pianificato') usaDatiStimati = true
       if (!fonteOre && fo) fonteOre = fo
+      ore += oreTot
       const { costoOrario, fonte: fc } = _getCostoOrario(op, id, busteMap)
       if (!fc) {
         hasDatiParziali = true
@@ -151,13 +155,9 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
         if (!opSenzaCosto.includes(cognome)) opSenzaCosto.push(cognome)
       }
       if (!fonteCosto && fc) fonteCosto = fc
-      costoForzaLavoro += costoOrario * ore
+      // Ore ordinarie al costo base, straordinario con maggiorazione CCNL
+      costoForzaLavoro += costoOrario * oreOrd + costoOrario * (1 + MAGGIORAZIONE_STR) * oreStr
     }
-
-    const ore = operatori.reduce((s, { isOp2 }) => {
-      const { ore: o } = _getOreIntervento(iv, isOp2)
-      return s + o
-    }, 0)
 
     const mats = matsByIntervento[iv.id] || []
     const costoMateriali = mats.reduce((s, m) => s + (m.quantita || 0) * (m.costo_unitario_snapshot || 0), 0)
@@ -170,15 +170,12 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
 
     const op1Name = iv.operatore  ? `${iv.operatore.nome||''} ${iv.operatore.cognome||''}`.trim() : null
     const op2Name = iv.operatore2 ? `${iv.operatore2.nome||''} ${iv.operatore2.cognome||''}`.trim() : null
-    const op1Ore = _getOreIntervento(iv, false)
-    const op2Ore = iv.operatore2 ? _getOreIntervento(iv, true) : null
     return {
       id: iv.id, data: iv.data_pianificata, ore, anomalo: false, stato: iv.stato,
       ore_ordinarie: iv.ore_ordinarie, ore_straordinario: iv.ore_straordinario,
       ore_ordinarie_op2: iv.ore_ordinarie_op2, ore_straordinario_op2: iv.ore_straordinario_op2,
       note_ore: iv.note_ore,
       op1Name, op2Name, operatore_id: iv.operatore_id, operatore2_id: iv.operatore2_id,
-      op1Ore: op1Ore.ore, op2Ore: op2Ore?.ore ?? null,
       costoForzaLavoro, costoMateriali, costoVeicolo, fonteOre, fonteCosto,
     }
   })
@@ -395,26 +392,33 @@ function stampaResoconto(result, mese, anno) {
   const contratto = result.contratto.numero_contratto || result.contratto.id
   const periodo = `${MESI_LABEL[mese-1]} ${anno}`
 
+  const opRiga = (dateFmt, opName, oreOrd, oreStr, note, isFirst) => {
+    const ord = oreOrd != null ? Number(oreOrd).toFixed(2) : '—'
+    const str = oreStr ? Number(oreStr).toFixed(2) : '0.00'
+    const tot = ((oreOrd || 0) + (oreStr || 0)).toFixed(2)
+    return `<tr>
+      ${isFirst ? `<td rowspan="ROWSPAN">${dateFmt}</td>` : ''}
+      <td>${opName}</td>
+      <td style="text-align:right;">${ord}</td>
+      <td style="text-align:right;">${str}</td>
+      <td style="text-align:right;font-weight:600;">${tot}</td>
+      <td style="font-size:11px;color:#6b7280;">${isFirst ? (note || '') : ''}</td>
+    </tr>`
+  }
+
   const righe = result.interventi
     .filter(iv => !iv.anomalo && iv.ore > 0)
     .map(iv => {
       const dateFmt = new Date(iv.data + 'T00:00:00').toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short' })
-      const operatori = [iv.op1Name, iv.op2Name].filter(Boolean).join(', ')
-      const oreOrd = iv.ore_ordinarie != null ? iv.ore_ordinarie.toFixed(2) : '—'
-      const oreStr = iv.ore_straordinario != null ? iv.ore_straordinario.toFixed(2) : '0.00'
-      const totOre = iv.ore.toFixed(2)
-      return `<tr>
-        <td>${dateFmt}</td>
-        <td>${operatori}</td>
-        <td style="text-align:right;">${oreOrd}</td>
-        <td style="text-align:right;">${oreStr}</td>
-        <td style="text-align:right;font-weight:600;">${totOre}</td>
-        <td style="font-size:11px;color:#6b7280;">${iv.note_ore || ''}</td>
-      </tr>`
+      const rows = []
+      if (iv.op1Name) rows.push(opRiga(dateFmt, iv.op1Name, iv.ore_ordinarie, iv.ore_straordinario, iv.note_ore, rows.length === 0))
+      if (iv.op2Name) rows.push(opRiga(dateFmt, iv.op2Name, iv.ore_ordinarie_op2, iv.ore_straordinario_op2, iv.note_ore, rows.length === 0))
+      const rowspan = rows.length || 1
+      return rows.join('').replace('ROWSPAN', rowspan)
     }).join('')
 
-  const totOrd = result.interventi.filter(iv=>!iv.anomalo).reduce((s,iv)=>s+(iv.ore_ordinarie||0),0)
-  const totStr = result.interventi.filter(iv=>!iv.anomalo).reduce((s,iv)=>s+(iv.ore_straordinario||0),0)
+  const totOrd = result.interventi.filter(iv=>!iv.anomalo).reduce((s,iv)=>s+(iv.ore_ordinarie||0)+(iv.ore_ordinarie_op2||0),0)
+  const totStr = result.interventi.filter(iv=>!iv.anomalo).reduce((s,iv)=>s+(iv.ore_straordinario||0)+(iv.ore_straordinario_op2||0),0)
   const totOre = totOrd + totStr
 
   const win = window.open('', '_blank', 'width=800,height=600')
