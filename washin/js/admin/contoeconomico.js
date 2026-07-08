@@ -143,6 +143,7 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
     ].filter(Boolean)
 
     let ore = 0
+    const opDetails = []
     for (const { op, id, isOp2 } of operatori) {
       const { oreOrd, oreStr, ore: oreTot, fonte: fo } = _getOreIntervento(iv, isOp2)
       if (fo === 'pianificato') usaDatiStimati = true
@@ -156,7 +157,12 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
       }
       if (!fonteCosto && fc) fonteCosto = fc
       // Ore ordinarie al costo base, straordinario con maggiorazione CCNL
-      costoForzaLavoro += costoOrario * oreOrd + costoOrario * (1 + MAGGIORAZIONE_STR) * oreStr
+      const costoOp = costoOrario * oreOrd + costoOrario * (1 + MAGGIORAZIONE_STR) * oreStr
+      costoForzaLavoro += costoOp
+      opDetails.push({
+        name: `${op.nome||''} ${op.cognome||''}`.trim(),
+        oreOrd, oreStr, costoOrario, costo: costoOp, fonte: fc,
+      })
     }
 
     const mats = matsByIntervento[iv.id] || []
@@ -176,7 +182,7 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
       ore_ordinarie_op2: iv.ore_ordinarie_op2, ore_straordinario_op2: iv.ore_straordinario_op2,
       note_ore: iv.note_ore,
       op1Name, op2Name, operatore_id: iv.operatore_id, operatore2_id: iv.operatore2_id,
-      costoForzaLavoro, costoMateriali, costoVeicolo, fonteOre, fonteCosto,
+      opDetails, costoForzaLavoro, costoMateriali, costoVeicolo, fonteOre, fonteCosto,
     }
   })
 
@@ -287,15 +293,40 @@ async function calcolaEMostra() {
           if (iv.anomalo) tr.style.background = '#fef2f2'
           if (iv.fonteOre === 'inserite') tr.style.borderLeft = '3px solid #10b981'
           const dateFmt = iv.data ? new Date(iv.data + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) : '-'
-          const oreCell = `${iv.ore.toFixed(1)}h`
           const oreBadge = iv.fonteOre ? ' ' + (FONTE_BADGE[iv.fonteOre] || '') : ''
           const costoBadge = iv.fonteCosto ? (FONTE_BADGE[iv.fonteCosto] || '') : ''
+
+          // Cella ore: per-operatore se ci sono dettagli
+          const oreCell = (iv.opDetails || []).length > 1
+            ? iv.opDetails.map(d => {
+                const label = d.name.split(' ').pop() // cognome
+                const tot = (d.oreOrd + d.oreStr).toFixed(1)
+                return `<span style="display:block;font-size:11px;">${label}: ${tot}h</span>`
+              }).join('') + `<span style="font-size:10px;color:var(--gray-500);">tot: ${iv.ore.toFixed(1)}h</span>`
+            : `${iv.ore.toFixed(1)}h`
+
+          // Cella forza lavoro: breakdown per-operatore
+          const flCell = iv.anomalo ? '—' : (() => {
+            if ((iv.opDetails || []).length > 1) {
+              const rows = iv.opDetails.map(d =>
+                `<span style="display:block;font-size:11px;color:var(--gray-600);">
+                  ${d.name.split(' ').pop()}: ${(d.oreOrd+d.oreStr).toFixed(2)}h × ${eur(d.costoOrario)}/h = <strong>${eur(d.costo)}</strong>
+                  ${d.oreStr > 0 ? `<span style="color:#d97706;font-size:10px;">(+str ${eur(d.oreStr)}h)</span>` : ''}
+                </span>`
+              ).join('')
+              return `<span style="font-size:12px;font-weight:700;">${eur(iv.costoForzaLavoro)}</span>${rows}`
+            }
+            const d = iv.opDetails?.[0]
+            const detail = d ? `<span style="display:block;font-size:10px;color:var(--gray-500);">${(d.oreOrd+d.oreStr).toFixed(2)}h × ${eur(d.costoOrario)}/h</span>` : ''
+            return eur(iv.costoForzaLavoro) + detail
+          })()
+
           const operatori = [iv.op1Name, iv.op2Name].filter(Boolean).join(', ') || '-'
           tr.innerHTML = `
             <td>${dateFmt}</td>
             <td style="font-size:12px;color:var(--gray-600);">${operatori}</td>
             <td>${oreCell}${oreBadge}</td>
-            <td>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro)}</td>
+            <td>${flCell}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoMateriali)}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoVeicolo)}</td>
             <td><strong>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro + iv.costoMateriali + iv.costoVeicolo)}</strong></td>
