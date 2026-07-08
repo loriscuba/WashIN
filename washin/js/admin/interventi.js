@@ -140,10 +140,10 @@ export function renderListaInterventi(interventi){
       const op1Ok = iv.ore_ordinarie != null
       const op2Ok = iv.operatore2_id ? iv.ore_ordinarie_op2 != null : null // null = non c'è op2
       const allOk = op1Ok && (op2Ok === null || op2Ok)
-      const avviaBtn = iv.stato === 'pianificato'
+      const avviaBtn = !_modalitaOrario && iv.stato === 'pianificato'
         ? `<button class="btn btn-sm btn-primary" data-action="avvia-intervento" data-id="${iv.id}">▶ Avvia</button>`
         : ''
-      const stopBtn = iv.stato === 'in_corso'
+      const stopBtn = !_modalitaOrario && iv.stato === 'in_corso'
         ? `<button class="btn btn-sm btn-danger" data-action="stop-intervento" data-id="${iv.id}">■ Stop</button>`
         : ''
       if (allOk) tr.style.borderLeft = '3px solid #10b981'
@@ -264,6 +264,10 @@ async function loadSediByContratto(contrattoId, sedeSelect, currentSedeId = null
     if (currentSedeId && s.id === currentSedeId) o.selected = true
     sedeSelect.appendChild(o)
   })
+  // Auto-seleziona se c'è una sola sede e non è già impostata una sede specifica
+  if (!currentSedeId && sedi?.length === 1) {
+    sedeSelect.value = sedi[0].id
+  }
 }
 
 export async function openModalIntervento(id = null){
@@ -627,8 +631,14 @@ export function renderCalendarioMese(interventi, mese) {
   }
 }
 
-export function initInterventi(){
+let _modalitaOrario = false
+
+export async function initInterventi(){
   try{
+    // Leggi modalità intervento per nascondere "Avvia" in modalità orario
+    const { data: impost } = await supabase.from('impostazioni').select('valore').eq('chiave', 'modalita_intervento').maybeSingle()
+    _modalitaOrario = impost?.valore === 'orario'
+
     const prevBtn = document.getElementById('prev-week')
     const nextBtn = document.getElementById('next-week')
     const monthInput = document.getElementById('interventi-month')
