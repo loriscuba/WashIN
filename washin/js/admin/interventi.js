@@ -135,20 +135,33 @@ export function renderListaInterventi(interventi){
       const tr = document.createElement('tr')
       const op1 = iv.operatore ? `${iv.operatore.nome || ''} ${iv.operatore.cognome || ''}`.trim() : ''
       const op2 = iv.operatore2 ? `${iv.operatore2.nome || ''} ${iv.operatore2.cognome || ''}`.trim() : ''
-      const operatorName = [op1, op2].filter(Boolean).join(' + ') || '-'
       const cliente = iv.contratti?.clienti?.ragione_sociale || '-'
       const badgeClass = STATO_BADGE[iv.stato] || 'badge-warning'
-      const oreOk = iv.ore_ordinarie != null
+      const op1Ok = iv.ore_ordinarie != null
+      const op2Ok = iv.operatore2_id ? iv.ore_ordinarie_op2 != null : null // null = non c'è op2
+      const allOk = op1Ok && (op2Ok === null || op2Ok)
       const avviaBtn = iv.stato === 'pianificato'
         ? `<button class="btn btn-sm btn-primary" data-action="avvia-intervento" data-id="${iv.id}">▶ Avvia</button>`
         : ''
       const stopBtn = iv.stato === 'in_corso'
         ? `<button class="btn btn-sm btn-danger" data-action="stop-intervento" data-id="${iv.id}">■ Stop</button>`
         : ''
-      if (oreOk) tr.style.borderLeft = '3px solid #10b981'
+      if (allOk) tr.style.borderLeft = '3px solid #10b981'
+      else if (op1Ok || op2Ok) tr.style.borderLeft = '3px solid #f59e0b'
+
+      const opRow = (name, oreOrd, oreStr, compiled) => {
+        const color = compiled ? '#059669' : '#dc2626'
+        const oreText = compiled
+          ? `${oreOrd}h${oreStr ? ' +' + oreStr + 'h str' : ''}`
+          : 'mancanti'
+        return `<div style="font-size:12px;color:${color};font-weight:600;">${name}: ${oreText}</div>`
+      }
+      const op1Row = op1 ? opRow(op1, iv.ore_ordinarie, iv.ore_straordinario, op1Ok) : ''
+      const op2Row = op2 ? opRow(op2, iv.ore_ordinarie_op2, iv.ore_straordinario_op2, op2Ok) : ''
+
       tr.innerHTML = `
         <td style="white-space:nowrap;">${iv.data_pianificata}${iv.ora_inizio_pianificata ? '<br><span style="font-size:11px;color:var(--gray-500);">P: ' + iv.ora_inizio_pianificata.slice(0,5) + (iv.ora_fine_pianificata ? '–' + iv.ora_fine_pianificata.slice(0,5) : '') + '</span>' : ''}</td>
-        <td>${operatorName}</td>
+        <td>${op1Row}${op2Row}</td>
         <td>
           <strong>${cliente}</strong><br>
           ${iv.sedi_cliente?.nome_sede || '-'}
@@ -157,11 +170,10 @@ export function renderListaInterventi(interventi){
         <td>${iv.tipo_pulizia || '-'}</td>
         <td>
           <span class="badge ${badgeClass}">${iv.stato}</span>
-          ${oreOk ? `<span style="display:block;font-size:11px;color:#059669;font-weight:600;margin-top:3px;">✅ ${iv.ore_ordinarie}h ord${iv.ore_straordinario ? ' +' + iv.ore_straordinario + 'h str' : ''}</span>` : ''}
         </td>
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-secondary" data-action="edit-intervento" data-id="${iv.id}">Modifica</button>
-          <button class="btn btn-sm ${oreOk ? 'btn-secondary' : 'btn-primary'}" data-action="inserisci-ore-admin" data-id="${iv.id}" data-op1="${iv.operatore_id || ''}" data-op1name="${op1}" data-op2="${iv.operatore2_id || ''}" data-op2name="${op2}" data-data="${iv.data_pianificata}">⏱ ${oreOk ? 'Ore' : 'Inserisci ore'}</button>
+          <button class="btn btn-sm ${allOk ? 'btn-secondary' : 'btn-primary'}" data-action="inserisci-ore-admin" data-id="${iv.id}" data-op1="${iv.operatore_id || ''}" data-op1name="${op1}" data-op2="${iv.operatore2_id || ''}" data-op2name="${op2}" data-data="${iv.data_pianificata}">⏱ ${allOk ? 'Ore' : 'Inserisci ore'}</button>
           ${avviaBtn}${stopBtn}
         </td>
       `
