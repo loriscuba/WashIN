@@ -19,9 +19,33 @@ function marginColor(pct) {
   return '#dc2626'
 }
 
-// Costo orario: 1) busta paga del mese  2) costo_orario_medio da consuntivi  3) costo_mensile/ore_mensili
+// Costo orario — rispetta fonte_costo_preventivo del profilo:
+//   'busta'      → busta paga importata del mese, poi costo_mensile/ore_mensili
+//   'consuntivo' → costo_orario_medio da consuntivi
+//   '' / auto    → busta del mese → consuntivo → profilo (catena completa)
 function _getCostoOrario(op, opId, busteMap) {
+  const fonte = op?.fonte_costo_preventivo || ''
   const busta = busteMap[opId]
+
+  if (fonte === 'consuntivo') {
+    if (op?.costo_orario_medio > 0)
+      return { costoOrario: op.costo_orario_medio, fonte: 'consuntivo' }
+    return { costoOrario: 0, fonte: null }
+  }
+
+  if (fonte === 'busta') {
+    // Prima prova busta paga importata per il mese corrente
+    if (busta?.costo_aziendale > 0 && busta?.ore_lavorate > 0)
+      return { costoOrario: busta.costo_aziendale / busta.ore_lavorate, fonte: 'busta' }
+    // Poi usa costo_mensile del profilo (già aggiornato da ultima busta)
+    const cm = op?.costo_mensile || 0
+    const om = op?.ore_mensili_contratto || 160
+    if (cm > 0)
+      return { costoOrario: cm / om, fonte: 'profilo' }
+    return { costoOrario: 0, fonte: null }
+  }
+
+  // auto: catena completa
   if (busta?.costo_aziendale > 0 && busta?.ore_lavorate > 0)
     return { costoOrario: busta.costo_aziendale / busta.ore_lavorate, fonte: 'busta' }
   if (op?.costo_orario_medio > 0)
@@ -80,8 +104,8 @@ export async function calcolaContoEconomico(contratto_id, mese, anno) {
       inizio_effettivo, fine_effettivo, km_percorsi, stato,
       ore_ordinarie, ore_straordinario, ore_ordinarie_op2, ore_straordinario_op2, note_ore,
       operatore_id, operatore2_id,
-      operatore:profili!operatore_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio),
-      operatore2:profili!operatore2_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio)
+      operatore:profili!operatore_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio, fonte_costo_preventivo),
+      operatore2:profili!operatore2_id(nome, cognome, costo_mensile, ore_mensili_contratto, costo_orario_medio, fonte_costo_preventivo)
     `)
     .eq('contratto_id', contratto_id)
     .neq('stato', 'annullato')
