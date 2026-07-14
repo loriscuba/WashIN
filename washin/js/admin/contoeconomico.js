@@ -320,37 +320,33 @@ async function calcolaEMostra() {
           const oreBadge = iv.fonteOre ? ' ' + (FONTE_BADGE[iv.fonteOre] || '') : ''
           const costoBadge = iv.fonteCosto ? (FONTE_BADGE[iv.fonteCosto] || '') : ''
 
-          // Cella ore: per-operatore se ci sono dettagli
-          const oreCell = (iv.opDetails || []).length > 1
-            ? iv.opDetails.map(d => {
-                const label = d.name.split(' ').pop() // cognome
-                const tot = (d.oreOrd + d.oreStr).toFixed(1)
-                return `<span style="display:block;font-size:11px;">${label}: ${tot}h</span>`
-              }).join('') + `<span style="font-size:10px;color:var(--gray-500);">tot: ${iv.ore.toFixed(1)}h</span>`
-            : `${iv.ore.toFixed(1)}h`
-
-          // Cella forza lavoro: breakdown per-operatore
+          // Cella unificata: una riga per operatore con nome, ore e costo
           const flCell = iv.anomalo ? '—' : (() => {
-            if ((iv.opDetails || []).length > 1) {
-              const rows = iv.opDetails.map(d =>
-                `<span style="display:block;font-size:11px;color:var(--gray-600);">
-                  ${d.name.split(' ').pop()}: ${(d.oreOrd+d.oreStr).toFixed(2)}h × ${eur(d.costoOrario)}/h = <strong>${eur(d.costo)}</strong>
-                  ${d.oreStr > 0 ? `<span style="color:#d97706;font-size:10px;">(+str ${eur(d.oreStr)}h)</span>` : ''}
-                </span>`
-              ).join('')
-              return `<span style="font-size:12px;font-weight:700;">${eur(iv.costoForzaLavoro)}</span>${rows}`
-            }
-            const d = iv.opDetails?.[0]
-            const detail = d ? `<span style="display:block;font-size:10px;color:var(--gray-500);">${(d.oreOrd+d.oreStr).toFixed(2)}h × ${eur(d.costoOrario)}/h</span>` : ''
-            return eur(iv.costoForzaLavoro) + detail
+            const details = iv.opDetails || []
+            if (details.length === 0) return `<span style="font-size:12px;font-weight:700;">${eur(iv.costoForzaLavoro)}</span>`
+            const righe = details.map(d => {
+              const ore = (d.oreOrd + d.oreStr).toFixed(1)
+              const strTag = d.oreStr > 0
+                ? `<span style="color:#d97706;font-size:10px;margin-left:3px;">+${d.oreStr}h str</span>`
+                : ''
+              return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:2px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="font-size:12px;color:var(--gray-700);font-weight:600;">${d.name}</span>
+                <span style="font-size:11px;color:var(--gray-500);white-space:nowrap;">${ore}h${strTag} × ${eur(d.costoOrario)}/h</span>
+                <span style="font-size:12px;font-weight:700;white-space:nowrap;">${eur(d.costo)}</span>
+              </div>`
+            }).join('')
+            const totale = details.length > 1
+              ? `<div style="display:flex;justify-content:space-between;padding:3px 0 0;font-size:12px;font-weight:700;">
+                  <span style="color:var(--gray-500);">Totale${oreBadge}</span>
+                  <span>${eur(iv.costoForzaLavoro)}</span>
+                </div>`
+              : `<div style="text-align:right;padding-top:1px;">${oreBadge}</div>`
+            return righe + totale
           })()
 
-          const operatori = [iv.op1Name, iv.op2Name].filter(Boolean).join(', ') || '-'
           tr.innerHTML = `
-            <td>${dateFmt}</td>
-            <td style="font-size:12px;color:var(--gray-600);">${operatori}</td>
-            <td>${oreCell}${oreBadge}</td>
-            <td>${flCell}</td>
+            <td style="white-space:nowrap;">${dateFmt}</td>
+            <td style="min-width:200px;">${flCell}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoMateriali)}</td>
             <td>${iv.anomalo ? '—' : eur(iv.costoVeicolo)}</td>
             <td><strong>${iv.anomalo ? '—' : eur(iv.costoForzaLavoro + iv.costoMateriali + iv.costoVeicolo)}</strong></td>
