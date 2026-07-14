@@ -561,7 +561,7 @@ export function initContoEconomico() {
   document.getElementById('ce-interventi-tbody')?.addEventListener('click', async e => {
     const btn = e.target.closest('[data-ce-edit]')
     if (!btn) return
-    const { default: { apriModaleOreAdmin } } = await import('./interventi.js')
+    const { apriModaleOreAdmin } = await import('./interventi.js')
     await apriModaleOreAdmin(btn.dataset.ceEdit, btn.dataset.data,
       btn.dataset.op1, btn.dataset.op1name, btn.dataset.op2, btn.dataset.op2name)
     calcolaEMostra()
