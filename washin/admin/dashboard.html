@@ -1185,22 +1185,44 @@
               <h1>Interventi</h1>
               <p style="color: var(--gray-500); margin-top:8px;">Pianifica e monitora gli interventi.</p>
             </div>
-            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              <button id="prev-week" class="btn btn-secondary btn-sm">◀</button>
-              <button id="next-week" class="btn btn-secondary btn-sm">▶</button>
-              <input id="interventi-month" type="month" style="max-width:160px;" />
-              <button id="view-today" class="btn btn-primary btn-sm">Oggi</button>
-              <button id="view-week" class="btn btn-secondary btn-sm">Settimana</button>
-              <button id="view-month" class="btn btn-secondary btn-sm">Mese</button>
-              <button id="refresh-interventi" class="btn btn-sm btn-secondary">Aggiorna</button>
-              <button id="add-intervento-button" class="btn btn-primary">+ Nuovo intervento</button>
-            </div>
+            <button id="add-intervento-button" class="btn btn-primary">+ Nuovo intervento</button>
           </div>
 
-          <div class="card" id="calendar-week" style="overflow-x:auto; min-height:80px; margin-bottom:20px;"></div>
+          <!-- Toolbar filtri -->
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+            <!-- Navigazione periodo -->
+            <button id="iv-prev" class="btn btn-secondary btn-sm">◀</button>
+            <span id="iv-period-label" style="font-size:13px;font-weight:600;min-width:120px;text-align:center;color:var(--gray-700);"></span>
+            <button id="iv-next" class="btn btn-secondary btn-sm">▶</button>
+
+            <div style="width:1px;height:24px;background:var(--gray-200);margin:0 4px;"></div>
+
+            <!-- Periodo -->
+            <button id="iv-day"   class="btn btn-primary  btn-sm">Giorno</button>
+            <button id="iv-week"  class="btn btn-secondary btn-sm">Settimana</button>
+            <button id="iv-month" class="btn btn-secondary btn-sm">Mese</button>
+
+            <div style="width:1px;height:24px;background:var(--gray-200);margin:0 4px;"></div>
+
+            <!-- Modalità vista -->
+            <button id="iv-mode-list" class="btn btn-primary btn-sm" title="Elenco">☰ Elenco</button>
+            <button id="iv-mode-cal"  class="btn btn-secondary btn-sm" title="Calendario">📅 Calendario</button>
+
+            <div style="width:1px;height:24px;background:var(--gray-200);margin:0 4px;"></div>
+
+            <!-- Toggle passati -->
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gray-600);">
+              <input type="checkbox" id="iv-show-passati" style="cursor:pointer;">
+              Mostra passati
+            </label>
+          </div>
+
+          <!-- Calendario (settimana/mese) -->
+          <div class="card" id="calendar-week" style="overflow-x:auto; min-height:80px; margin-bottom:20px; display:none;"></div>
           <div class="card" id="calendar-month" style="overflow-x:auto; margin-bottom:20px; display:none;"></div>
 
-          <div class="table-container card">
+          <!-- Elenco -->
+          <div class="table-container card" id="iv-list-container">
             <table class="washin-table">
               <thead>
                 <tr>

@@ -20,16 +20,22 @@ function endOfMonth(date){
 
 export async function loadInterventi(filtri = {}){
   try{
-    let query = supabase.from('interventi').select("*, operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome), sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale))")
+    let query = supabase.from('interventi').select("*, ore_ordinarie_op2, ore_straordinario_op2, operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome), sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale))")
 
-    if (filtri.date) {
+    if (filtri.dateFrom && filtri.dateTo) {
+      query = query.gte('data_pianificata', filtri.dateFrom).lte('data_pianificata', filtri.dateTo)
+    } else if (filtri.date) {
       query = query.eq('data_pianificata', filtri.date)
     } else if (filtri.month){
-      // filtri.month può essere string 'YYYY-MM' o Date
       let ref = (filtri.month instanceof Date) ? filtri.month : new Date(filtri.month + '-01')
       const start = formatDateISO(startOfMonth(ref))
       const end = formatDateISO(endOfMonth(ref))
       query = query.gte('data_pianificata', start).lte('data_pianificata', end)
+    }
+
+    if (filtri.soloFuturi) {
+      const oggi = formatDateISO(new Date())
+      query = query.gte('data_pianificata', oggi)
     }
 
     if (filtri.operatore) query = query.eq('operatore_id', filtri.operatore)
@@ -635,81 +641,112 @@ let _modalitaOrario = false
 
 export async function initInterventi(){
   try{
-    // Leggi modalità intervento per nascondere "Avvia" in modalità orario
     const { data: impost } = await supabase.from('impostazioni').select('valore').eq('chiave', 'modalita_intervento').maybeSingle()
     _modalitaOrario = impost?.valore === 'orario'
 
-    const prevBtn = document.getElementById('prev-week')
-    const nextBtn = document.getElementById('next-week')
-    const monthInput = document.getElementById('interventi-month')
-    const refresh = document.getElementById('refresh-interventi')
-    const addBtn = document.getElementById('add-intervento-button')
-    const modal = document.getElementById('intervento-modal')
-    const form = modal?.querySelector('form')
-    let refDate = new Date()
-    let currentView = 'today'
+    const addBtn  = document.getElementById('add-intervento-button')
+    const modal   = document.getElementById('intervento-modal')
+    const form    = modal?.querySelector('form')
 
-    // auto-set current month
-    if (monthInput) {
-      monthInput.value = `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
+    // stato vista
+    let refDate     = new Date()
+    let period      = 'day'   // 'day' | 'week' | 'month'
+    let mode        = 'list'  // 'list' | 'calendar'
+    let showPassati = false
+
+    // ── helpers date ──────────────────────────────────────────
+    function isoDate(d) { return formatDateISO(d) }
+    function startOfWeek(d) {
+      const c = new Date(d); const day = c.getDay(); const diff = day === 0 ? -6 : 1 - day
+      c.setDate(c.getDate() + diff); return c
+    }
+    function endOfWeek(d) { const s = startOfWeek(d); const e = new Date(s); e.setDate(s.getDate()+6); return e }
+    function fmtLabel(d, p) {
+      if (p === 'day') return d.toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short', year:'numeric' })
+      if (p === 'week') {
+        const s = startOfWeek(d), e = endOfWeek(d)
+        return `${s.toLocaleDateString('it-IT',{day:'numeric',month:'short'})} – ${e.toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'})}`
+      }
+      return d.toLocaleDateString('it-IT', { month:'long', year:'numeric' })
     }
 
-    function setView(v) {
-      currentView = v
-      const isToday = v === 'today'
-      const wk = document.getElementById('calendar-week')
-      const mo = document.getElementById('calendar-month')
-      if (wk) wk.style.display = v === 'week' ? '' : 'none'
-      if (mo) mo.style.display = v === 'month' ? '' : 'none'
-      if (prevBtn) prevBtn.style.display = isToday ? 'none' : ''
-      if (nextBtn) nextBtn.style.display = isToday ? 'none' : ''
-      if (monthInput) monthInput.style.display = isToday ? 'none' : ''
-      document.getElementById('view-today')?.classList.toggle('btn-primary', isToday)
-      document.getElementById('view-today')?.classList.toggle('btn-secondary', !isToday)
-      document.getElementById('view-week')?.classList.toggle('btn-primary', v === 'week')
-      document.getElementById('view-week')?.classList.toggle('btn-secondary', v !== 'week')
-      document.getElementById('view-month')?.classList.toggle('btn-primary', v === 'month')
-      document.getElementById('view-month')?.classList.toggle('btn-secondary', v !== 'month')
+    // ── update UI buttons ──────────────────────────────────────
+    function updateToolbar() {
+      document.getElementById('iv-period-label').textContent = fmtLabel(refDate, period)
+      ;['day','week','month'].forEach(p => {
+        document.getElementById(`iv-${p}`)?.classList.toggle('btn-primary', period === p)
+        document.getElementById(`iv-${p}`)?.classList.toggle('btn-secondary', period !== p)
+      })
+      ;['list','cal'].forEach(m => {
+        document.getElementById(`iv-mode-${m}`)?.classList.toggle('btn-primary', mode === m)
+        document.getElementById(`iv-mode-${m}`)?.classList.toggle('btn-secondary', mode !== m)
+      })
+      // calendario non disponibile in "giorno"
+      const calBtn = document.getElementById('iv-mode-cal')
+      if (calBtn) calBtn.disabled = period === 'day'
+      // nascondi lista in modalità calendario
+      const listContainer = document.getElementById('iv-list-container')
+      const calWk = document.getElementById('calendar-week')
+      const calMo = document.getElementById('calendar-month')
+      if (mode === 'calendar') {
+        if (listContainer) listContainer.style.display = 'none'
+        if (calWk) calWk.style.display = period === 'week' ? '' : 'none'
+        if (calMo) calMo.style.display = period === 'month' ? '' : 'none'
+      } else {
+        if (listContainer) listContainer.style.display = ''
+        if (calWk) calWk.style.display = 'none'
+        if (calMo) calMo.style.display = 'none'
+      }
     }
 
-    async function refreshView(){
-      if (currentView === 'today') {
-        const todayStr = new Date().toISOString().slice(0, 10)
-        const interventi = await loadInterventi({ date: todayStr })
+    // ── carica e mostra ──────────────────────────────────────────
+    async function refreshView() {
+      updateToolbar()
+      const oggi = isoDate(new Date())
+      let filtri = { soloFuturi: !showPassati }
+
+      if (period === 'day') {
+        filtri.date = isoDate(refDate)
+        delete filtri.soloFuturi // giorno specifico: mostra tutto
+      } else if (period === 'week') {
+        filtri.dateFrom = isoDate(startOfWeek(refDate))
+        filtri.dateTo   = isoDate(endOfWeek(refDate))
+        if (!showPassati) filtri.dateFrom = filtri.dateFrom < oggi ? oggi : filtri.dateFrom
+      } else {
+        filtri.month = refDate
+        if (!showPassati) filtri.soloFuturi = true
+      }
+
+      const interventi = await loadInterventi(filtri)
+
+      if (mode === 'list') {
         renderListaInterventi(interventi)
       } else {
-        const month = monthInput?.value || `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
-        const interventi = await loadInterventi({ month })
-        if (currentView === 'week') renderCalendarioSettimana(interventi, refDate)
-        else renderCalendarioMese(interventi, month)
-        renderListaInterventi(interventi)
+        if (period === 'week') renderCalendarioSettimana(interventi, refDate)
+        else renderCalendarioMese(interventi, isoDate(refDate).slice(0,7))
       }
     }
 
-    prevBtn?.addEventListener('click', () => {
-      if (currentView === 'month') {
-        refDate.setMonth(refDate.getMonth() - 1)
-        if (monthInput) monthInput.value = `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
-      } else {
-        refDate.setDate(refDate.getDate() - 7)
-      }
+    // ── navigazione ──────────────────────────────────────────
+    document.getElementById('iv-prev')?.addEventListener('click', () => {
+      if (period === 'day')   refDate.setDate(refDate.getDate() - 1)
+      if (period === 'week')  refDate.setDate(refDate.getDate() - 7)
+      if (period === 'month') refDate.setMonth(refDate.getMonth() - 1)
       refreshView()
     })
-    nextBtn?.addEventListener('click', () => {
-      if (currentView === 'month') {
-        refDate.setMonth(refDate.getMonth() + 1)
-        if (monthInput) monthInput.value = `${refDate.getFullYear()}-${String(refDate.getMonth()+1).padStart(2,'0')}`
-      } else {
-        refDate.setDate(refDate.getDate() + 7)
-      }
+    document.getElementById('iv-next')?.addEventListener('click', () => {
+      if (period === 'day')   refDate.setDate(refDate.getDate() + 1)
+      if (period === 'week')  refDate.setDate(refDate.getDate() + 7)
+      if (period === 'month') refDate.setMonth(refDate.getMonth() + 1)
       refreshView()
     })
 
-    document.getElementById('view-today')?.addEventListener('click', () => { setView('today'); refreshView() })
-    document.getElementById('view-week')?.addEventListener('click', () => { setView('week'); refreshView() })
-    document.getElementById('view-month')?.addEventListener('click', () => { setView('month'); refreshView() })
-    monthInput?.addEventListener('change', refreshView)
-    refresh?.addEventListener('click', refreshView)
+    document.getElementById('iv-day')?.addEventListener('click', () => { period = 'day'; if (mode==='calendar') mode='list'; refreshView() })
+    document.getElementById('iv-week')?.addEventListener('click', () => { period = 'week'; refreshView() })
+    document.getElementById('iv-month')?.addEventListener('click', () => { period = 'month'; refreshView() })
+    document.getElementById('iv-mode-list')?.addEventListener('click', () => { mode = 'list'; refreshView() })
+    document.getElementById('iv-mode-cal')?.addEventListener('click', () => { if (period !== 'day') { mode = 'calendar'; refreshView() } })
+    document.getElementById('iv-show-passati')?.addEventListener('change', e => { showPassati = e.target.checked; refreshView() })
 
     addBtn?.addEventListener('click', async ()=>{ await openModalIntervento(); if (modal && window.lucide) window.lucide.replace() })
 
@@ -835,7 +872,6 @@ export async function initInterventi(){
     window.addEventListener('interventi:refresh', refreshView)
 
     // initial load
-    setView('today')
     refreshView()
   }catch(err){
     showToast('Errore inizializzazione interventi','error')
