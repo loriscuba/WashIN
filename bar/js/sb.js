@@ -1,8 +1,8 @@
-// Client Supabase condiviso: usa le stesse credenziali di WashIN (washin/js/config.js)
+// Client Supabase condiviso: credenziali in bar/js/config.js
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
 
 if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
-  throw new Error('Configurazione Supabase mancante: verifica washin/js/config.js')
+  throw new Error('Configurazione Supabase mancante: verifica bar/js/config.js')
 }
 
 export const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY)
