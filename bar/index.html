@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Menu del Bar</title>
+  <meta name="theme-color" content="#FAF7F2" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230D9488'/><text x='50%25' y='56%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Arial,sans-serif' font-weight='800' font-size='18'>M</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/bar.css">
+  <script src="../washin/js/config.js"></script>
+</head>
+<body>
+  <header class="menu-head wrap">
+    <h1 id="bar-name">Menu</h1>
+    <p id="bar-sub" class="muted"></p>
+    <span id="table-badge" class="table-badge hidden"></span>
+  </header>
+
+  <nav class="cat-nav hidden" id="cat-nav" aria-label="Categorie"><div class="wrap" id="cat-chips"></div></nav>
+
+  <main class="wrap" id="menu">
+    <p class="state muted">Caricamento del menu…</p>
+  </main>
+
+  <footer class="menu-foot wrap muted" id="foot"></footer>
+
+  <script type="module" src="js/menu.js"></script>
+</body>
+</html>

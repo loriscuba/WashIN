@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gestione Menu Bar</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230F172A'/><text x='50%25' y='56%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Arial,sans-serif' font-weight='800' font-size='18'>M</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/bar.css">
+  <script src="../washin/js/config.js"></script>
+  <script src="js/vendor/qrcode.js"></script>
+</head>
+<body class="admin">
+  <!-- Login (stesse credenziali di WashIN, solo ruolo admin) -->
+  <section id="login-view" class="wrap hidden">
+    <form id="login-form" class="card login">
+      <h3>Gestione Menu Bar</h3>
+      <p class="muted" style="font-size:.9rem;margin-bottom:14px">Accedi con il tuo account WashIN (amministratore).</p>
+      <label class="field">Email<input type="email" id="email" required autocomplete="username"></label>
+      <label class="field">Password<input type="password" id="password" required autocomplete="current-password"></label>
+      <button class="btn primary" type="submit" style="width:100%;justify-content:center">Accedi</button>
+      <p class="error" id="login-error" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <div id="app-view" class="hidden">
+    <header class="topbar">
+      <div class="wrap">
+        <strong>Menu Bar · Gestione</strong>
+        <div style="display:flex;gap:8px">
+          <a class="btn sm" href="./" target="_blank" rel="noopener">Vedi menu</a>
+          <button class="btn sm" id="logout">Esci</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="prodotti">Prodotti</button>
+        <button class="tab" data-tab="categorie">Categorie</button>
+        <button class="tab" data-tab="tavoli">Tavoli e QR</button>
+        <button class="tab" data-tab="impostazioni">Impostazioni</button>
+      </nav>
+
+      <section class="panel" data-panel="prodotti">
+        <div class="row-actions">
+          <button class="btn primary" id="new-prod">+ Nuovo prodotto</button>
+          <input type="text" id="prod-search" placeholder="Cerca prodotto…" style="max-width:260px">
+        </div>
+        <div id="prod-list"></div>
+      </section>
+
+      <section class="panel hidden" data-panel="categorie">
+        <form class="card row-actions" id="cat-form" style="margin-bottom:16px">
+          <input type="text" id="cat-new" placeholder="Nuova categoria" required style="flex:1;min-width:180px">
+          <button class="btn primary" type="submit">Aggiungi</button>
+        </form>
+        <div class="card" id="cat-list"></div>
+      </section>
+
+      <section class="panel hidden" data-panel="tavoli">
+        <div class="card">
+          <h3>Aggiungi tavoli</h3>
+          <form class="row-actions" id="tav-form">
+            <input type="text" id="tav-new" placeholder="Es. 5, Terrazza 2" style="flex:1;min-width:160px">
+            <button class="btn" type="submit">Aggiungi</button>
+          </form>
+          <form class="row-actions" id="tav-range" style="margin-bottom:0">
+            <span class="muted" style="font-size:.9rem">Da</span>
+            <input type="number" id="tav-from" min="1" value="1" style="width:80px">
+            <span class="muted" style="font-size:.9rem">a</span>
+            <input type="number" id="tav-to" min="1" value="10" style="width:80px">
+            <button class="btn" type="submit">Crea tavoli numerati</button>
+          </form>
+        </div>
+        <div class="row-actions">
+          <button class="btn primary" id="print-qr">Stampa tutti i QR</button>
+          <span class="muted" style="font-size:.85rem" id="qr-url"></span>
+        </div>
+        <div class="qr-grid" id="qr-grid"></div>
+      </section>
+
+      <section class="panel hidden" data-panel="impostazioni">
+        <form class="card" id="imp-form">
+          <label class="field">Nome del bar<input type="text" id="imp-nome" required></label>
+          <label class="field">Sottotitolo (opzionale)<input type="text" id="imp-sub" placeholder="Es. Aperto dalle 7 alle 19"></label>
+          <label class="field">Nota a piè di pagina<textarea id="imp-nota"></textarea></label>
+          <button class="btn primary" type="submit">Salva</button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="prod-dialog">
+    <form id="prod-form" method="dialog">
+      <h3 id="prod-title">Prodotto</h3>
+      <label class="field">Categoria<select id="p-cat" required></select></label>
+      <div class="grid2">
+        <label class="field">Nome<input type="text" id="p-nome" required></label>
+        <label class="field">Variante (opzionale)<input type="text" id="p-var" placeholder="Es. Piccolo, Grande"></label>
+      </div>
+      <label class="field">Descrizione / ingredienti<textarea id="p-desc"></textarea></label>
+      <div class="grid2">
+        <label class="field">Prezzo (€)<input type="number" id="p-prezzo" step="0.01" min="0" required></label>
+        <label class="field">Ordine<input type="number" id="p-ordine" step="1"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="p-surg"> Prodotto surgelato (*)</label>
+      <label class="check"><input type="checkbox" id="p-disp" checked> Disponibile</label>
+      <div class="dialog-actions">
+        <button class="btn danger" type="button" id="p-del">Elimina</button>
+        <span style="display:flex;gap:8px">
+          <button class="btn" type="button" id="p-cancel">Annulla</button>
+          <button class="btn primary" type="submit">Salva</button>
+        </span>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="print-area" class="hidden"></div>
+
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>
