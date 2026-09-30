@@ -12,12 +12,12 @@ SET search_path = ''
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.profili
-    WHERE id = auth.uid() AND ruolo = 'admin'
+    WHERE user_id = auth.uid() AND ruolo = 'admin'
   );
 $$;
 
-REVOKE ALL ON FUNCTION public.bar_is_admin() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.bar_is_admin() TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.bar_is_admin() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.bar_is_admin() TO authenticated;
 
 CREATE TABLE IF NOT EXISTS public.bar_categorie (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
