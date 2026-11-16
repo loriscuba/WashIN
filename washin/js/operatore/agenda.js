@@ -83,6 +83,25 @@ function endOfWeekStr() {
   return localDateStr(sunday)
 }
 
+// L'operatore non può leggere i profili dei colleghi (RLS): i nomi arrivano
+// dalla funzione nomi_colleghi, limitata a chi condivide un intervento.
+async function completaNomiColleghi(interventi) {
+  const ids = new Set()
+  for (const iv of interventi) {
+    if (iv.operatore_id && !iv.operatore) ids.add(iv.operatore_id)
+    if (iv.operatore2_id && !iv.operatore2) ids.add(iv.operatore2_id)
+  }
+  if (!ids.size) return interventi
+  const { data, error } = await supabase.rpc('nomi_colleghi', { ids: [...ids] })
+  if (error) { console.warn('nomi_colleghi', error); return interventi }
+  const byId = Object.fromEntries((data || []).map(p => [p.id, { nome: p.nome, cognome: p.cognome }]))
+  for (const iv of interventi) {
+    if (iv.operatore_id && !iv.operatore) iv.operatore = byId[iv.operatore_id] || null
+    if (iv.operatore2_id && !iv.operatore2) iv.operatore2 = byId[iv.operatore2_id] || null
+  }
+  return interventi
+}
+
 export async function loadInterventiOperatore(start, end) {
   try {
     const operatoreId = await getOperatoreId()
@@ -98,7 +117,7 @@ export async function loadInterventiOperatore(start, end) {
       .order('ora_inizio_pianificata', { ascending: true })
 
     if (error) throw error
-    return data || []
+    return completaNomiColleghi(data || [])
   } catch (error) {
     showToast('Errore caricamento interventi', 'error')
     console.error(error)
@@ -120,7 +139,7 @@ export async function loadInterventiPassati() {
       .order('data_pianificata', { ascending: false })
       .limit(50)
     if (error) throw error
-    return data || []
+    return completaNomiColleghi(data || [])
   } catch (error) {
     showToast('Errore caricamento storico', 'error')
     console.error(error)

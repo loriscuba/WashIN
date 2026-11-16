@@ -134,6 +134,12 @@ Deno.serve(async (req: Request) => {
     const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
     if (authErr || !user) return new Response(JSON.stringify({ error: 'Non autorizzato' }), { status: 401, headers: CORS })
 
+    // Solo gli admin possono inviare cedolini o email di prova
+    const { data: callerProfile } = await supabaseAdmin
+      .from('profili').select('ruolo').eq('user_id', user.id).maybeSingle()
+    if (callerProfile?.ruolo !== 'admin')
+      return new Response(JSON.stringify({ error: 'Accesso riservato agli amministratori' }), { status: 403, headers: CORS })
+
     const body = await req.json()
     const { busta_paga_id, _test, test_to } = body
 
