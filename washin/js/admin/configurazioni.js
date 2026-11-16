@@ -21,7 +21,7 @@ function renderParametriCcnl(rows) {
   const tbody = document.getElementById('ccnl-tbody')
   if (!tbody) return
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:24px;">Nessun parametro CCNL. Eseguire migrations_v19.sql su Supabase.</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--gray-400);padding:24px;">Nessun parametro CCNL. Eseguire sql/migrations/migrations_v19.sql su Supabase.</td></tr>'
     return
   }
   tbody.innerHTML = rows.map(r => `
@@ -76,7 +76,7 @@ function renderTariffeInail(rows) {
   const tbody = document.getElementById('inail-tbody')
   if (!tbody) return
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px;">Nessuna tariffa INAIL. Eseguire migrations_v19.sql su Supabase.</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px;">Nessuna tariffa INAIL. Eseguire sql/migrations/migrations_v19.sql su Supabase.</td></tr>'
     return
   }
   tbody.innerHTML = rows.map(r => `
@@ -177,7 +177,7 @@ function renderCoefficientiRischio(rows) {
   const tbody = document.getElementById('coeff-tbody')
   if (!tbody) return
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px;">Nessun coefficiente. Eseguire migrations_v23.sql su Supabase.</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--gray-400);padding:24px;">Nessun coefficiente. Eseguire sql/migrations/migrations_v23.sql su Supabase.</td></tr>'
     return
   }
   tbody.innerHTML = rows.map(r => `
