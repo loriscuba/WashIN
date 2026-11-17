@@ -28,6 +28,8 @@ export async function uploadAvatar(userId, file) {
   if (error) throw error
   const { data } = supabase.storage.from('avatars').getPublicUrl(path)
   const urlWithTs = data.publicUrl + '?t=' + Date.now()
-  await supabase.from('profili').update({ avatar_url: data.publicUrl }).eq('id', userId)
+  // aggiorna il profilo collegato all'account (profili.user_id), non profili.id
+  const { error: rpcErr } = await supabase.rpc('aggiorna_mio_avatar', { url: data.publicUrl })
+  if (rpcErr) throw rpcErr
   return urlWithTs
 }
