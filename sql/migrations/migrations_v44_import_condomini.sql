@@ -21,12 +21,14 @@
 --     sommano (scale + garage) o si alternano (estate/inverno): restano vuoti e il
 --     contratto ha una nota da verificare; nell'app c'è "Calcola dai servizi".
 
-BEGIN;
-
-CREATE TEMP TABLE _imp_clienti (nome text, amm text, tipo text, tempo text, prezzo text, ottimale text,
-  importo numeric, ottimale_m numeric, ore numeric, note text) ON COMMIT DROP;
-CREATE TEMP TABLE _imp_servizi (nome text, ordine int, descrizione text, tempo_testo text,
-  minuti int, numero numeric, periodo text, prezzo numeric, unita text, ottimale numeric, note text) ON COMMIT DROP;
+-- Tabelle di appoggio normali (non TEMP: il SQL Editor di Supabase può eseguire
+-- le istruzioni su connessioni diverse), cancellate alla fine.
+DROP TABLE IF EXISTS public._imp_clienti;
+DROP TABLE IF EXISTS public._imp_servizi;
+CREATE TABLE public._imp_clienti (nome text, amm text, tipo text, tempo text, prezzo text, ottimale text,
+  importo numeric, ottimale_m numeric, ore numeric, note text);
+CREATE TABLE public._imp_servizi (nome text, ordine int, descrizione text, tempo_testo text,
+  minuti int, numero numeric, periodo text, prezzo numeric, unita text, ottimale numeric, note text);
 
 INSERT INTO public.amministratori (nome) VALUES
   ('3B'),
@@ -97,7 +99,7 @@ INSERT INTO public.amministratori (nome) VALUES
   ('Venturino')
 ON CONFLICT ((lower(nome))) DO NOTHING;
 
-INSERT INTO _imp_clienti VALUES
+INSERT INTO public._imp_clienti VALUES
   ('Al collegio 5', 'Bonora', 'condominio', '0,30 2 v al mese', '47,09', '50', 47.09, 50.0, 1.0, NULL),
   ('Al collegio 6', 'Bonora', 'condominio', '0,30 1 v. Settim
 0,30 2 v mese', '55,20
@@ -445,7 +447,7 @@ diversi', NULL, NULL, NULL, 'Più righe di servizio: verificare se si sommano o 
   ('Vittorio veneto 48', 'Ottonello', 'condominio', '0,45 1 v sett', '118', '135', 118.0, 135.0, 3.25, NULL),
   ('Elena', NULL, NULL, NULL, '18', '20', NULL, NULL, NULL, NULL);
 
-INSERT INTO _imp_servizi VALUES
+INSERT INTO public._imp_servizi VALUES
   ('Al collegio 5', 1, NULL, '0,30 2 v al mese', 30, 2, 'mese', 47.09, 'mese', 50.0, NULL),
   ('Al collegio 6', 1, NULL, '0,30 1 v. Settim', 30, 1, 'settimana', 55.2, 'mese', 90.0, NULL),
   ('Al collegio 6', 2, NULL, '0,30 2 v mese', 30, 2, 'mese', 33.0, 'mese', 40.0, NULL),
@@ -726,7 +728,7 @@ INSERT INTO _imp_servizi VALUES
 -- Clienti: riusa quelli già presenti con lo stesso nome
 UPDATE public.clienti c
 SET nome_breve = i.nome
-FROM _imp_clienti i
+FROM public._imp_clienti i
 WHERE c.nome_breve IS NULL
   AND public.normalizza_nome(regexp_replace(c.ragione_sociale, '^\s*(condominio|cond\.)\s+', '', 'i'))
       = public.normalizza_nome(i.nome)
@@ -735,7 +737,7 @@ WHERE c.nome_breve IS NULL
 
 INSERT INTO public.clienti (ragione_sociale, nome_breve, tipo, attivo)
 SELECT i.nome, i.nome, i.tipo, true
-FROM _imp_clienti i
+FROM public._imp_clienti i
 WHERE NOT EXISTS (SELECT 1 FROM public.clienti c
                   WHERE public.normalizza_nome(c.nome_breve) = public.normalizza_nome(i.nome));
 
@@ -743,7 +745,7 @@ WHERE NOT EXISTS (SELECT 1 FROM public.clienti c
 UPDATE public.clienti c
 SET amministratore_id = coalesce(c.amministratore_id, a.id),
     tipo              = coalesce(c.tipo, i.tipo)
-FROM _imp_clienti i
+FROM public._imp_clienti i
 LEFT JOIN public.amministratori a ON lower(a.nome) = lower(i.amm)
 WHERE public.normalizza_nome(c.nome_breve) = public.normalizza_nome(i.nome);
 
@@ -752,7 +754,7 @@ INSERT INTO public.contratti (cliente_id, tipo, stato, importo_mensile, prezzo_o
   ore_contratto_mensili, tempo_originale, prezzo_originale, prezzo_ottimale_originale, fonte_import, note)
 SELECT c.id, 'ricorrente', 'attivo', i.importo, i.ottimale_m, i.ore,
        i.tempo, i.prezzo, i.ottimale, 'elenco-condomini-2026-11', i.note
-FROM _imp_clienti i
+FROM public._imp_clienti i
 JOIN public.clienti c ON public.normalizza_nome(c.nome_breve) = public.normalizza_nome(i.nome)
 WHERE NOT EXISTS (SELECT 1 FROM public.contratti k
                   WHERE k.cliente_id = c.id AND k.fonte_import = 'elenco-condomini-2026-11');
@@ -762,12 +764,13 @@ INSERT INTO public.contratti_servizi (contratto_id, ordine, descrizione, tempo_t
   interventi_numero, interventi_periodo, prezzo, prezzo_unita, prezzo_ottimale, note)
 SELECT k.id, s.ordine, s.descrizione, s.tempo_testo, s.minuti, s.numero, s.periodo,
        s.prezzo, s.unita, s.ottimale, s.note
-FROM _imp_servizi s
+FROM public._imp_servizi s
 JOIN public.clienti c   ON public.normalizza_nome(c.nome_breve) = public.normalizza_nome(s.nome)
 JOIN public.contratti k ON k.cliente_id = c.id AND k.fonte_import = 'elenco-condomini-2026-11'
 WHERE NOT EXISTS (SELECT 1 FROM public.contratti_servizi x WHERE x.contratto_id = k.id);
 
-COMMIT;
+DROP TABLE public._imp_clienti;
+DROP TABLE public._imp_servizi;
 
 -- Controllo
 SELECT count(*) AS contratti_importati,
