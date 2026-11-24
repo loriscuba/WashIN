@@ -252,6 +252,8 @@
       .ana-btn-scheda { background: #faf5ff; color: #7c3aed; border: 1px solid #e9d5ff; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
       /* ── Scheda contratto ── */
       .scheda-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
+      .contratto-sez { border-top:1px solid var(--gray-200); padding-top:12px; margin-top:8px; }
+      .contratto-sez > summary { cursor:pointer; list-style:revert; }
       .scheda-section-title { font-size: 11px; font-weight: 700; color: var(--teal,#0d9488); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; }
       /* ── Sidebar nav icon sizing ── */
       .sidebar-nav a .nav-label { margin-left: 2px; }
@@ -1695,40 +1697,169 @@
     </div>
 
     <div class="modal-overlay" id="contratto-modal">
-      <div class="modal-box">
+      <div class="modal-box" style="max-width:820px;">
         <h2>Nuovo Contratto</h2>
+        <p id="contratto-completezza" style="margin:-6px 0 12px;font-size:12px;color:var(--gray-500);"></p>
         <form>
+          <!-- Contratto -->
+          <p class="scheda-section-title">Contratto</p>
           <div class="form-group"><label>Cliente</label><select name="cliente_id"><option value="">-- Seleziona cliente --</option></select></div>
-          <div class="form-group"><label>Numero contratto</label><input name="numero_contratto" type="text"></div>
-          <div class="form-group"><label>Tipo</label>
-            <select name="tipo">
-              <option value="ricorrente">Ricorrente</option>
-              <option value="una_tantum">Una tantum</option>
-              <option value="appalto">Appalto</option>
-            </select>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Numero contratto</label><input name="numero_contratto" type="text"></div>
+            <div class="form-group"><label>Tipo</label>
+              <select name="tipo">
+                <option value="ricorrente">Ricorrente</option>
+                <option value="una_tantum">Una tantum</option>
+                <option value="appalto">Appalto</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Stato</label>
+              <select name="stato">
+                <option value="attivo">Attivo</option>
+                <option value="sospeso">Sospeso</option>
+                <option value="scaduto">Scaduto</option>
+              </select>
+            </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
             <div class="form-group"><label>Data inizio</label><input name="data_inizio" type="date"></div>
-            <div class="form-group"><label>Data fine</label><input name="data_fine" type="date"></div>
+            <div class="form-group"><label>Data scadenza</label><input name="data_fine" type="date"></div>
+            <div class="form-group"><label>Rinnovo tacito</label>
+              <select name="rinnovo_tacito"><option value="">—</option><option value="true">Sì</option><option value="false">No</option></select>
+            </div>
+            <div class="form-group"><label>Preavviso disdetta (gg)</label><input name="preavviso_disdetta_giorni" type="number" min="0"></div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div class="form-group"><label>Importo mensile (€)</label><input name="importo_mensile" type="number" step="0.01" min="0"></div>
-            <div class="form-group"><label>Ore/mese</label><input name="ore_contratto_mensili" type="number" step="0.5" min="0"></div>
-          </div>
-          <div class="form-group"><label>Frequenza</label>
-            <select name="frequenza">
-              <option value="settimanale">Settimanale</option>
-              <option value="giornaliera">Giornaliera</option>
-              <option value="mensile">Mensile</option>
-            </select>
-          </div>
-          <div class="form-group"><label>Stato</label>
-            <select name="stato">
-              <option value="attivo">Attivo</option>
-              <option value="sospeso">Sospeso</option>
-              <option value="scaduto">Scaduto</option>
-            </select>
-          </div>
+
+          <!-- Condominio -->
+          <details class="contratto-sez" open>
+            <summary class="scheda-section-title">Condominio</summary>
+            <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;">
+              <div class="form-group"><label>Nome breve</label><input data-cli="nome_breve" type="text" placeholder="es. Aurelia 58"></div>
+              <div class="form-group"><label>Indirizzo (via e civico)</label><input data-cli="indirizzo" type="text"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;">
+              <div class="form-group"><label>CAP</label><input data-cli="cap" type="text"></div>
+              <div class="form-group"><label>Città</label><input data-cli="citta" type="text"></div>
+              <div class="form-group"><label>Provincia</label><input data-cli="provincia" type="text" maxlength="5" placeholder="SV"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Referente in loco (es. consigliere)</label><input data-cli="referente_in_loco" type="text"></div>
+              <div class="form-group"><label>Telefono referente</label><input data-cli="telefono_referente" type="text"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+              <div class="form-group"><label>N. scale</label><input data-cli="num_scale" type="number" min="0"></div>
+              <div class="form-group"><label>N. piani</label><input data-cli="num_piani" type="number" min="0"></div>
+              <div class="form-group"><label>N. interni</label><input data-cli="num_interni" type="number" min="0"></div>
+            </div>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px;">
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input data-cli="ascensore" type="checkbox" style="width:auto;"> Ascensore</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input data-cli="cortile" type="checkbox" style="width:auto;"> Cortile</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input data-cli="garage" type="checkbox" style="width:auto;"> Garage</label>
+              <label style="display:flex;align-items:center;gap:6px;font-weight:400;"><input data-cli="cantine" type="checkbox" style="width:auto;"> Cantine</label>
+            </div>
+          </details>
+
+          <!-- Amministratore -->
+          <details class="contratto-sez" open>
+            <summary class="scheda-section-title">Amministratore</summary>
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;align-items:end;">
+              <div class="form-group"><label>Amministratore</label><select id="contratto-amm-select"><option value="">— nessuno —</option></select></div>
+              <div class="form-group"><button type="button" id="contratto-amm-nuovo" class="btn btn-secondary btn-sm">+ Nuovo amministratore</button></div>
+            </div>
+            <div id="contratto-amm-dati">
+              <p style="font-size:12px;color:var(--gray-500);margin:0 0 8px;">I contatti valgono per tutti i condomini di questo amministratore.</p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="form-group"><label>Ragione sociale / studio</label><input data-amm="nome" type="text"></div>
+                <div class="form-group"><label>Referente</label><input data-amm="referente" type="text"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                <div class="form-group"><label>Telefono</label><input data-amm="telefono" type="text"></div>
+                <div class="form-group"><label>Email</label><input data-amm="email" type="email"></div>
+                <div class="form-group"><label>PEC</label><input data-amm="pec" type="email"></div>
+              </div>
+            </div>
+          </details>
+
+          <!-- Servizi -->
+          <details class="contratto-sez" open>
+            <summary class="scheda-section-title">Servizi e frequenza</summary>
+            <div id="contratto-servizi-incl" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;"></div>
+            <div style="overflow-x:auto;">
+              <table class="washin-table" style="font-size:12px;min-width:720px;">
+                <thead><tr>
+                  <th>Descrizione</th><th>Min/intervento</th><th>N.</th><th>Ogni</th>
+                  <th>Prezzo €</th><th>Per</th><th>Ottimale €</th><th>Note</th><th></th>
+                </tr></thead>
+                <tbody id="contratto-servizi-body"></tbody>
+              </table>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px;">
+              <button type="button" id="contratto-servizio-add" class="btn btn-secondary btn-sm">+ Riga servizio</button>
+              <button type="button" id="contratto-calcola" class="btn btn-secondary btn-sm">Calcola importo e ore dai servizi</button>
+            </div>
+            <div id="contratto-originale" style="display:none;font-size:12px;background:var(--gray-50,#f9fafb);border:1px dashed var(--gray-300);border-radius:8px;padding:8px 10px;margin-bottom:12px;white-space:pre-line;"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Giorni preferiti</label><input name="giorni_preferiti" type="text" placeholder="es. martedì mattina"></div>
+              <div class="form-group"><label>Frequenza (riepilogo)</label>
+                <select name="frequenza">
+                  <option value="">—</option>
+                  <option value="settimanale">Settimanale</option>
+                  <option value="giornaliera">Giornaliera</option>
+                  <option value="mensile">Mensile</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group"><label>Extra a parte</label><textarea name="extra_a_parte" rows="2" placeholder="es. vetri su richiesta, sgombero cantine"></textarea></div>
+          </details>
+
+          <!-- Economico -->
+          <details class="contratto-sez" open>
+            <summary class="scheda-section-title">Economico e fatturazione</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Importo mensile (€)</label><input name="importo_mensile" type="number" step="0.01" min="0"></div>
+              <div class="form-group"><label>Prezzo ottimale/mese (€)</label><input name="prezzo_ottimale_mensile" type="number" step="0.01" min="0"></div>
+              <div class="form-group"><label>Ore/mese</label><input name="ore_contratto_mensili" type="number" step="0.01" min="0"></div>
+              <div class="form-group"><label>IVA</label>
+                <select name="iva_inclusa"><option value="false">Esclusa</option><option value="true">Inclusa</option></select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Modalità pagamento</label><input name="modalita_pagamento" type="text" placeholder="bonifico, RiBa…"></div>
+              <div class="form-group"><label>Termini pagamento (gg)</label><input name="termini_pagamento_giorni" type="number" min="0"></div>
+              <div class="form-group"><label>Adeguamento ISTAT</label>
+                <select name="adeguamento_istat"><option value="">—</option><option value="true">Sì</option><option value="false">No</option></select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Codice fiscale condominio</label><input data-cli="codice_fiscale" type="text"></div>
+              <div class="form-group"><label>Codice SDI</label><input data-cli="codice_sdi" type="text" maxlength="7"></div>
+              <div class="form-group"><label>PEC fatturazione</label><input data-cli="pec" type="email"></div>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;margin-bottom:12px;"><input data-cli="split_payment" type="checkbox" style="width:auto;"> Split payment</label>
+            <div class="form-group"><label>Note economiche</label><textarea name="note_economiche" rows="2" placeholder="es. regole ISTAT, prezzi stagionali"></textarea></div>
+          </details>
+
+          <!-- Operativo -->
+          <details class="contratto-sez" open>
+            <summary class="scheda-section-title">Operativo</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Operatore assegnato</label><select name="operatore_id"><option value="">— nessuno —</option></select></div>
+              <div class="form-group"><label>Materiali a carico di</label>
+                <select name="materiali_a_carico"><option value="">—</option><option value="impresa">Impresa</option><option value="condominio">Condominio</option></select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Codice portone</label><input name="codice_portone" type="text"></div>
+              <div class="form-group"><label>Chiavi (chi le ha / dove)</label><input name="chiavi" type="text"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+              <div class="form-group"><label>Punto acqua</label><input name="punto_acqua" type="text"></div>
+              <div class="form-group"><label>Punto luce</label><input name="punto_luce" type="text"></div>
+              <div class="form-group"><label>Ripostiglio attrezzature</label><input name="ripostiglio" type="text"></div>
+            </div>
+            <div class="form-group"><label>Note di accesso</label><textarea name="note_accesso" rows="2"></textarea></div>
+          </details>
+
           <div class="form-group"><label>Note</label><textarea name="note" rows="3"></textarea></div>
           <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
             <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
