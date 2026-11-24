@@ -105,11 +105,25 @@ export function renderTabellaClienti(clienti) {
 	}
 }
 
+async function populateAmministratoriSelect(selectEl) {
+	if (!selectEl) return
+	const { data, error } = await supabase.from('amministratori').select('id, nome').order('nome')
+	if (error) { console.error(error); return }
+	selectEl.innerHTML = '<option value="">— nessuno —</option>'
+	;(data || []).forEach(a => {
+		const opt = document.createElement('option')
+		opt.value = a.id
+		opt.textContent = a.nome
+		selectEl.appendChild(opt)
+	})
+}
+
 export async function openModalCliente(id = null) {
 	try {
 		const modal = document.getElementById('cliente-modal')
 		const form = modal?.querySelector('form')
 		if (!modal || !form) return
+		await populateAmministratoriSelect(form.querySelector('[name="amministratore_id"]'))
 		if (id) {
 			const { data, error } = await supabase.from('clienti').select('*').eq('id', id).single()
 			if (error) throw error
@@ -145,6 +159,8 @@ export async function saveCliente(formData) {
 			note: formData.note,
 			attivo: formData.attivo !== undefined ? formData.attivo : true,
 		}
+		if (formData.amministratore_id !== undefined) fields.amministratore_id = formData.amministratore_id || null
+		if (formData.nome_breve !== undefined) fields.nome_breve = (formData.nome_breve || '').trim() || null
 		let error
 		if (formData.id) {
 			;({ error } = await supabase.from('clienti').update(fields).eq('id', formData.id))
@@ -251,6 +267,8 @@ export function initClienti() {
 					email: form.querySelector('[name="email"]').value,
 					note: form.querySelector('[name="note"]').value,
 					attivo: form.querySelector('[name="attivo"]').checked,
+					amministratore_id: form.querySelector('[name="amministratore_id"]')?.value,
+					nome_breve: form.querySelector('[name="nome_breve"]')?.value,
 				}
 				await saveCliente(formData)
 				form.reset()

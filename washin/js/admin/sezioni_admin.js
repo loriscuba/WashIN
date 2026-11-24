@@ -16,6 +16,7 @@ const SOTTOSEZIONI = [
   { sezione: 'utenti',              etichetta: 'Utenti',               fixed: false },
   { sezione: 'modelli-contratti',   etichetta: 'Modelli Contratti',    fixed: false },
   { sezione: 'fornitori',           etichetta: 'Fornitori',            fixed: false },
+  { sezione: 'amministratori',      etichetta: 'Amministratori',       fixed: false },
   { sezione: 'impostazioni',        etichetta: 'Dati Azienda',         fixed: false },
   { sezione: 'tool-import',         etichetta: 'Tool Import',          fixed: false },
   { sezione: 'parametri-ccnl',      etichetta: 'Parametri CCNL',       fixed: false },
