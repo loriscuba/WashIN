@@ -21,8 +21,10 @@
 --     sommano (scale + garage) o si alternano (estate/inverno): restano vuoti e il
 --     contratto ha una nota da verificare; nell'app c'è "Calcola dai servizi".
 
--- Tabelle di appoggio normali (non TEMP: il SQL Editor di Supabase può eseguire
--- le istruzioni su connessioni diverse), cancellate alla fine.
+-- Tutto l'import è un unico blocco DO: il SQL Editor di Supabase lo esegue come una
+-- sola istruzione, quindi le tabelle di appoggio esistono per tutta la durata.
+DO $import$
+BEGIN
 DROP TABLE IF EXISTS public._imp_clienti;
 DROP TABLE IF EXISTS public._imp_servizi;
 CREATE TABLE public._imp_clienti (nome text, amm text, tipo text, tempo text, prezzo text, ottimale text,
@@ -771,6 +773,8 @@ WHERE NOT EXISTS (SELECT 1 FROM public.contratti_servizi x WHERE x.contratto_id 
 
 DROP TABLE public._imp_clienti;
 DROP TABLE public._imp_servizi;
+END
+$import$;
 
 -- Controllo
 SELECT count(*) AS contratti_importati,
