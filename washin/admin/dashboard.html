@@ -252,6 +252,8 @@
       .ana-btn-scheda { background: #faf5ff; color: #7c3aed; border: 1px solid #e9d5ff; border-radius: 6px; cursor: pointer; padding: 4px 10px; font-size: 12px; }
       /* ── Scheda contratto ── */
       .scheda-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
+      .contratto-servizi-table th, .contratto-servizi-table td { padding:6px 4px; white-space:nowrap; }
+      .contratto-servizi-table input, .contratto-servizi-table select { width:100% !important; min-width:0; box-sizing:border-box; padding:5px 6px !important; font-size:13px !important; }
       .contratto-sez { border-top:1px solid var(--gray-200); padding-top:12px; margin-top:8px; }
       .contratto-sez > summary { cursor:pointer; list-style:revert; }
       .scheda-section-title { font-size: 11px; font-weight: 700; color: var(--teal,#0d9488); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; }
@@ -1737,7 +1739,7 @@
     </div>
 
     <div class="modal-overlay" id="contratto-modal">
-      <div class="modal-box" style="max-width:820px;">
+      <div class="modal-box" style="max-width:1000px;width:95%;">
         <h2>Nuovo Contratto</h2>
         <p id="contratto-completezza" style="margin:-6px 0 12px;font-size:12px;color:var(--gray-500);"></p>
         <form>
@@ -1825,10 +1827,14 @@
             <summary class="scheda-section-title">Servizi e frequenza</summary>
             <div id="contratto-servizi-incl" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;"></div>
             <div style="overflow-x:auto;">
-              <table class="washin-table" style="font-size:12px;min-width:720px;">
+              <table class="washin-table contratto-servizi-table" style="font-size:12px;width:100%;min-width:900px;table-layout:fixed;">
+                <colgroup>
+                  <col style="width:20%"><col style="width:9%"><col style="width:7%"><col style="width:13%">
+                  <col style="width:10%"><col style="width:12%"><col style="width:10%"><col style="width:15%"><col style="width:44px">
+                </colgroup>
                 <thead><tr>
-                  <th>Descrizione</th><th>Min/intervento</th><th>N.</th><th>Ogni</th>
-                  <th>Prezzo €</th><th>Per</th><th>Ottimale €</th><th>Note</th><th></th>
+                  <th>Descrizione</th><th>Minuti</th><th>Volte</th><th>Ogni</th>
+                  <th>Prezzo €</th><th>Prezzo per</th><th>Ottimale €</th><th>Note</th><th></th>
                 </tr></thead>
                 <tbody id="contratto-servizi-body"></tbody>
               </table>
