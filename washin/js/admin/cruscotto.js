@@ -530,7 +530,7 @@ export async function loadVeicoliAlert() {
       tbody.appendChild(tr)
     })
   } catch(err) {
-    showToast('Tabella veicoli non trovata — esegui migrations_v5.sql', 'error')
+    showToast('Tabella veicoli non trovata — esegui sql/migrations/migrations_v05.sql', 'error')
     console.error('Errore alert veicoli:', err)
   }
 }

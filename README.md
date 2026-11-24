@@ -1,39 +1,42 @@
 # WashIN
 
-Web app per la gestione di un'impresa di pulizie.
+Gestionale web per un'impresa di pulizie: clienti e sedi, contratti, preventivi,
+interventi, presenze, buste paga, fatture, magazzino, veicoli e conto economico
+(area **admin**), più agenda, checklist, ore e cedolini per gli **operatori**.
 
-Stack
-- HTML + CSS + JavaScript (vanilla, no bundler)
-- Supabase: Auth + Database + Storage
+## Stack
 
-Run
-1. Crea un file `config.js` nella root del progetto con le tue credenziali (NON committare mai chiavi reali). Esempio:
+- HTML, CSS e JavaScript senza build (moduli ES, librerie da CDN)
+- [Supabase](https://supabase.com): login, database Postgres, storage dei PDF ed edge function
+- Pubblicazione su GitHub Pages a ogni push su `main` (`.github/workflows/pages-deploy.yml`)
 
-```js
-// config.js (NON committare)
-window.SUPABASE_URL = 'https://your-project.supabase.co'
-window.SUPABASE_ANON_KEY = 'your-anon-key'
+## Struttura
+
+| Percorso | Cosa contiene |
+|---|---|
+| `index.html`, `404.html` | Reindirizzano a `washin/` |
+| `washin/index.html` | Login |
+| `washin/admin/dashboard.html` + `washin/js/admin/` | Area admin, un file JS per sezione |
+| `washin/operatore/dashboard.html` + `washin/js/operatore/` | Area operatore |
+| `washin/js/config.js` | URL Supabase e chiavi pubbliche (vedi i commenti nel file) |
+| `sql/` | Schema e migrazioni del database (vedi `sql/README.md`) |
+| `supabase/functions/` | Edge function: `crea-utente-operatore`, `send-cedolino`, `c` (link breve al cedolino) |
+
+## Database
+
+Le modifiche si applicano a mano dal SQL Editor di Supabase. Le regole sono in
+[`sql/README.md`](sql/README.md).
+
+Il collegamento tra profilo e account di accesso è `profili.user_id` →
+`auth.users.id`. `profili.id` è un id interno e non coincide con l'account.
+
+## Provare in locale
+
+Serve un server statico, perché i moduli ES non funzionano aprendo il file:
+
+```bash
+python3 -m http.server 8000
+# poi apri http://localhost:8000/washin/
 ```
 
-2. Apri `index.html` direttamente nel browser (nessun build step).
-
-Schema minimo richiesto su Supabase
-- Tabella `profiles` con almeno i campi:
-	- `id` (uuid) — chiave primaria, corrisponde a `auth.users.id`
-	- `role` (text) — valori previsti: `admin` o `operatore`
-
-Funzionalità incluse
-- Pagina di login / registrazione (autenticazione via Supabase Auth)
-- Dopo login, viene letta la riga corrispondente in `profiles` e viene mostrata la dashboard corretta in base al ruolo (`admin` / `operatore`).
-
-Design
-- Mobile-first, palette: teal (#0D9488), dark navy (#0F172A), ambra (#F59E0B)
-- Font: Inter (Google Fonts)
-- Icone: Lucide Icons (CDN)
-
-Nota
-- Il file `config.js` deve essere creato manualmente dall'utente prima di aprire `index.html`.
-
-Se vuoi, posso:
-- Generare migrazioni SQL per creare la tabella `profiles`.
-- Aggiungere mock di gestione utenti nella dashboard admin.
+L'app usa il database di produzione indicato in `washin/js/config.js`.
