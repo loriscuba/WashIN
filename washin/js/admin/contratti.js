@@ -169,16 +169,48 @@ async function populateClientiSelect(selectEl, selectedId = null) {
   })
 }
 
-async function populateOperatoriSelect(selectEl) {
-  const { data, error } = await supabase.from('profili').select('id, nome, cognome, attivo').order('nome')
-  if (error) return
-  selectEl.innerHTML = '<option value="">— nessuno —</option>'
-  ;(data || []).filter(p => p.attivo !== false).forEach(p => {
-    const opt = document.createElement('option')
-    opt.value = p.id
-    opt.textContent = `${p.nome || ''} ${p.cognome || ''}`.trim()
-    selectEl.appendChild(opt)
-  })
+// Operatori assegnati al contratto (tabella contratti_operatori, v46)
+async function renderOperatori(contrattoId) {
+  const box = document.getElementById('contratto-operatori')
+  if (!box) return
+  const [{ data: profili, error }, assegnati] = await Promise.all([
+    supabase.from('profili').select('id, nome, cognome, attivo, ruolo').order('nome'),
+    contrattoId
+      ? supabase.from('contratti_operatori').select('operatore_id').eq('contratto_id', contrattoId)
+      : Promise.resolve({ data: [] }),
+  ])
+  if (error) { box.innerHTML = '<span style="color:var(--gray-500);font-size:12px;">Errore caricamento operatori</span>'; return }
+  if (assegnati.error) console.error(assegnati.error)
+  const scelti = new Set((assegnati.data || []).map(r => r.operatore_id))
+  const lista = (profili || []).filter(p => p.attivo !== false || scelti.has(p.id))
+  box.innerHTML = lista.length
+    ? lista.map(p => `
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:13px;">
+        <input type="checkbox" data-operatore="${p.id}" style="width:auto;"${scelti.has(p.id) ? ' checked' : ''}>
+        ${esc(`${p.nome || ''} ${p.cognome || ''}`.trim())}
+      </label>`).join('')
+    : '<span style="color:var(--gray-500);font-size:12px;">Nessun operatore attivo</span>'
+}
+
+function readOperatori() {
+  return [...document.querySelectorAll('#contratto-operatori [data-operatore]:checked')].map(el => el.dataset.operatore)
+}
+
+async function saveOperatori(contrattoId, operatori) {
+  const { data: esistenti, error: e0 } = await supabase.from('contratti_operatori').select('operatore_id').eq('contratto_id', contrattoId)
+  if (e0) throw e0
+  const prima = new Set((esistenti || []).map(r => r.operatore_id))
+  const dopo = new Set(operatori)
+  const via = [...prima].filter(id => !dopo.has(id))
+  const nuovi = [...dopo].filter(id => !prima.has(id))
+  if (via.length) {
+    const { error } = await supabase.from('contratti_operatori').delete().eq('contratto_id', contrattoId).in('operatore_id', via)
+    if (error) throw error
+  }
+  if (nuovi.length) {
+    const { error } = await supabase.from('contratti_operatori').insert(nuovi.map(operatore_id => ({ contratto_id: contrattoId, operatore_id })))
+    if (error) throw error
+  }
 }
 
 async function loadAmministratori() {
@@ -355,7 +387,7 @@ export async function openModalContratto(id = null, prefilledClienteId = null) {
     const clienteSelect = form.querySelector('[name="cliente_id"]')
     await Promise.all([
       populateClientiSelect(clienteSelect),
-      populateOperatoriSelect(form.querySelector('[name="operatore_id"]')),
+      renderOperatori(id),
       loadAmministratori(),
     ])
 
@@ -423,6 +455,7 @@ export async function saveContratto(formData) {
     }
     if (error) throw error
     if (formData.servizi && contrattoId) await saveServizi(contrattoId, formData.servizi)
+    if (formData.operatori && contrattoId) await saveOperatori(contrattoId, formData.operatori)
     showToast('Contratto salvato', 'success')
     return contrattoId || true
   } catch (err) {
@@ -599,9 +632,9 @@ export function initContratti() {
             punto_luce: txt('punto_luce'),
             ripostiglio: txt('ripostiglio'),
             note_accesso: txt('note_accesso'),
-            operatore_id: v('operatore_id') || null,
           },
           servizi: readServizi(),
+          operatori: readOperatori(),
         }
         try {
           await saveClienteEAmministratore(modal, payload.cliente_id)

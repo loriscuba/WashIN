@@ -1888,8 +1888,10 @@
           <!-- Operativo -->
           <details class="contratto-sez" open>
             <summary class="scheda-section-title">Operativo</summary>
+            <div class="form-group"><label>Operatori assegnati</label>
+              <div id="contratto-operatori" style="display:flex;gap:8px 16px;flex-wrap:wrap;padding:8px 10px;border:1.5px solid var(--gray-300);border-radius:8px;max-height:160px;overflow-y:auto;"></div>
+            </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <div class="form-group"><label>Operatore assegnato</label><select name="operatore_id"><option value="">— nessuno —</option></select></div>
               <div class="form-group"><label>Materiali a carico di</label>
                 <select name="materiali_a_carico"><option value="">—</option><option value="impresa">Impresa</option><option value="condominio">Condominio</option></select>
               </div>
