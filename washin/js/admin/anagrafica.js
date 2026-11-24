@@ -23,6 +23,7 @@ const ICO = {
   mapPin:       _ico('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>', 13),
   user:         _ico('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>', 13),
   hash:         _ico('<line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line>', 12),
+  clock:        _ico('<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>', 12),
   fileText:     _ico('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>', 13),
   search:       _ico('<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>', 40),
 }
@@ -35,7 +36,7 @@ export async function loadAnagrafica() {
         id, ragione_sociale, nome_breve, tipo, piva, citta, provincia, referente, telefono, attivo,
         amministratori(nome),
         contratti(
-          id, numero_contratto, tipo, importo_mensile, stato,
+          id, numero_contratto, tipo, importo_mensile, stato, tempo_originale,
           sedi_cliente(id, nome_sede, indirizzo, mq_totali)
         )
       `)
@@ -164,11 +165,12 @@ function buildContrattoHtml(c, nomeCliente, tipoCliente = '') {
       <div class="ana-row ana-contratto-row" data-toggle-ctr="${c.id}">
         <span class="ana-arrow">${arrowHtml}</span>
         <div class="ana-main">
-          <span class="ana-name" style="font-size:14px;">${c.numero_contratto || '—'}</span>
+          <span class="ana-name" style="font-size:14px;">${c.numero_contratto ? `N. ${c.numero_contratto}` : '<span style="color:var(--gray-400);font-weight:500;">Senza numero</span>'}</span>
           <span class="ana-submeta">
             <span class="ana-type-tag ana-tag-contratto">Contratto</span>
             <span class="ana-chip">${ICO.fileText} ${c.tipo || '-'}</span>
             ${c.importo_mensile != null ? `<span class="ana-chip" style="color:#059669;font-weight:600;">${EUR(c.importo_mensile)}/mese</span>` : ''}
+            ${c.tempo_originale ? `<span class="ana-chip" title="Tempo e frequenza dall'elenco">${ICO.clock || ''} ${c.tempo_originale.replace(/[<>&]/g, '').split('\n').join(' · ')}</span>` : ''}
           </span>
         </div>
         <div class="ana-right">
