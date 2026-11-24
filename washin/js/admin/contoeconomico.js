@@ -392,9 +392,28 @@ export async function loadWidgetMarginalita() {
       return
     }
 
-    const results = await Promise.all(
-      contratti.map(c => calcolaContoEconomico(c.id, mese, anno).catch(() => null))
-    )
+    // Con centinaia di contratti attivi non si può calcolare il conto economico di tutti
+    // in parallelo (4-5 richieste ciascuno): si calcolano solo quelli con interventi nel
+    // mese, a gruppi di 6.
+    const startDate = `${anno}-${String(mese).padStart(2, '0')}-01`
+    const endDate = new Date(anno, mese, 0).toISOString().slice(0, 10)
+    const { data: ivMese, error: ivErr } = await supabase
+      .from('interventi')
+      .select('contratto_id')
+      .neq('stato', 'annullato')
+      .gte('data_pianificata', startDate)
+      .lte('data_pianificata', endDate)
+      .not('contratto_id', 'is', null)
+    if (ivErr) throw ivErr
+    const conInterventi = new Set((ivMese || []).map(r => r.contratto_id))
+    const daCalcolare = contratti.filter(c => conInterventi.has(c.id))
+    const senzaInterventi = contratti.length - daCalcolare.length
+
+    const results = []
+    for (let i = 0; i < daCalcolare.length; i += 6) {
+      const gruppo = daCalcolare.slice(i, i + 6)
+      results.push(...await Promise.all(gruppo.map(c => calcolaContoEconomico(c.id, mese, anno).catch(() => null))))
+    }
 
     const items = results
       .filter(Boolean)
@@ -431,6 +450,13 @@ export async function loadWidgetMarginalita() {
       `
       container.appendChild(tr)
     })
+    if (!items.length || senzaInterventi) {
+      const tr = document.createElement('tr')
+      tr.innerHTML = `<td colspan="4" style="text-align:center;color:var(--gray-500);font-size:12px;padding:12px;">
+        ${!items.length ? 'Nessun contratto con interventi questo mese. ' : ''}${senzaInterventi ? `${senzaInterventi} contratti attivi senza interventi questo mese non sono in elenco.` : ''}
+      </td>`
+      container.appendChild(tr)
+    }
   } catch (err) {
     console.error('Errore widget marginalità:', err)
     container.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gray-500);padding:16px;">Errore caricamento</td></tr>'
