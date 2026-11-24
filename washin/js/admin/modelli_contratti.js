@@ -85,7 +85,7 @@ export async function openSchedaContratto(contrattoId) {
 
   const { data: contratto, error: errC } = await supabase
     .from('contratti')
-    .select('*, clienti(ragione_sociale, tipo, citta, indirizzo, piva, provincia, referente, telefono)')
+    .select('*, clienti(ragione_sociale, tipo, citta, indirizzo, piva, provincia, referente, telefono, codice_fiscale, amministratori(nome))')
     .eq('id', contrattoId)
     .single()
   if (errC) { showToast('Errore caricamento contratto', 'error'); return }
@@ -118,8 +118,8 @@ export async function openSchedaContratto(contrattoId) {
   set('nome_condominio',       scheda.nome_condominio,       c.ragione_sociale)
   set('comune_condominio',     scheda.comune_condominio,     c.citta)
   set('indirizzo_condominio',  scheda.indirizzo_condominio,  c.indirizzo)
-  set('cf_condominio',         scheda.cf_condominio,         c.piva)
-  set('nome_amministratore',   scheda.nome_amministratore,   c.referente)
+  set('cf_condominio',         scheda.cf_condominio,         c.codice_fiscale, c.piva)
+  set('nome_amministratore',   scheda.nome_amministratore,   c.amministratori?.nome, c.referente)
 
   // Immobile / Servizio
   set('indirizzo_stabile',     scheda.indirizzo_stabile,     c.indirizzo)
@@ -129,6 +129,7 @@ export async function openSchedaContratto(contrattoId) {
 
   // Corrispettivo
   set('corrispettivo_mensile', scheda.corrispettivo_mensile, contratto.importo_mensile)
+  set('giorni_intervento',     scheda.giorni_intervento,     contratto.giorni_preferiti)
   set('giorni_pagamento',      scheda.giorni_pagamento,      cfg.giorni_pagamento, 30)
   set('iban',                  scheda.iban,                  cfg.iban)
 

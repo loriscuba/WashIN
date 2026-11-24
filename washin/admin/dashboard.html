@@ -440,6 +440,11 @@
               <strong>Fornitori</strong>
               <p>Anagrafica fornitori</p>
             </a>
+            <a href="#amministratori" data-target="amministratori" class="config-card group-co">
+              <div class="config-card-icon"><span><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01"/></svg></span></div>
+              <strong>Amministratori</strong>
+              <p>Amministratori di condominio</p>
+            </a>
             <a href="#impostazioni" data-target="impostazioni" class="config-card group-co">
               <div class="config-card-icon"><span><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg></span></div>
               <strong>Dati Azienda</strong>
@@ -820,6 +825,37 @@
           <div id="modelli-list"></div>
         </section>
 
+        <!-- ── Amministratori di condominio ─────────── -->
+        <section id="amministratori" class="section hidden">
+          <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+              <a href="#configurazioni" data-target="configurazioni" class="back-link">← Configurazioni</a>
+              <h1>Amministratori</h1>
+              <p style="color: var(--gray-500); margin-top:8px;">Amministratori di condominio, contatti e condomini gestiti.</p>
+            </div>
+            <button id="add-amministratore-button" class="btn btn-primary">+ Nuovo amministratore</button>
+          </div>
+          <div style="margin-bottom:12px;">
+            <input type="search" id="amministratori-search" placeholder="🔍 Cerca amministratore o condominio…"
+              style="padding:9px 14px;border:1.5px solid var(--gray-300);border-radius:10px;font-size:14px;width:100%;max-width:360px;box-sizing:border-box;outline:none;" />
+          </div>
+          <div class="table-container card">
+            <table class="washin-table">
+              <thead>
+                <tr>
+                  <th>Amministratore</th>
+                  <th>Referente</th>
+                  <th>Telefono</th>
+                  <th>Email / PEC</th>
+                  <th>Condomini</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="amministratori-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- ── Fornitori ─────────────────────────────── -->
         <section id="fornitori" class="section hidden">
           <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -872,7 +908,7 @@
               <button class="clienti-attivo-btn" data-attivo="false" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#fff;color:#6b7280;border-left:1px solid var(--gray-300);">Inattivi</button>
               <button class="clienti-attivo-btn" data-attivo=""      style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:#fff;color:#6b7280;border-left:1px solid var(--gray-300);">Tutti</button>
             </div>
-            <input type="search" id="anagrafica-search" placeholder="🔍 Cerca cliente, P.IVA, contratto, città, provincia…"
+            <input type="search" id="anagrafica-search" placeholder="🔍 Cerca cliente, amministratore, P.IVA, contratto, città…"
               style="padding:9px 14px;border:1.5px solid var(--gray-300);border-radius:10px;font-size:14px;flex:1;min-width:200px;max-width:480px;box-sizing:border-box;outline:none;" />
           </div>
 
@@ -1683,6 +1719,10 @@
             <div class="form-group"><label>P.IVA</label><input name="piva" type="text"></div>
             <div class="form-group"><label>Provincia</label><input name="provincia" type="text" maxlength="5" placeholder="es. MI"></div>
           </div>
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;">
+            <div class="form-group"><label>Nome breve</label><input name="nome_breve" type="text" placeholder="es. Aurelia 58"></div>
+            <div class="form-group"><label>Amministratore</label><select name="amministratore_id"><option value="">— nessuno —</option></select></div>
+          </div>
           <div class="form-group"><label>Referente</label><input name="referente" type="text"></div>
           <div class="form-group"><label>Telefono</label><input name="telefono" type="text"></div>
           <div class="form-group"><label>Email</label><input name="email" type="email"></div>
@@ -1864,6 +1904,30 @@
           <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
             <button type="button" class="btn btn-secondary btn-sm">Annulla</button>
             <button type="submit" class="btn btn-primary btn-sm">Salva contratto</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="amministratore-modal">
+      <div class="modal-box">
+        <h2>Amministratore</h2>
+        <form>
+          <div class="form-group"><label>Ragione sociale / studio</label><input name="nome" type="text" required></div>
+          <div class="form-group"><label>Referente</label><input name="referente" type="text"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="form-group"><label>Telefono</label><input name="telefono" type="text"></div>
+            <div class="form-group"><label>Email</label><input name="email" type="email"></div>
+          </div>
+          <div class="form-group"><label>PEC</label><input name="pec" type="email"></div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;">
+            <div class="form-group"><label>Indirizzo</label><input name="indirizzo" type="text"></div>
+            <div class="form-group"><label>Città</label><input name="citta" type="text"></div>
+          </div>
+          <div class="form-group"><label>Note</label><textarea name="note" rows="2"></textarea></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+            <button type="button" class="btn btn-secondary btn-sm" data-action="close-amministratore">Annulla</button>
+            <button type="submit" class="btn btn-primary btn-sm">Salva amministratore</button>
           </div>
         </form>
       </div>
@@ -3163,6 +3227,7 @@
       import { initSezioniOperatore } from '../js/admin/sezioni_operatore.js'
       import { initSezioniAdmin } from '../js/admin/sezioni_admin.js'
       import { initFornitori } from '../js/admin/fornitori.js'
+      import { initAmministratori } from '../js/admin/amministratori.js'
       import { initGestioneAnagrafica } from '../js/admin/gestione_anagrafica.js'
       import { initToolImport } from '../js/admin/tool_import.js'
       import { initCheckPresenze } from '../js/admin/check_presenze.js'
@@ -3327,6 +3392,7 @@
         initSezioniOperatore()
         initSezioniAdmin()
         initFornitori()
+        initAmministratori()
         initGestioneAnagrafica()
         initToolImport()
         initCheckPresenze()

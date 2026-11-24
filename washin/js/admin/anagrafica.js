@@ -32,7 +32,8 @@ export async function loadAnagrafica() {
     const { data, error } = await supabase
       .from('clienti')
       .select(`
-        id, ragione_sociale, tipo, piva, citta, provincia, referente, telefono, attivo,
+        id, ragione_sociale, nome_breve, tipo, piva, citta, provincia, referente, telefono, attivo,
+        amministratori(nome),
         contratti(
           id, numero_contratto, tipo, importo_mensile, stato,
           sedi_cliente(id, nome_sede, indirizzo, mq_totali)
@@ -57,6 +58,8 @@ function matches(cliente) {
   if (!_search) return true
   const q = _search.toLowerCase()
   if ((cliente.ragione_sociale || '').toLowerCase().includes(q)) return true
+  if ((cliente.nome_breve || '').toLowerCase().includes(q)) return true
+  if ((cliente.amministratori?.nome || '').toLowerCase().includes(q)) return true
   if ((cliente.piva || '').toLowerCase().includes(q)) return true
   if ((cliente.citta || '').toLowerCase().includes(q)) return true
   if ((cliente.provincia || '').toLowerCase().includes(q)) return true
@@ -111,6 +114,7 @@ function buildClienteEl(cliente) {
           ${cliente.tipo ? `<span class="ana-chip">${cliente.tipo}</span>` : ''}
           ${cliente.piva ? `<span class="ana-chip">${ICO.hash} ${cliente.piva}</span>` : ''}
           ${meta ? `<span class="ana-chip">${ICO.mapPin} ${meta}</span>` : ''}
+          ${cliente.amministratori?.nome ? `<span class="ana-chip" title="Amministratore">${ICO.user} Amm. ${cliente.amministratori.nome}</span>` : ''}
           ${cliente.referente ? `<span class="ana-chip">${ICO.user} ${cliente.referente}</span>` : ''}
         </span>
       </div>
