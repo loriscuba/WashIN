@@ -17,7 +17,14 @@ export async function loadUtenti() {
     // Carica gli ID presenti in auth.users per sapere chi ha un account di login
     const { data: authIds } = await supabase.rpc('get_auth_user_ids')
     const authSet = new Set((authIds || []).map(r => r.id))
-    return (data || []).map(u => ({ ...u, _hasAuthAccount: authSet.has(u.id) }))
+    // L'account di login può essere collegato in due modi:
+    //  - profili.user_id = auth.users.id (account creati da Gestione anagrafica → Attiva account)
+    //  - profili.id = auth.users.id (account creati da Utenti → Nuovo utente)
+    return (data || []).map(u => {
+      const authId = (u.user_id && authSet.has(u.user_id)) ? u.user_id
+                   : (authSet.has(u.id) ? u.id : null)
+      return { ...u, _authUserId: authId, _hasAuthAccount: !!authId }
+    })
   } catch (err) {
     showToast('Errore caricamento utenti', 'error')
     console.error(err)
@@ -40,7 +47,7 @@ function createUtenteRow(u) {
     ? '<span class="badge badge-success" title="Ha un account di accesso">Login ✓</span>'
     : '<span class="badge badge-warning" title="Solo profilo, nessun account di accesso">Solo profilo</span>'
   const resetBtn = u._hasAuthAccount
-    ? `<button class="btn btn-sm btn-secondary" data-action="reset-pw-utente" data-id="${u.id}" data-nome="${[u.nome, u.cognome].filter(Boolean).join(' ') || u.email || ''}">Reset PW</button>`
+    ? `<button class="btn btn-sm btn-secondary" data-action="reset-pw-utente" data-id="${u._authUserId}" data-nome="${[u.nome, u.cognome].filter(Boolean).join(' ') || u.email || ''}">Reset PW</button>`
     : `<button class="btn btn-sm" style="background:#f1f5f9;color:#94a3b8;border:none;border-radius:6px;cursor:not-allowed;padding:4px 10px;font-size:12px;" title="Crea prima un account da Nuovo utente" disabled>Reset PW</button>`
   tr.innerHTML = `
     <td><strong>${[u.nome, u.cognome].filter(Boolean).join(' ') || '-'}</strong></td>
