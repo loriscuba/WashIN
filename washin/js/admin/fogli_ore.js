@@ -57,6 +57,7 @@ function render() {
           Ogni operatrice riceve le righe dei contratti attivi in cui è flaggata come operatore (una riga per servizio).
           Oltre 15 righe si passa a un secondo foglio.
         </p>
+        <div id="fo-operatori-nota" style="font-size:12px;color:var(--gray-500);margin-bottom:8px;"></div>
         <div id="fo-operatori" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" id="fo-tutti">Seleziona tutte</button>
@@ -112,7 +113,7 @@ function render() {
     caricaStampa()
   })
   document.getElementById('fo-tutti').addEventListener('click', () => {
-    const boxes = [...document.querySelectorAll('#fo-operatori input[type=checkbox]')]
+    const boxes = [...document.querySelectorAll('#fo-operatori input[type=checkbox]:not(:disabled)')]
     const all = boxes.every(b => b.checked)
     boxes.forEach(b => { b.checked = !all })
   })
@@ -193,19 +194,38 @@ async function caricaStampa() {
     ])
     if (e1) throw e1
     if (e2) throw e2
-    const conta = new Map()
+    // Tutte le operatrici con almeno un contratto flaggato, anche se il contratto non è
+    // attivo o il profilo è disattivato: così si vede perché una non riceve righe.
+    const info = new Map()
     for (const a of assegn || []) {
-      if (a.contratti && a.contratti.stato && a.contratti.stato !== 'attivo') continue
-      conta.set(a.operatore_id, (conta.get(a.operatore_id) || 0) + 1)
+      const i = info.get(a.operatore_id) || { attivi: 0, altri: {} }
+      const stato = a.contratti?.stato || 'attivo'
+      if (stato === 'attivo') i.attivi++
+      else i.altri[stato] = (i.altri[stato] || 0) + 1
+      info.set(a.operatore_id, i)
     }
-    _operatori = (profili || []).filter(p => conta.has(p.id) && p.attivo !== false)
+    _operatori = (profili || []).filter(p => info.has(p.id))
+      .sort((x, y) => (info.get(y.id).attivi > 0) - (info.get(x.id).attivi > 0) || nomeOp(x).localeCompare(nomeOp(y), 'it'))
     box.innerHTML = _operatori.length
-      ? _operatori.map(p => `
-        <label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;">
-          <input type="checkbox" value="${p.id}"> <span style="flex:1;">${esc(nomeOp(p))}</span>
-          <span style="color:var(--gray-500);font-size:11px;">${conta.get(p.id)} contr.</span>
-        </label>`).join('')
-      : '<span style="color:var(--gray-500);font-size:13px;">Nessuna operatrice è flaggata sui contratti attivi. Assegnale dalla scheda del contratto.</span>'
+      ? _operatori.map(p => {
+          const i = info.get(p.id)
+          const altri = Object.entries(i.altri).map(([st, n]) => `${n} ${st}`).join(', ')
+          const note = [
+            p.attivo === false ? 'profilo inattivo' : '',
+            altri ? `non attivi: ${altri}` : '',
+          ].filter(Boolean).join(' · ')
+          const off = i.attivi === 0
+          return `
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border:1px solid var(--gray-200);border-radius:8px;cursor:${off ? 'default' : 'pointer'};${off ? 'opacity:.55;' : ''}"
+          title="${off ? 'Nessun contratto attivo flaggato: non riceve righe' : ''}">
+          <input type="checkbox" value="${p.id}" ${off ? 'disabled' : ''}>
+          <span style="flex:1;">${esc(nomeOp(p))}${note ? `<br><small style="color:#b45309;">${esc(note)}</small>` : ''}</span>
+          <span style="color:var(--gray-500);font-size:11px;white-space:nowrap;">${i.attivi} contr.</span>
+        </label>`
+        }).join('')
+      : '<span style="color:var(--gray-500);font-size:13px;">Nessuna operatrice è flaggata sui contratti. Assegnale dalla scheda del contratto.</span>'
+    document.getElementById('fo-operatori-nota').textContent =
+      `${_operatori.length} operatrici flaggate su almeno un contratto. Se ne manca una, non è spuntata in nessun contratto: apri il contratto e spuntala tra gli operatori.`
   } catch (err) {
     console.error(err)
     box.innerHTML = `<span style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato la migrazione v47?</span>`
