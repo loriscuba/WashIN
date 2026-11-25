@@ -1,8 +1,9 @@
 // Stampa dei fogli ore settimanali (jsPDF + qrcode-generator da CDN).
 import {
-  PAGE, QR_PREFIX, MARKER, MARKERS, QR, RIGHE, TABLE, boxRect, VAR, VAR_GROUPS, bubbleCenter,
-  FOOTER, GIORNI, codiceFoglio,
+  PAGE, QR_PREFIX, MARKER, MARKERS, QR, RIGHE, GIORNI, codiceFoglio, getLayout, LAYOUT_CORRENTE,
 } from './fogli_ore_layout.js'
+
+const { TABLE, boxRect, VAR, VAR_GROUPS, bubbleCenter, TOTALE, totaleCenter, FOOTER } = getLayout(LAYOUT_CORRENTE)
 
 const LIBS = {
   jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
@@ -64,7 +65,7 @@ function drawPage(doc, qrcode, p) {
   doc.setDrawColor(0, 0, 0)
   doc.setFillColor(0, 0, 0)
   for (const mk of MARKERS) doc.rect(mk.x - MARKER.size / 2, mk.y - MARKER.size / 2, MARKER.size, MARKER.size, 'F')
-  drawQr(doc, qrcode, QR_PREFIX + foglio.id)
+  drawQr(doc, qrcode, `${QR_PREFIX}${foglio.id}|${LAYOUT_CORRENTE}`)
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16)
   doc.text('FOGLIO ORE SETTIMANALE', 14, 17)
@@ -79,7 +80,7 @@ function drawPage(doc, qrcode, p) {
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
   doc.text("1) Fai una X nel giorno in cui hai fatto l'intervento: vale il tempo previsto indicato nella riga.", 14, 46)
   doc.text('2) Solo se il tempo è stato diverso, fai comunque la X e compila una riga di VARIAZIONI in fondo.', 14, 50.5)
-  doc.text('Non scrivere sul QR e sui quadratini neri agli angoli.', 14, 55)
+  doc.text('3) In fondo annerisci il TOTALE delle X che hai fatto. Non scrivere sul QR e sui quadratini neri.', 14, 55)
 
   // Tabella
   const T = TABLE
@@ -134,27 +135,48 @@ function drawPage(doc, qrcode, p) {
   doc.setLineWidth(0.1)
   for (let d = 1; d < 7; d++) doc.line(T.colGiorni + T.dayW * d, T.top, T.colGiorni + T.dayW * d, T.bottom)
 
-  // Variazioni
+  // Variazioni: cerchi vuoti, valori stampati sopra la prima riga
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10)
   doc.text('VARIAZIONI', 14, VAR.titleY)
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
-  doc.text('solo se il tempo è diverso: annerisci un cerchio per gruppo e indica il tempo TOTALE impiegato', 38, VAR.titleY)
+  doc.text('solo se il tempo è diverso: annerisci un cerchio per gruppo (riga, giorno, ore, minuti) = tempo TOTALE impiegato', 38, VAR.titleY)
+  for (const g of VAR_GROUPS) {
+    g.values.forEach((label, i) => {
+      const { cx } = bubbleCenter(0, g, i)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(label.length > 1 ? 6 : 7)
+      doc.text(label, cx, VAR.valoriY, { align: 'center' })
+    })
+  }
   for (let v = 0; v < VAR.righe; v++) {
     for (const g of VAR_GROUPS) {
       const { cy } = bubbleCenter(v, g, 0)
       doc.setFont('helvetica', 'bold'); doc.setFontSize(7)
       doc.text(g.label, g.labelX, cy + 1)
-      g.values.forEach((label, i) => {
+      g.values.forEach((_, i) => {
         const { cx } = bubbleCenter(v, g, i)
         doc.setLineWidth(0.2)
         doc.circle(cx, cy, VAR.r)
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(label.length > 1 ? 5 : 6)
-        doc.setTextColor(160, 160, 160)
-        doc.text(label, cx, cy + 0.75, { align: 'center' })
-        doc.setTextColor(0, 0, 0)
       })
     }
   }
+
+  // Totale X dichiarato dall'operatrice (doppio controllo della lettura)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+  doc.text('TOTALE X della settimana:', 14, TOTALE.y + 1.2)
+  for (const g of TOTALE.gruppi) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7)
+    doc.text(g.label, g.labelX, TOTALE.y + 1)
+    g.values.forEach((label, i) => {
+      const { cx, cy } = totaleCenter(g, i)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7)
+      doc.text(label, cx, TOTALE.valoriY, { align: 'center' })
+      doc.setLineWidth(0.2)
+      doc.circle(cx, cy, TOTALE.r)
+    })
+  }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(110, 110, 110)
+  doc.text(['es. 12 X =', 'decine 1, unità 2'], 177, TOTALE.y - 0.6)
+  doc.setTextColor(0, 0, 0)
 
   // Note e firme
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
