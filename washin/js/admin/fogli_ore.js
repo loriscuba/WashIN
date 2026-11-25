@@ -2,8 +2,8 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
 import { creaPdfFogli } from './fogli_ore_pdf.js'
-import { fileToCanvases, leggiPagina } from './fogli_ore_lettura.js'
-import { RIGHE, GIORNI, codiceFoglio } from './fogli_ore_layout.js'
+import { fileToCanvases, leggiPagina, ritaglio } from './fogli_ore_lettura.js'
+import { RIGHE, GIORNI, codiceFoglio, getLayout } from './fogli_ore_layout.js'
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const PERIODO = { settimana: 'settimana', mese: 'mese', anno: 'anno', giorno: 'giorno', a_richiesta: 'a richiesta' }
@@ -57,6 +57,7 @@ function render() {
           Ogni operatrice riceve le righe dei contratti attivi in cui è flaggata come operatore (una riga per servizio).
           Oltre 15 righe si passa a un secondo foglio.
         </p>
+        <div id="fo-operatori-nota" style="font-size:12px;color:var(--gray-500);margin-bottom:8px;"></div>
         <div id="fo-operatori" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" id="fo-tutti">Seleziona tutte</button>
@@ -112,7 +113,7 @@ function render() {
     caricaStampa()
   })
   document.getElementById('fo-tutti').addEventListener('click', () => {
-    const boxes = [...document.querySelectorAll('#fo-operatori input[type=checkbox]')]
+    const boxes = [...document.querySelectorAll('#fo-operatori input[type=checkbox]:not(:disabled)')]
     const all = boxes.every(b => b.checked)
     boxes.forEach(b => { b.checked = !all })
   })
@@ -193,19 +194,38 @@ async function caricaStampa() {
     ])
     if (e1) throw e1
     if (e2) throw e2
-    const conta = new Map()
+    // Tutte le operatrici con almeno un contratto flaggato, anche se il contratto non è
+    // attivo o il profilo è disattivato: così si vede perché una non riceve righe.
+    const info = new Map()
     for (const a of assegn || []) {
-      if (a.contratti && a.contratti.stato && a.contratti.stato !== 'attivo') continue
-      conta.set(a.operatore_id, (conta.get(a.operatore_id) || 0) + 1)
+      const i = info.get(a.operatore_id) || { attivi: 0, altri: {} }
+      const stato = a.contratti?.stato || 'attivo'
+      if (stato === 'attivo') i.attivi++
+      else i.altri[stato] = (i.altri[stato] || 0) + 1
+      info.set(a.operatore_id, i)
     }
-    _operatori = (profili || []).filter(p => conta.has(p.id) && p.attivo !== false)
+    _operatori = (profili || []).filter(p => info.has(p.id))
+      .sort((x, y) => (info.get(y.id).attivi > 0) - (info.get(x.id).attivi > 0) || nomeOp(x).localeCompare(nomeOp(y), 'it'))
     box.innerHTML = _operatori.length
-      ? _operatori.map(p => `
-        <label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border:1px solid var(--gray-200);border-radius:8px;cursor:pointer;">
-          <input type="checkbox" value="${p.id}"> <span style="flex:1;">${esc(nomeOp(p))}</span>
-          <span style="color:var(--gray-500);font-size:11px;">${conta.get(p.id)} contr.</span>
-        </label>`).join('')
-      : '<span style="color:var(--gray-500);font-size:13px;">Nessuna operatrice è flaggata sui contratti attivi. Assegnale dalla scheda del contratto.</span>'
+      ? _operatori.map(p => {
+          const i = info.get(p.id)
+          const altri = Object.entries(i.altri).map(([st, n]) => `${n} ${st}`).join(', ')
+          const note = [
+            p.attivo === false ? 'profilo inattivo' : '',
+            altri ? `non attivi: ${altri}` : '',
+          ].filter(Boolean).join(' · ')
+          const off = i.attivi === 0
+          return `
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border:1px solid var(--gray-200);border-radius:8px;cursor:${off ? 'default' : 'pointer'};${off ? 'opacity:.55;' : ''}"
+          title="${off ? 'Nessun contratto attivo flaggato: non riceve righe' : ''}">
+          <input type="checkbox" value="${p.id}" ${off ? 'disabled' : ''}>
+          <span style="flex:1;">${esc(nomeOp(p))}${note ? `<br><small style="color:#b45309;">${esc(note)}</small>` : ''}</span>
+          <span style="color:var(--gray-500);font-size:11px;white-space:nowrap;">${i.attivi} contr.</span>
+        </label>`
+        }).join('')
+      : '<span style="color:var(--gray-500);font-size:13px;">Nessuna operatrice è flaggata sui contratti. Assegnale dalla scheda del contratto.</span>'
+    document.getElementById('fo-operatori-nota').textContent =
+      `${_operatori.length} operatrici flaggate su almeno un contratto. Se ne manca una, non è spuntata in nessun contratto: apri il contratto e spuntala tra gli operatori.`
   } catch (err) {
     console.error(err)
     box.innerHTML = `<span style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato la migrazione v47?</span>`
@@ -327,7 +347,7 @@ async function contrattiAttivi() {
 
 async function caricaFoglio(id) {
   const { data, error } = await supabase.from('fogli_ore')
-    .select('id, numero, settimana_inizio, stato, operatore_id, pagina, pagine, profili(nome, cognome), fogli_ore_righe(*)')
+    .select('id, numero, settimana_inizio, stato, operatore_id, pagina, pagine, profili(nome, cognome), fogli_ore_righe(*, contratti(stato), contratti_servizi(interventi_numero, interventi_periodo))')
     .eq('id', id).maybeSingle()
   if (error) throw error
   return data
@@ -469,27 +489,163 @@ function renderLettura(item) {
                 <option value=""></option>${GIORNI.map((g, d) => `<option value="${d}" ${v.giorno === d ? 'selected' : ''}>${g}</option>`).join('')}</select>
               Minuti <input type="number" min="0" step="5" data-role="var-minuti" data-i="${i}" value="${v.minuti ?? ''}" class="form-input" style="width:70px;font-size:12px;padding:2px 4px;">
               <button class="btn btn-sm btn-secondary" data-action="var-del" data-idx="${item.idx}" data-i="${i}">Togli</button>
-              ${v.incerto ? '<span style="color:#b45309;">da controllare</span>' : ''}
+              ${v.incerto ? `<span style="color:#b45309;">da controllare${v.nota ? ': ' + esc(v.nota) : ''}</span>` : ''}
             </div>`).join('')}
           <div><button class="btn btn-sm btn-secondary" data-action="var-add" data-idx="${item.idx}">+ Variazione</button></div>
         </div>
       </div>`
   }
 
-  const thumb = item.thumb || (item.thumb = item.canvas.toDataURL('image/jpeg', 0.6))
+  let pannello = ''
+  if (f) {
+    const ck = controlli(item)
+    const voce = v => `<div style="display:flex;gap:6px;"><span style="color:${v.ok ? '#16a34a' : '#b45309'};font-weight:700;">${v.ok ? '✓' : '!'}</span><span>${esc(v.testo)}</span></div>`
+    pannello = `
+      <div style="margin-top:10px;border-radius:8px;padding:8px 10px;font-size:12px;border:1px solid ${ck.ok ? '#86efac' : '#fcd34d'};background:${ck.ok ? '#f0fdf4' : '#fffbeb'};">
+        <div style="font-size:14px;font-weight:700;color:${ck.ok ? '#15803d' : '#b45309'};margin-bottom:4px;">
+          ${ck.ok ? '✓ Tutto ok' : '⚠ Da controllare'}</div>
+        ${ck.voci.map(voce).join('')}
+      </div>
+      <details style="margin-top:8px;" ${ck.ok ? '' : 'open'}>
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;">Confronta con la scansione</summary>
+        <div style="font-size:11px;color:var(--gray-500);margin:4px 0;">In verde le X e i cerchi che il sistema ha letto, in arancione quelli incerti. Se vedi una X senza riquadro verde, o un riquadro senza X, correggi la griglia.</div>
+        <img src="${immagineConfronto(item)}" alt="Scansione con le letture" style="max-width:100%;border:1px solid var(--gray-200);border-radius:6px;">
+      </details>`
+  }
+
   el.dataset.idx = item.idx
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:start;">
       ${head}
       <div style="display:flex;gap:6px;">
-        <a href="${thumb}" target="_blank" rel="noopener" class="btn btn-sm btn-secondary">Vedi scansione</a>
+        <button class="btn btn-sm btn-secondary" data-action="vedi" data-idx="${item.idx}">Vedi scansione</button>
         ${f && f.stato !== 'annullato' ? `<button class="btn btn-sm btn-primary" data-action="conferma" data-idx="${item.idx}" ${item.salvato ? 'disabled' : ''}>${item.salvato ? 'Salvato ✓' : 'Conferma e salva'}</button>` : ''}
       </div>
     </div>
     ${avvisi.length ? `<div style="margin-top:8px;font-size:12px;color:#92400e;background:#fef3c7;border-radius:6px;padding:6px 8px;">${avvisi.map(esc).join('<br>')}</div>` : ''}
+    ${pannello}
     ${f ? '<div style="font-size:11px;color:var(--gray-500);margin-top:6px;">In giallo le caselle e le variazioni lette con poca sicurezza.</div>' : ''}
     ${grid}
   `
+}
+
+// ── Controlli prima del salvataggio ─────────────────────────────────────────
+// Interventi attesi in una settimana per la frequenza del contratto: [min, max]
+function attesiSettimana(numero, periodo) {
+  const n = Number(numero)
+  if (!n || !periodo || periodo === 'a_richiesta') return null
+  if (periodo === 'giorno') return [Math.floor(n * 5), Math.ceil(n * 7)]
+  const w = periodo === 'settimana' ? n : periodo === 'mese' ? n * 12 / 52 : periodo === 'anno' ? n / 52 : null
+  if (w == null) return null
+  return [Math.floor(w + 1e-9), Math.ceil(w - 1e-9)]
+}
+
+function celleConX(item) {
+  const set = new Set(Object.keys(item.stato.x))
+  for (const v of item.stato.variazioni) if (v.riga != null && v.giorno != null) set.add(`${v.riga}-${v.giorno}`)
+  return set
+}
+
+// Ritorna { ok, voci: [{ ok: bool, testo }] }
+function controlli(item) {
+  const L = item.lettura, S = item.stato, rm = righeMap(item)
+  const voci = []
+  const add = (ok, testo) => voci.push({ ok, testo })
+  const celle = celleConX(item)
+
+  // 1. Lettura sicura
+  const nIncerti = Object.keys(S.incerti).length + S.variazioni.filter(v => v.incerto).length
+  if (!L.allineata) add(false, 'Quadrati agli angoli non trovati: confronta bene con la scansione')
+  add(nIncerti === 0, nIncerti === 0 ? 'Tutte le caselle lette con sicurezza' : `${nIncerti} letture incerte (in giallo): controllale sulla scansione`)
+
+  // 2. Totale dichiarato dall'operatrice
+  if (L.totaleDichiarato != null) {
+    const same = L.totaleDichiarato === celle.size
+    add(same && !L.totaleIncerto, same
+      ? `Il totale X scritto dall'operatrice (${L.totaleDichiarato}) torna con le X lette`
+      : `Totale X scritto dall'operatrice: ${L.totaleDichiarato}${L.totaleIncerto ? ' (letto con poca sicurezza)' : ''}, X lette: ${celle.size}`)
+  } else if (L.versione >= 2) add(false, "L'operatrice non ha segnato il totale delle X")
+
+  // 3. Contratti: frequenza e stato, riga per riga
+  let righeOk = 0
+  for (const [r, riga] of rm) {
+    if (!riga.contratto_id) continue
+    const n = [...celle].filter(k => k.startsWith(r + '-')).length
+    const nome = `Riga ${r} ${riga.etichetta || ''}`.trim()
+    if (riga.contratti?.stato && riga.contratti.stato !== 'attivo' && n) { add(false, `${nome}: il contratto non è più attivo (${riga.contratti.stato})`); continue }
+    const att = attesiSettimana(riga.contratti_servizi?.interventi_numero, riga.contratti_servizi?.interventi_periodo)
+    if (att && (n < att[0] || n > att[1])) {
+      const previsto = att[0] === att[1] ? att[0] : `${att[0]}-${att[1]}`
+      add(false, `${nome}: ${n} X, il contratto ne prevede ${previsto} a settimana`)
+      continue
+    }
+    righeOk++
+  }
+  if (righeOk) add(true, `${righeOk} righe in linea con la frequenza del contratto`)
+
+  // 4. Righe libere e variazioni
+  for (const k of celle) {
+    const r = Number(k.split('-')[0])
+    if (!rm.get(r)?.contratto_id && !S.libere[r]?.contratto_id) { add(false, `Riga ${r}: X su una riga libera, scegli il contratto`); break }
+  }
+  for (const v of S.variazioni) {
+    if (v.riga == null || v.giorno == null || v.minuti == null) { add(false, 'Variazione incompleta: completa riga, giorno e tempo'); continue }
+    const dove = `Variazione riga ${v.riga} ${GIORNI[v.giorno]}`
+    if (!S.x[`${v.riga}-${v.giorno}`]) add(false, `${dove}: nella casella non c'è la X, controlla che riga e giorno siano giusti`)
+    const prev = rm.get(v.riga)?.minuti_previsti
+    if (prev && (v.minuti > prev * 2 || v.minuti < prev / 2)) add(false, `${dove}: ${fmtMin(v.minuti).trim()} contro ${fmtMin(prev).trim()} previsti, verifica`)
+  }
+  return { ok: voci.every(v => v.ok), voci }
+}
+
+// Scansione raddrizzata con sopra quello che il sistema ha letto
+function immagineConfronto(item) {
+  const L = item.lettura, S = item.stato
+  const lay = getLayout(L.versione)
+  const k = 4, x0 = 10, y0 = lay.TABLE.top - 2
+  const y1 = (lay.TOTALE ? lay.TOTALE.y + 2 : lay.VAR.firstY + lay.VAR.gapY * (lay.VAR.righe - 1)) + 4
+  if (!item.ritaglio) item.ritaglio = ritaglio(item.canvas, L.H, x0, y0, 200 - x0, y1 - y0, k)
+  const c = document.createElement('canvas')
+  c.width = item.ritaglio.width; c.height = item.ritaglio.height
+  const ctx = c.getContext('2d')
+  ctx.drawImage(item.ritaglio, 0, 0)
+  const P = (x, y) => [(x - x0) * k, (y - y0) * k]
+  ctx.lineWidth = 3
+  for (let r = 1; r <= RIGHE; r++) {
+    for (let d = 0; d < 7; d++) {
+      const key = `${r}-${d}`
+      if (!S.x[key] && !S.incerti[key]) continue
+      const b = lay.boxRect(r, d)
+      const [px, py] = P(b.x - 1, b.y - 1)
+      ctx.strokeStyle = S.incerti[key] ? 'rgba(217,119,6,.9)' : 'rgba(22,163,74,.85)'
+      ctx.setLineDash(S.x[key] ? [] : [6, 4])
+      ctx.strokeRect(px, py, (b.w + 2) * k, (b.h + 2) * k)
+    }
+  }
+  ctx.setLineDash([])
+  const cerchio = (cx, cy, r, incerto) => {
+    const [px, py] = P(cx, cy)
+    ctx.strokeStyle = incerto ? 'rgba(217,119,6,.9)' : 'rgba(22,163,74,.85)'
+    ctx.beginPath(); ctx.arc(px, py, (r + 1) * k, 0, Math.PI * 2); ctx.stroke()
+  }
+  for (const v of L.variazioni) {
+    if (v.fila == null) continue
+    for (const g of lay.VAR_GROUPS) {
+      const i = v.sel?.[g.key]
+      if (i == null) continue
+      const { cx, cy } = lay.bubbleCenter(v.fila, g, i)
+      cerchio(cx, cy, lay.VAR.r, v.incerto)
+    }
+  }
+  if (lay.TOTALE && L.totaleSel) {
+    lay.TOTALE.gruppi.forEach((g, gi) => {
+      const i = L.totaleSel[gi]
+      if (i == null) return
+      const { cx, cy } = lay.totaleCenter(g, i)
+      cerchio(cx, cy, lay.TOTALE.r, L.totaleIncerto)
+    })
+  }
+  return c.toDataURL('image/jpeg', 0.8)
 }
 
 function minutiCella(item, r, d) {
@@ -520,6 +676,7 @@ function onLettureChange(e) {
     if (role === 'var-giorno') v.giorno = t.value === '' ? null : Number(t.value)
     if (role === 'var-minuti') v.minuti = t.value === '' ? null : Number(t.value)
     v.incerto = false
+    v.nota = ''
   } else return
   item.salvato = false
   renderLettura(item)
@@ -531,7 +688,7 @@ async function onLettureClick(e) {
   const item = _letture[Number(b.dataset.idx)]
   if (!item) return
   const a = b.dataset.action
-  if (a === 'var-add') { item.stato.variazioni.push({ riga: null, giorno: null, minuti: null, incerto: false }); item.salvato = false; renderLettura(item) }
+  if (a === 'var-add') { item.stato.variazioni.push({ riga: null, giorno: null, minuti: null, incerto: false, nota: '' }); item.salvato = false; renderLettura(item) }
   if (a === 'var-del') { item.stato.variazioni.splice(Number(b.dataset.i), 1); item.salvato = false; renderLettura(item) }
   if (a === 'cerca-foglio') {
     const codice = b.parentElement.querySelector('[data-role="codice"]').value.trim()
@@ -539,10 +696,15 @@ async function onLettureClick(e) {
     if (!num) return
     const { data } = await supabase.from('fogli_ore').select('id').eq('numero', num).maybeSingle()
     if (!data) { showToast('Foglio non trovato', 'error'); return }
-    item.lettura = await leggiPagina(item.canvas, data.id)
+    item.lettura = await leggiPagina(item.canvas, data.id, item.lettura?.versione)
     item.foglio = await caricaFoglio(data.id)
+    item.ritaglio = null
     prepara(item)
     renderLettura(item)
+  }
+  if (a === 'vedi') { // i browser non aprono i data: URL in una nuova scheda, un blob sì
+    const w = window.open('', '_blank')
+    item.canvas.toBlob(blob => { if (w) w.location.href = URL.createObjectURL(blob) }, 'image/jpeg', 0.8)
   }
   if (a === 'conferma') await conferma(item, b)
 }
