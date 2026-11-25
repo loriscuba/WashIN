@@ -17,6 +17,46 @@ let _busteData    = []
 let _busteAnagData = []   // anagrafica estratta da cedolini INAIL
 
 // Estrae data di nascita dal codice fiscale italiano (molto più affidabile dell'OCR)
+// ── Cognome/Nome: lettere usate per il codice fiscale ────────────────────────
+// Nel cedolino c'è "COGNOME NOME" senza separatore: con cognomi o nomi composti
+// (VERA VELEZ EDDA PATRICIA, SIMBANA CEVALLOS LUIS ANDRES) il punto di taglio
+// si ricava dal codice fiscale, che codifica cognome (car. 1-3) e nome (4-6).
+const CF_VOCALI = 'AEIOU'
+function cfLettere(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z]/g, '')
+}
+function cfCodiceCognome(s) {
+  const l = cfLettere(s)
+  const cons = [...l].filter(c => !CF_VOCALI.includes(c)).join('')
+  const voc  = [...l].filter(c =>  CF_VOCALI.includes(c)).join('')
+  return (cons + voc + 'XXX').slice(0, 3)
+}
+function cfCodiceNome(s) {
+  const l = cfLettere(s)
+  const cons = [...l].filter(c => !CF_VOCALI.includes(c)).join('')
+  if (cons.length >= 4) return cons[0] + cons[2] + cons[3]
+  const voc = [...l].filter(c => CF_VOCALI.includes(c)).join('')
+  return (cons + voc + 'XXX').slice(0, 3)
+}
+
+// Divide "COGNOME NOME" in { cognome, nome }. Se c'è il CF sceglie il taglio
+// coerente con il CF, altrimenti la prima parola è il cognome.
+export function splitCognomeNome(full, cf) {
+  const parts = (full || '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return { cognome: parts[0] || '', nome: '' }
+  const code = (cf || '').toUpperCase()
+  if (/^[A-Z]{6}/.test(code)) {
+    for (let k = 1; k < parts.length; k++) {
+      const cognome = parts.slice(0, k).join(' ')
+      const nome    = parts.slice(k).join(' ')
+      if (cfCodiceCognome(cognome) === code.slice(0, 3) && cfCodiceNome(nome) === code.slice(3, 6)) {
+        return { cognome, nome }
+      }
+    }
+  }
+  return { cognome: parts[0], nome: parts.slice(1).join(' ') }
+}
+
 function birthDateFromCF(cf) {
   if (!cf || cf.length !== 16) return null
   const MESE_CF = { A:1,B:2,C:3,D:4,E:5,H:6,L:7,M:8,P:9,R:10,S:11,T:12 }
@@ -133,13 +173,14 @@ export function parseInailPayslip(text) {
   // Header row: "NNN |COGNOME NOME DD/MM/YY"
   // OCR produces | (pipe) from table borders between the code and the name
   const nomeRe = [
-    /\b(\d{1,3})\s*[\|:]?\s*([A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ]{2,}){1,3})\s+\d{2}\/\d{2}\/\d{2}/,
-    /\b(\d{1,3})\s*[\|:]?\s*([A-ZÀÈÉÌÒÙ]{2,}\s+[A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ]{2,})?)\s*[\|\n]/,
+    /\b(\d{1,3})\s*[\|:]?\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ']+(?:\s+[A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ']+){1,4})\s+\d{2}\/\d{2}\/\d{2}/,
+    /\b(\d{1,3})\s*[\|:]?\s*([A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ']+\s+[A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ']+(?:\s+[A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ']+)?)\s*[\|\n]/,
   ]
   for (const re of nomeRe) {
     const m = text.match(re)
     if (m && parseInt(m[1]) <= 999) {
-      const parts = m[2].trim().split(/\s+/)
+      anag._nomeCompleto = m[2].trim()
+      const parts = anag._nomeCompleto.split(/\s+/)
       anag.cognome   = parts[0]
       anag.nome      = parts.slice(1).join(' ')
       anag.matricola = m[1]
@@ -293,6 +334,11 @@ export function parseInailPayslip(text) {
   for (const m of text.matchAll(/STRAORDINARIO[^\n]*([\d.]+,\d{2})/gi)) straordTot += pd(m[1])
   if (straordTot) busta.straordinari_imp = Math.round(straordTot * 100) / 100
 
+  if (anag._nomeCompleto && anag.codice_fiscale) {
+    Object.assign(anag, splitCognomeNome(anag._nomeCompleto, anag.codice_fiscale))
+  }
+  delete anag._nomeCompleto
+
   return { anag, busta }
 }
 
@@ -314,15 +360,27 @@ export function parseCedolino(text) {
     if (mm) { busta._bp_mese = idx + 1; busta._bp_anno = parseInt(mm[1]); break }
   }
 
-  // ── Header line: "MESE ANNO … MATRICOLA  COGNOME NOME  DD/MM/YY" ─────────
-  const headerLineIdx = lines.findIndex(l => MESI_IT.some(m => l.toUpperCase().includes(m)))
-  const headerLine = headerLineIdx >= 0 ? lines[headerLineIdx] : ''
-  if (headerLine) {
-    const nameHM = headerLine.match(/\b([A-ZÀÈÉÌÒÙ]{2,}(?:\s+[A-ZÀÈÉÌÒÙ']{2,}){1,3})\s+\d{2}\/\d{2}\/\d{2,4}/)
+  // ── Nome: "… MATRICOLA  COGNOME NOME  DD/MM/YY  CODICE_FISCALE …" ─────────
+  // Ancorato al CF che segue la data: così un cognome con apostrofo
+  // (TIRILLO' MARILENA) non fa scivolare il match sul comune di nascita.
+  const NOME_TOK = "[A-ZÀÈÉÌÒÙ][A-ZÀÈÉÌÒÙ'`’]*"
+  const nameCfM = text.match(new RegExp(
+    `\\b(\\d{1,6})\\s+(${NOME_TOK}(?:\\s+${NOME_TOK}){1,5})\\s+\\d{2}\\/\\d{2}\\/\\d{2,4}\\s+([A-Z]{6}\\d{2}[A-Z]\\d{2}[A-Z]\\d{3}[A-Z])\\b`))
+  if (nameCfM) {
+    const { cognome, nome } = splitCognomeNome(nameCfM[2], nameCfM[3])
+    anag.cognome = cognome
+    anag.nome    = nome
+    if (parseInt(nameCfM[1]) < 10000) anag.matricola = nameCfM[1]
+  } else {
+    // Fallback: riga intestazione "MESE ANNO … MATRICOLA  COGNOME NOME  DD/MM/YY"
+    const headerLineIdx = lines.findIndex(l => MESI_IT.some(m => l.toUpperCase().includes(m)))
+    const headerLine = headerLineIdx >= 0 ? lines[headerLineIdx] : ''
+    const nameHM = headerLine.match(new RegExp(`\\b(${NOME_TOK}(?:\\s+${NOME_TOK}){1,5})\\s+\\d{2}\\/\\d{2}\\/\\d{2,4}`))
     if (nameHM) {
-      const parts = nameHM[1].trim().split(/\s+/)
-      anag.cognome = parts[0]
-      anag.nome    = parts.slice(1).join(' ')
+      const cfNear = text.match(/\b([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])\b/i)?.[1]
+      const { cognome, nome } = splitCognomeNome(nameHM[1], cfNear)
+      anag.cognome = cognome
+      anag.nome    = nome
       const beforeName = headerLine.substring(0, headerLine.indexOf(nameHM[1]))
       const matM = beforeName.match(/\b(\d{1,6})\s*$/)
       if (matM && parseInt(matM[1]) < 10000) anag.matricola = matM[1]
