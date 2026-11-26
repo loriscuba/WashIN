@@ -70,7 +70,7 @@ async function carica() {
       .select('*, squadre_operatori(operatore_id), squadre_contratti(id, contratto_id, dal, al, note)')
       .order('nome'),
     supabase.from('profili').select('id, nome, cognome, attivo').order('nome'),
-    supabase.from('contratti').select('id, numero_contratto, stato, clienti(nome_breve, ragione_sociale)'),
+    supabase.from('contratti').select('id, numero_contratto, stato, clienti(nome_breve, ragione_sociale, indirizzo, citta)'),
   ])
   if (sq.error) {
     console.error(sq.error)
@@ -83,6 +83,9 @@ async function carica() {
   _contratti = (ct.data || []).map(k => ({
     id: k.id, stato: k.stato,
     nome: `${k.clienti?.nome_breve || k.clienti?.ragione_sociale || '—'}${k.numero_contratto ? ' (' + k.numero_contratto + ')' : ''}`,
+    indirizzo: [k.clienti?.indirizzo, k.clienti?.citta].filter(Boolean).join(', '),
+    cerca: [k.clienti?.nome_breve, k.clienti?.ragione_sociale, k.numero_contratto, k.clienti?.indirizzo, k.clienti?.citta]
+      .filter(Boolean).join(' ').toLowerCase(),
   })).sort((a, b) => a.nome.localeCompare(b.nome, 'it', { numeric: true }))
   renderLista()
   renderDettaglio()
@@ -112,16 +115,16 @@ function renderLista() {
 }
 
 function rigaContrattoHtml(r = {}) {
-  const opts = _contratti
-    .filter(k => k.stato === 'attivo' || k.id === r.contratto_id)
-    .map(k => `<option value="${k.id}"${k.id === r.contratto_id ? ' selected' : ''}>${esc(k.nome)}</option>`).join('')
+  const k = _contratti.find(x => x.id === r.contratto_id)
   const st = r.dal ? statoPeriodo(r) : ''
   const badge = st === 'attiva' ? '<span class="badge badge-success">in corso</span>'
     : st === 'futura' ? '<span class="badge badge-info">futura</span>'
     : st === 'conclusa' ? '<span class="badge">conclusa</span>' : ''
   return `
     <tr data-riga="${r.id || ''}">
-      <td><select class="form-input" data-f="contratto_id" style="max-width:260px;"><option value="">— scegli contratto —</option>${opts}</select></td>
+      <td><input type="hidden" data-f="contratto_id" value="${esc(r.contratto_id || '')}">
+        <strong style="font-size:13px;">${esc(k?.nome || 'Contratto')}</strong>
+        ${k?.indirizzo ? `<br><small style="color:var(--gray-500);">${esc(k.indirizzo)}</small>` : ''}</td>
       <td><input type="date" class="form-input" data-f="dal" value="${esc(r.dal || oggiIso())}"></td>
       <td><input type="date" class="form-input" data-f="al" value="${esc(r.al || '')}" title="Vuoto = senza scadenza"></td>
       <td><input type="text" class="form-input" data-f="note" value="${esc(r.note || '')}" placeholder="es. copertura ferie" style="min-width:140px;"></td>
@@ -147,6 +150,14 @@ function renderDettaglio() {
   for (const x of _squadre) if (x.id !== s.id) for (const o of x.squadre_operatori || []) altrove.set(o.operatore_id, x.nome)
   const operatori = _profili.filter(p => p.attivo !== false || comp.has(p.id))
   const righe = [...(s.squadre_contratti || [])].sort((a, b) => (b.dal || '').localeCompare(a.dal || ''))
+  const assegnati = new Set(righe.map(r => r.contratto_id))
+  // Altre squadre che hanno il contratto in corso o in futuro (solo come informazione)
+  const altreSq = new Map()
+  for (const x of _squadre) if (x.id !== s.id) for (const r of x.squadre_contratti || []) {
+    if (statoPeriodo(r) === 'conclusa') continue
+    altreSq.set(r.contratto_id, [...(altreSq.get(r.contratto_id) || []), x.nome])
+  }
+  const contrattiLista = _contratti.filter(k => k.stato === 'attivo' || assegnati.has(k.id))
 
   box.innerHTML = `
     <div class="card">
@@ -181,11 +192,20 @@ function renderDettaglio() {
 
       <h3 style="font-size:14px;margin:18px 0 6px;">Contratti assegnati</h3>
       <p style="font-size:12px;color:var(--gray-500);margin:0 0 8px;">Nel periodo indicato la squadra sostituisce gli operatori fissi del contratto (sui fogli ore il contratto passa alla squadra). Lascia vuota la data "al" se l'assegnazione non ha scadenza; per una copertura temporanea (es. ferie) metti le due date.</p>
-      <div class="table-container"><table class="washin-table">
+      <input type="search" id="sq-cerca-contr" class="form-input" placeholder="Cerca contratto (nome, numero, indirizzo)…" style="max-width:320px;margin-bottom:8px;">
+      <div id="sq-lista-contratti" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px 12px;max-height:220px;overflow-y:auto;padding:8px 10px;border:1.5px solid var(--gray-300);border-radius:8px;">
+        ${contrattiLista.map(k => `
+          <label data-cerca="${esc(k.cerca)}" style="display:flex;align-items:flex-start;gap:6px;font-size:13px;font-weight:400;" title="${esc(k.indirizzo)}">
+            <input type="checkbox" data-contratto="${k.id}"${assegnati.has(k.id) ? ' checked' : ''} style="margin-top:2px;">
+            <span>${esc(k.nome)}${k.indirizzo ? `<br><small style="color:var(--gray-500);">${esc(k.indirizzo)}</small>` : ''}
+              ${altreSq.has(k.id) ? `<br><small style="color:#b45309;">anche: ${esc(altreSq.get(k.id).join(', '))}</small>` : ''}</span>
+          </label>`).join('') || '<span style="font-size:12px;color:var(--gray-500);">Nessun contratto attivo</span>'}
+      </div>
+      <div class="table-container" style="margin-top:10px;"><table class="washin-table">
         <thead><tr><th>Contratto</th><th>Dal</th><th>Al</th><th>Note</th><th></th><th></th></tr></thead>
         <tbody id="sq-contratti">${righe.map(rigaContrattoHtml).join('')}</tbody>
       </table></div>
-      <button type="button" class="btn btn-secondary btn-sm" id="sq-add-contratto" style="margin-top:8px;">+ Assegna contratto</button>
+      <p id="sq-contratti-vuoto" style="font-size:12px;color:var(--gray-500);margin:6px 0 0;${righe.length ? 'display:none;' : ''}">Spunta i contratti nell'elenco sopra: compaiono qui con le date da completare.</p>
 
       <label style="display:block;font-size:13px;font-weight:600;margin-top:16px;">Note
         <textarea id="sq-note" class="form-input" rows="2" style="display:block;margin-top:4px;width:100%;">${esc(s.note || '')}</textarea>
@@ -204,11 +224,37 @@ function renderDettaglio() {
     const q = e.target.value.trim().toLowerCase()
     box.querySelectorAll('#sq-componenti label[data-nome]').forEach(l => { l.style.display = !q || l.dataset.nome.includes(q) ? '' : 'none' })
   })
-  document.getElementById('sq-add-contratto').addEventListener('click', () => {
-    document.getElementById('sq-contratti').insertAdjacentHTML('beforeend', rigaContrattoHtml())
+  const tbody = document.getElementById('sq-contratti')
+  const aggiornaVuoto = () => { document.getElementById('sq-contratti-vuoto').style.display = tbody.children.length ? 'none' : '' }
+  document.getElementById('sq-cerca-contr').addEventListener('input', e => {
+    const parole = e.target.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    box.querySelectorAll('#sq-lista-contratti label[data-cerca]').forEach(l => {
+      l.style.display = parole.every(w => l.dataset.cerca.includes(w)) ? '' : 'none'
+    })
   })
-  document.getElementById('sq-contratti').addEventListener('click', e => {
-    if (e.target.closest('[data-azione="togli"]')) e.target.closest('tr').remove()
+  // Spunta = aggiunge una riga con le date; togli spunta = toglie le righe di quel contratto
+  document.getElementById('sq-lista-contratti').addEventListener('change', e => {
+    const cb = e.target.closest('[data-contratto]')
+    if (!cb) return
+    const id = cb.dataset.contratto
+    const righeK = [...tbody.querySelectorAll('tr')].filter(tr => tr.querySelector('[data-f="contratto_id"]').value === id)
+    if (cb.checked) {
+      if (!righeK.length) tbody.insertAdjacentHTML('afterbegin', rigaContrattoHtml({ contratto_id: id }))
+    } else {
+      if (righeK.length > 1 && !confirm(`Questo contratto ha ${righeK.length} periodi: li tolgo tutti?`)) { cb.checked = true; return }
+      righeK.forEach(tr => tr.remove())
+    }
+    aggiornaVuoto()
+  })
+  tbody.addEventListener('click', e => {
+    if (!e.target.closest('[data-azione="togli"]')) return
+    const tr = e.target.closest('tr')
+    const id = tr.querySelector('[data-f="contratto_id"]').value
+    tr.remove()
+    const resta = [...tbody.querySelectorAll('[data-f="contratto_id"]')].some(i => i.value === id)
+    const cb = box.querySelector(`#sq-lista-contratti [data-contratto="${id}"]`)
+    if (cb && !resta) cb.checked = false
+    aggiornaVuoto()
   })
   document.getElementById('sq-annulla').addEventListener('click', () => { if (_sel === 'new') _sel = null; renderLista(); renderDettaglio() })
   document.getElementById('sq-salva').addEventListener('click', e => salva(s, e.currentTarget))
