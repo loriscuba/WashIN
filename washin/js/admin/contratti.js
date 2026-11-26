@@ -1,5 +1,6 @@
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
+import { squadreDelContratto, periodoLabel } from './squadre.js'
 
 let _allContratti = []
 let _search = ''
@@ -190,6 +191,23 @@ async function renderOperatori(contrattoId) {
         ${esc(`${p.nome || ''} ${p.cognome || ''}`.trim())}
       </label>`).join('')
     : '<span style="color:var(--gray-500);font-size:12px;">Nessun operatore attivo</span>'
+}
+
+// Squadre assegnate al contratto (v48), sola lettura: si gestiscono dalla sezione Squadre
+async function renderSquadre(contrattoId) {
+  const box = document.getElementById('contratto-squadre')
+  if (!box) return
+  if (!contrattoId) { box.innerHTML = '<span style="color:var(--gray-500);font-size:12px;">Nessuna</span>'; return }
+  const righe = await squadreDelContratto(contrattoId)
+  if (righe === null) { box.innerHTML = '<span style="color:var(--gray-500);font-size:12px;">Squadre non disponibili (migrazione v48)</span>'; return }
+  const vis = righe.filter(r => r.stato !== 'conclusa')
+  box.innerHTML = vis.length
+    ? vis.map(r => `<div style="display:flex;align-items:center;gap:6px;margin:2px 0;">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(r.squadre?.colore || '#999')}"></span>
+        <strong>${esc(r.squadre?.nome || '')}</strong>
+        <span style="color:var(--gray-500);">${esc(periodoLabel(r))}${r.stato === 'futura' ? ' · futura' : ''}${r.note ? ' · ' + esc(r.note) : ''}</span>
+      </div>`).join('')
+    : '<span style="color:var(--gray-500);font-size:12px;">Nessuna</span>'
 }
 
 function readOperatori() {
@@ -388,6 +406,7 @@ export async function openModalContratto(id = null, prefilledClienteId = null) {
     await Promise.all([
       populateClientiSelect(clienteSelect),
       renderOperatori(id),
+      renderSquadre(id),
       loadAmministratori(),
     ])
 
