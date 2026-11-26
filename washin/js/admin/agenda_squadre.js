@@ -3,6 +3,7 @@
 // "Genera settimana" crea gli interventi dai contratti assegnati e dalla frequenza dei servizi.
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
+import { serviziUnici } from './fogli_ore_righe.js'
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -69,18 +70,40 @@ export function scegliGiorni(validi, k, seme) {
   return [...out].sort((a, b) => a - b)
 }
 
+// Una sola assegnazione per squadra e contratto (se due periodi toccano la stessa settimana
+// si uniscono i giorni validi)
+function assegnUniche() {
+  const m = new Map()
+  for (const a of _assegn) {
+    const k = `${a.squadra_id}|${a.contratto_id}`
+    const prima = m.get(k)
+    if (!prima) m.set(k, { ...a, giorni: giorniValidi(a, _lun) })
+    else prima.giorni = [...new Set([...prima.giorni, ...giorniValidi(a, _lun)])].sort((x, y) => x - y)
+  }
+  return [...m.values()]
+}
+
+const fmtMin = m => m == null ? '' : m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ' ' + String(m % 60).padStart(2, '0') + "'" : ''}` : `${m}'`
+const PER = { settimana: 'sett', mese: 'mese', anno: 'anno', giorno: 'giorno' }
+function etichettaServizio(s) {
+  const d = s.descrizione ? s.descrizione[0].toUpperCase() + s.descrizione.slice(1) : 'Servizio'
+  const f = s.interventi_numero != null && s.interventi_periodo ? `${String(s.interventi_numero).replace('.', ',')} v/${PER[s.interventi_periodo] || s.interventi_periodo}` : ''
+  return [d, fmtMin(s.minuti_intervento), f].filter(Boolean).join(' · ')
+}
+
 function piano() {
   const nuovi = []
-  for (const a of _assegn) {
+  for (const a of assegnUniche()) {
     const sq = _squadre.find(s => s.id === a.squadra_id)
     const k0 = a.contratti
     if (!sq || !k0 || (k0.stato && k0.stato !== 'attivo')) continue
-    const validi = giorniValidi(a, _lun)
-    for (const s of k0.contratti_servizi || []) {
+    const validi = a.giorni
+    const servizi = serviziUnici(k0.contratti_servizi)
+    for (const s of servizi) {
       const k = interventiSettimana(s, _lun)
       if (!k) continue
       const giorni = scegliGiorni(validi, k, hash(k0.id + s.id))
-      const gia = _interventi.filter(iv => iv.contratto_id === k0.id && (iv.servizio_id === s.id || (!iv.servizio_id && (k0.contratti_servizi || []).length === 1))).length
+      const gia = _interventi.filter(iv => iv.contratto_id === k0.id && (iv.servizio_id === s.id || (!iv.servizio_id && servizi.length === 1))).length
       for (const d of giorni.slice(gia)) {
         nuovi.push({
           contratto_id: k0.id, servizio_id: s.id, squadra_id: sq.id,
@@ -156,7 +179,7 @@ function render() {
     return `<th style="text-align:center;${iso === oggi ? 'color:#0d9488;' : ''}">${g}<br><small>${new Date(iso + 'T12:00:00').getDate()}</small></th>`
   }).join('')
   const righe = _squadre.map(sq => {
-    const contr = _assegn.filter(a => a.squadra_id === sq.id)
+    const contr = [...new Set(_assegn.filter(a => a.squadra_id === sq.id).map(a => a.contratto_id))]
     const celle = GIORNI.map((_, d) => {
       const iso = addDaysIso(_lun, d)
       const items = _interventi.filter(iv => iv.squadra_id === sq.id && iv.data_pianificata === iso)
@@ -184,10 +207,11 @@ function render() {
 async function aggiungi(td) {
   const sq = _squadre.find(s => s.id === td.dataset.squadra)
   const d = Number(td.dataset.giorno)
-  const suoi = _assegn.filter(a => a.squadra_id === sq.id).map(a => a.contratti).filter(Boolean)
+  const suoi = [...new Map(_assegn.filter(a => a.squadra_id === sq.id && a.contratti).map(a => [a.contratto_id, a.contratti])).values()]
+    .sort((a, b) => nomeContratto(a).localeCompare(nomeContratto(b), 'it', { numeric: true }))
   const opzioni = []
   for (const k of suoi) {
-    const servizi = (k.contratti_servizi || []).filter(s => s.interventi_periodo !== 'a_richiesta')
+    const servizi = serviziUnici(k.contratti_servizi)
     if (!servizi.length) opzioni.push({ k, s: null })
     for (const s of servizi) opzioni.push({ k, s })
   }
@@ -198,19 +222,36 @@ async function aggiungi(td) {
     <div style="font-size:12px;font-weight:600;margin-bottom:6px;">${esc(sq.nome)} · ${GIORNI[d]} ${new Date(addDaysIso(_lun, d) + 'T12:00:00').getDate()}</div>
     <select class="form-input" style="font-size:12px;width:100%;">
       ${opzioni.length ? '' : '<option value="">Nessun contratto assegnato alla squadra</option>'}
-      ${opzioni.map((o, i) => `<option value="${i}">${esc(nomeContratto(o.k))}${o.s ? ' · ' + esc(o.s.descrizione || 'servizio') : ''}</option>`).join('')}
+      ${opzioni.map((o, i) => `<option value="${i}">${esc(nomeContratto(o.k))}${o.s ? ' · ' + esc(etichettaServizio(o.s)) : ''}</option>`).join('')}
     </select>
     <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">
       <button type="button" class="btn btn-secondary btn-sm" data-m="chiudi">Annulla</button>
       <button type="button" class="btn btn-primary btn-sm" data-m="ok" ${opzioni.length ? '' : 'disabled'}>Aggiungi</button>
     </div>`
-  td.appendChild(menu)
+  // Il menu sta sopra la pagina (position:fixed): la tabella scorre in orizzontale e lo taglierebbe
+  document.body.appendChild(menu)
+  const r = td.getBoundingClientRect()
+  const w = 280
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px'
+  const h = menu.offsetHeight
+  menu.style.top = (r.bottom + h + 8 > window.innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4) + 'px'
+  const chiudi = ev => {
+    if (ev && ev.type === 'mousedown' && menu.contains(ev.target)) return
+    menu.remove()
+    document.removeEventListener('mousedown', chiudi, true)
+    window.removeEventListener('scroll', chiudi, true)
+  }
+  setTimeout(() => {
+    document.addEventListener('mousedown', chiudi, true)
+    window.addEventListener('scroll', chiudi, true)
+  })
   menu.addEventListener('click', async e => {
     e.stopPropagation()
     const m = e.target.closest('[data-m]')?.dataset.m
-    if (m === 'chiudi') menu.remove()
+    if (m === 'chiudi') chiudi()
     if (m !== 'ok') return
     const o = opzioni[Number(menu.querySelector('select').value)]
+    chiudi()
     const { error } = await supabase.from('interventi').insert({
       contratto_id: o.k.id, servizio_id: o.s?.id || null, squadra_id: sq.id,
       data_pianificata: addDaysIso(_lun, d), stato: 'pianificato', tipo_pulizia: 'ordinaria',
@@ -275,7 +316,8 @@ export function initAgendaSquadre({ apriIntervento } = {}) {
       #agenda-squadre .ag-x:hover { color:#b91c1c; }
       #agenda-squadre .ag-add { border:1px dashed var(--gray-300); background:none; border-radius:6px; width:100%; color:var(--gray-400); cursor:pointer; font-size:14px; padding:0; }
       #agenda-squadre .ag-add:hover { color:#0d9488; border-color:#0d9488; }
-      #agenda-squadre .ag-menu { position:absolute; z-index:20; top:100%; left:0; width:260px; background:#fff; border:1px solid var(--gray-300); border-radius:8px; padding:10px; box-shadow:0 8px 24px rgba(0,0,0,.15); }
+      .ag-menu { position:fixed; z-index:1000; width:280px; background:#fff; border:1px solid var(--gray-300); border-radius:8px; padding:10px; box-shadow:0 8px 24px rgba(0,0,0,.15); font-family:inherit; }
+      #agenda-squadre .table-container { overflow-y:visible; }
     </style>
     <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
       <div>
@@ -310,7 +352,6 @@ export function initAgendaSquadre({ apriIntervento } = {}) {
 
   const griglia = document.getElementById('ag-griglia')
   griglia.addEventListener('click', async e => {
-    if (e.target.closest('.ag-menu')) return
     const az = e.target.closest('[data-azione]')?.dataset.azione
     if (az === 'aggiungi') { aggiungi(e.target.closest('td')); return }
     const card = e.target.closest('.ag-card')
