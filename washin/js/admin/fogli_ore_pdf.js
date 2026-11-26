@@ -55,7 +55,7 @@ function drawQr(doc, qrcode, data) {
 }
 
 function drawPage(doc, qrcode, p) {
-  const { foglio, operatore, righe } = p
+  const { foglio, operatore, righe, squadra, squadraUnica, componenti = [] } = p
   const lun = foglio.settimana_inizio
   const dom = addDays(lun, 6)
   const dLun = addDays(lun, 0)
@@ -70,17 +70,28 @@ function drawPage(doc, qrcode, p) {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16)
   doc.text('FOGLIO ORE SETTIMANALE', 14, 17)
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
-  doc.text('Operatrice:', 14, 25)
+  doc.text(squadraUnica ? 'Squadra:' : 'Operatrice:', 14, 25)
   doc.setFont('helvetica', 'bold'); doc.setFontSize(13)
   doc.text(fit(doc, operatore, 130), 34, 25)
+  if (squadra && !squadraUnica) {
+    const w = doc.getTextWidth(fit(doc, operatore, 130))
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
+    doc.text(fit(doc, /^squadra\b/i.test(squadra) ? squadra : `squadra ${squadra}`, 125 - w), 36 + w, 25)
+  }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
   doc.text(`Settimana: da lunedì ${dLun.getDate()} ${MESI[dLun.getMonth()]} a domenica ${dom.getDate()} ${MESI[dom.getMonth()]} ${dom.getFullYear()}`, 14, 31.5)
   doc.setFont('courier', 'bold'); doc.setFontSize(11)
   doc.text(`Foglio ${codice}${foglio.pagine > 1 ? `   pag. ${foglio.pagina}/${foglio.pagine}` : ''}`, 14, 38)
+  if (squadraUnica) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
+    doc.text(fit(doc, `Componenti: ${componenti.join(', ') || '—'}`, 90), 74, 38)
+  }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
   doc.text("1) Fai una X nel giorno in cui hai fatto l'intervento: vale il tempo previsto indicato nella riga.", 14, 46)
   doc.text('2) Solo se il tempo è stato diverso, fai comunque la X e compila una riga di VARIAZIONI in fondo.', 14, 50.5)
-  doc.text('3) In fondo annerisci il TOTALE delle X che hai fatto. Non scrivere sul QR e sui quadratini neri.', 14, 55)
+  doc.text(squadraUnica
+    ? '3) Annerisci il TOTALE delle X. Nelle note scrivi chi era assente e in che giorno. Non scrivere sul QR e sui quadratini neri.'
+    : '3) In fondo annerisci il TOTALE delle X che hai fatto. Non scrivere sul QR e sui quadratini neri.', 14, 55)
 
   // Tabella
   const T = TABLE
@@ -180,11 +191,13 @@ function drawPage(doc, qrcode, p) {
 
   // Note e firme
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
-  doc.text('Note:', 14, FOOTER.noteY)
+  const noteLabel = squadraUnica ? 'Assenti (chi, che giorno) / note:' : 'Note:'
+  doc.text(noteLabel, 14, FOOTER.noteY)
   doc.setLineWidth(0.15)
-  doc.line(24, FOOTER.noteY + 0.5, 196, FOOTER.noteY + 0.5)
-  doc.text('Firma operatrice:', 14, FOOTER.firmaY)
-  doc.line(42, FOOTER.firmaY + 0.5, 105, FOOTER.firmaY + 0.5)
+  doc.line(16 + doc.getTextWidth(noteLabel), FOOTER.noteY + 0.5, 196, FOOTER.noteY + 0.5)
+  const firma = squadraUnica ? 'Firma capo squadra:' : 'Firma operatrice:'
+  doc.text(firma, 14, FOOTER.firmaY)
+  doc.line(16 + doc.getTextWidth(firma), FOOTER.firmaY + 0.5, 105, FOOTER.firmaY + 0.5)
   doc.text('Visto ufficio:', 115, FOOTER.firmaY)
   doc.line(136, FOOTER.firmaY + 0.5, 196, FOOTER.firmaY + 0.5)
   doc.setFontSize(6.5); doc.setTextColor(130, 130, 130)

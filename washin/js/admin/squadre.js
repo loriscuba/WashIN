@@ -142,6 +142,9 @@ function renderDettaglio() {
     : _squadre.find(x => x.id === _sel)
   if (!s) { _sel = null; renderDettaglio(); return }
   const comp = new Set((s.squadre_operatori || []).map(o => o.operatore_id))
+  // Un operatore sta in una sola squadra: chi è già in un'altra non si può spuntare
+  const altrove = new Map()
+  for (const x of _squadre) if (x.id !== s.id) for (const o of x.squadre_operatori || []) altrove.set(o.operatore_id, x.nome)
   const operatori = _profili.filter(p => p.attivo !== false || comp.has(p.id))
   const righe = [...(s.squadre_contratti || [])].sort((a, b) => (b.dal || '').localeCompare(a.dal || ''))
 
@@ -169,13 +172,15 @@ function renderDettaglio() {
       <input type="search" id="sq-cerca-op" class="form-input" placeholder="Cerca operatore…" style="max-width:240px;margin-bottom:8px;">
       <div id="sq-componenti" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 12px;max-height:220px;overflow-y:auto;padding:8px 10px;border:1.5px solid var(--gray-300);border-radius:8px;">
         ${operatori.map(p => `
-          <label data-nome="${esc(nomeOp(p).toLowerCase())}" style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;">
-            <input type="checkbox" data-operatore="${p.id}"${comp.has(p.id) ? ' checked' : ''}> ${esc(nomeOp(p))}
+          <label data-nome="${esc(nomeOp(p).toLowerCase())}" style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;${altrove.has(p.id) ? 'opacity:.5;' : ''}"
+            ${altrove.has(p.id) ? `title="Già in ${esc(altrove.get(p.id))}"` : ''}>
+            <input type="checkbox" data-operatore="${p.id}"${comp.has(p.id) ? ' checked' : ''}${altrove.has(p.id) ? ' disabled' : ''}> ${esc(nomeOp(p))}
+            ${altrove.has(p.id) ? `<small style="color:var(--gray-500);">(${esc(altrove.get(p.id))})</small>` : ''}
           </label>`).join('') || '<span style="font-size:12px;color:var(--gray-500);">Nessun operatore attivo</span>'}
       </div>
 
       <h3 style="font-size:14px;margin:18px 0 6px;">Contratti assegnati</h3>
-      <p style="font-size:12px;color:var(--gray-500);margin:0 0 8px;">Lascia vuota la data "al" se l'assegnazione non ha scadenza. Per una copertura temporanea (es. ferie) metti le due date.</p>
+      <p style="font-size:12px;color:var(--gray-500);margin:0 0 8px;">Nel periodo indicato la squadra sostituisce gli operatori fissi del contratto (sui fogli ore il contratto passa alla squadra). Lascia vuota la data "al" se l'assegnazione non ha scadenza; per una copertura temporanea (es. ferie) metti le due date.</p>
       <div class="table-container"><table class="washin-table">
         <thead><tr><th>Contratto</th><th>Dal</th><th>Al</th><th>Note</th><th></th><th></th></tr></thead>
         <tbody id="sq-contratti">${righe.map(rigaContrattoHtml).join('')}</tbody>
@@ -298,7 +303,7 @@ async function salva(s, btn) {
     await carica()
   } catch (e) {
     console.error(e)
-    showToast(/squadre_nome_uq|duplicate/.test(e.message || '') ? 'Esiste già una squadra con questo nome' : 'Errore salvataggio squadra', 'error')
+    showToast(/una_squadra/.test(e.message || '') ? 'Un operatore scelto è già in un\'altra squadra' : /squadre_nome_uq|duplicate/.test(e.message || '') ? 'Esiste già una squadra con questo nome' : 'Errore salvataggio squadra', 'error')
   } finally {
     btn.disabled = false
   }

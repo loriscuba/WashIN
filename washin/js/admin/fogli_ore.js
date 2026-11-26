@@ -4,6 +4,7 @@ import { showToast } from './clienti.js'
 import { creaPdfFogli } from './fogli_ore_pdf.js'
 import { fileToCanvases, leggiPagina, ritaglio } from './fogli_ore_lettura.js'
 import { RIGHE, GIORNI, codiceFoglio, getLayout } from './fogli_ore_layout.js'
+import { righePerOperatori, righePerSquadre, contrattiSquadreSettimana } from './fogli_ore_righe.js'
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const PERIODO = { settimana: 'settimana', mese: 'mese', anno: 'anno', giorno: 'giorno', a_richiesta: 'a richiesta' }
@@ -31,7 +32,8 @@ function render() {
   if (!sec) return
   sec.innerHTML = `
     <style>
-      #fogli-ore input[type=checkbox] { width:auto; padding:0; }
+      #fogli-ore input[type=checkbox], #fogli-ore input[type=radio] { width:auto; padding:0; }
+      #fo-modo label { white-space:nowrap; }
       #fogli-ore input[type=file] { width:auto; }
       #fogli-ore table select, #fogli-ore table input[type=number] { width:auto; }
     </style>
@@ -53,21 +55,23 @@ function render() {
           </label>
           <span id="fo-settimana-label" style="font-size:13px;color:var(--gray-500);padding-bottom:8px;"></span>
         </div>
-        <p style="font-size:12px;color:var(--gray-500);margin:12px 0 8px;">
-          Ogni operatrice riceve le righe dei contratti attivi in cui è flaggata come operatore (una riga per servizio).
-          Oltre 15 righe si passa a un secondo foglio.
-        </p>
+        <div id="fo-modo" style="display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:14px;font-size:13px;">
+          <label style="display:flex;gap:6px;align-items:center;font-weight:400;"><input type="radio" name="fo-modo" value="operatrici" checked> Per operatrice</label>
+          <label style="display:flex;gap:6px;align-items:center;font-weight:400;"><input type="radio" name="fo-modo" value="squadra"> Squadra: foglio unico</label>
+          <label style="display:flex;gap:6px;align-items:center;font-weight:400;"><input type="radio" name="fo-modo" value="componenti"> Squadra: un foglio per componente</label>
+        </div>
+        <p id="fo-modo-nota" style="font-size:12px;color:var(--gray-500);margin:10px 0 8px;"></p>
         <div id="fo-operatori-nota" style="font-size:12px;color:var(--gray-500);margin-bottom:8px;"></div>
         <div id="fo-operatori" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm" id="fo-tutti">Seleziona tutte</button>
+          <button class="btn btn-secondary btn-sm" id="fo-tutti">Seleziona tutti</button>
           <button class="btn btn-primary" id="fo-genera">Genera e scarica PDF</button>
         </div>
       </div>
       <div class="card" style="margin-top:16px;">
         <h3 style="margin:0 0 8px;font-size:15px;">Fogli già generati per questa settimana</h3>
         <div class="table-container"><table class="washin-table">
-          <thead><tr><th>Foglio</th><th>Operatrice</th><th>Righe</th><th>Stato</th><th></th></tr></thead>
+          <thead><tr><th>Foglio</th><th>Operatrice / squadra</th><th>Righe</th><th>Stato</th><th></th></tr></thead>
           <tbody id="fo-generati"></tbody>
         </table></div>
       </div>
@@ -118,6 +122,7 @@ function render() {
     boxes.forEach(b => { b.checked = !all })
   })
   document.getElementById('fo-genera').addEventListener('click', generaFogli)
+  document.getElementById('fo-modo').addEventListener('change', caricaStampa)
   document.getElementById('fo-generati').addEventListener('click', onGeneratiClick)
   document.getElementById('fo-file').addEventListener('change', onFile)
   document.getElementById('fo-letture').addEventListener('click', onLettureClick)
@@ -148,43 +153,60 @@ function settimanaLabel(lun) {
   return `dal ${f(a)} al ${f(b)} ${b.getFullYear()}`
 }
 
-// Righe del foglio per ogni operatrice, dai contratti attivi flaggati
-async function righePerOperatori(ids) {
-  const { data, error } = await supabase
-    .from('contratti_operatori')
-    .select('operatore_id, contratti(id, numero_contratto, stato, clienti(nome_breve, ragione_sociale), contratti_servizi(id, ordine, descrizione, minuti_intervento, interventi_numero, interventi_periodo))')
-    .in('operatore_id', ids)
-  if (error) throw error
-  const per = new Map(ids.map(id => [id, []]))
-  for (const row of data || []) {
-    const k = row.contratti
-    if (!k || (k.stato && k.stato !== 'attivo')) continue
-    const nome = k.clienti?.nome_breve || k.clienti?.ragione_sociale || 'Contratto'
-    const servizi = (k.contratti_servizi || []).filter(s => s.interventi_periodo !== 'a_richiesta')
-      .sort((a, b) => (a.ordine ?? 0) - (b.ordine ?? 0))
-    const base = { contratto_id: k.id, codice: k.numero_contratto || '', etichetta: nome }
-    if (!servizi.length) {
-      per.get(row.operatore_id).push({ ...base, servizio_id: null, dettaglio: 'tempo da definire sul contratto', minuti_previsti: null })
-      continue
-    }
-    for (const s of servizi) {
-      const freq = s.interventi_numero != null && s.interventi_periodo
-        ? `${String(s.interventi_numero).replace('.', ',')} v/${PERIODO[s.interventi_periodo] || s.interventi_periodo}` : ''
-      const dettaglio = [s.descrizione ? s.descrizione[0].toUpperCase() + s.descrizione.slice(1) : 'Servizio',
-        s.minuti_intervento != null ? fmtMin(s.minuti_intervento).trim() : 'tempo da definire', freq].filter(Boolean).join(' · ')
-      per.get(row.operatore_id).push({ ...base, servizio_id: s.id, dettaglio, minuti_previsti: s.minuti_intervento })
-    }
-  }
-  for (const list of per.values()) {
-    list.sort((a, b) => a.etichetta.localeCompare(b.etichetta, 'it', { numeric: true })) // stabile: i servizi restano nell'ordine del contratto
-  }
-  return per
+let _operatori = []
+let _squadre = []
+const modoStampa = () => document.querySelector('#fo-modo input:checked')?.value || 'operatrici'
+const NOTE_MODO = {
+  operatrici: 'Ogni operatrice riceve le righe dei contratti attivi in cui è flaggata come operatore (una riga per servizio). I contratti che in quella settimana sono assegnati a una squadra passano sul foglio della squadra. Oltre 15 righe si passa a un secondo foglio.',
+  squadra: 'Un solo foglio per squadra con i contratti assegnati alla squadra nella settimana: lo compila il capo squadra. All\'import ogni X vale il tempo previsto per ciascun componente presente (2 persone × 45\' = 45\' a testa); le assenze si indicano nella revisione.',
+  componenti: 'Un foglio per ogni componente della squadra con i contratti della squadra più quelli personali: ognuno segna solo quello che ha fatto.',
 }
 
-let _operatori = []
 async function caricaStampa() {
   const lun = document.getElementById('fo-settimana').value
   document.getElementById('fo-settimana-label').textContent = lun ? settimanaLabel(lun) : ''
+  const modo = modoStampa()
+  document.getElementById('fo-modo-nota').textContent = NOTE_MODO[modo]
+  if (modo === 'operatrici') await caricaOperatrici(lun)
+  else await caricaSquadre(lun)
+  await caricaGenerati()
+}
+
+async function caricaSquadre(lun) {
+  const box = document.getElementById('fo-operatori')
+  box.innerHTML = '<span style="color:var(--gray-500);font-size:13px;">Caricamento…</span>'
+  document.getElementById('fo-operatori-nota').textContent = ''
+  try {
+    const [{ data, error }, nContratti] = await Promise.all([
+      supabase.from('squadre').select('id, nome, colore, attiva, squadre_operatori(operatore_id, profili(nome, cognome, attivo))').eq('attiva', true).order('nome'),
+      contrattiSquadreSettimana(lun),
+    ])
+    if (error) throw error
+    _squadre = (data || []).map(sq => ({
+      ...sq,
+      componenti: (sq.squadre_operatori || []).filter(o => o.profili?.attivo !== false)
+        .map(o => ({ id: o.operatore_id, nome: nomeOp(o.profili) })).sort((a, b) => a.nome.localeCompare(b.nome, 'it')),
+      contratti: nContratti?.get(sq.id) || 0,
+    }))
+    box.innerHTML = _squadre.length ? _squadre.map(sq => {
+      const off = !sq.componenti.length || (modoStampa() === 'squadra' && !sq.contratti)
+      const perche = !sq.componenti.length ? 'nessun componente' : !sq.contratti ? 'nessun contratto in questa settimana' : ''
+      return `
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border:1px solid var(--gray-200);border-radius:8px;cursor:${off ? 'default' : 'pointer'};${off ? 'opacity:.55;' : ''}">
+          <input type="checkbox" value="${sq.id}" ${off ? 'disabled' : ''}>
+          <span style="flex:1;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(sq.colore)};margin-right:4px;"></span><strong>${esc(sq.nome)}</strong>
+            <br><small style="color:var(--gray-500);">${esc(sq.componenti.map(c => c.nome).join(', ') || '—')}</small>
+            ${perche ? `<br><small style="color:#b45309;">${perche}</small>` : ''}</span>
+          <span style="color:var(--gray-500);font-size:11px;white-space:nowrap;">${sq.contratti} contr.</span>
+        </label>`
+    }).join('') : '<span style="color:var(--gray-500);font-size:13px;">Nessuna squadra attiva. Creale dalla sezione Squadre.</span>'
+  } catch (err) {
+    console.error(err)
+    box.innerHTML = `<span style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato le migrazioni v48 e v49?</span>`
+  }
+}
+
+async function caricaOperatrici(lun) {
   const box = document.getElementById('fo-operatori')
   box.innerHTML = '<span style="color:var(--gray-500);font-size:13px;">Caricamento…</span>'
   try {
@@ -230,20 +252,44 @@ async function caricaStampa() {
     console.error(err)
     box.innerHTML = `<span style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato la migrazione v47?</span>`
   }
-  await caricaGenerati()
+}
+
+// Le colonne dei fogli di squadra esistono solo dopo la v49: senza, la sezione funziona come prima
+let _v49 = null
+async function haV49() {
+  if (_v49 === null) {
+    const { error } = await supabase.from('fogli_ore').select('squadra_id, componenti').limit(1)
+    _v49 = !error
+  }
+  return _v49
+}
+const SQ = async () => (await haV49()) ? ', squadra_id, componenti, squadre(nome)' : ''
+// Nome mostrato del foglio: operatrice, squadra o componente di squadra
+function nomeFoglio(f) {
+  if (!f.squadre) return nomeOp(f.profili)
+  const sq = /^squadra\b/i.test(f.squadre.nome) ? f.squadre.nome : `Squadra ${f.squadre.nome}`
+  return f.operatore_id ? `${nomeOp(f.profili)} (${sq})` : sq
+}
+// Nomi dei componenti di un foglio unico di squadra, nell'ordine stampato
+async function componentiFoglio(f) {
+  const ids = f.componenti || []
+  if (!ids.length) return []
+  const { data } = await supabase.from('profili').select('id, nome, cognome').in('id', ids)
+  const m = new Map((data || []).map(p => [p.id, nomeOp(p)]))
+  return ids.map(id => ({ id, nome: m.get(id) || '?' }))
 }
 
 async function caricaGenerati() {
   const lun = document.getElementById('fo-settimana').value
   const tb = document.getElementById('fo-generati')
   const { data, error } = await supabase.from('fogli_ore')
-    .select('id, numero, pagina, pagine, stato, operatore_id, profili(nome, cognome), fogli_ore_righe(riga)')
+    .select('id, numero, pagina, pagine, stato, operatore_id, profili(nome, cognome), fogli_ore_righe(riga)' + await SQ())
     .eq('settimana_inizio', lun).order('numero')
   if (error) { tb.innerHTML = `<tr><td colspan="5" style="color:#b91c1c;">${esc(error.message)}</td></tr>`; return }
   tb.innerHTML = (data || []).length ? data.map(f => `
     <tr style="${f.stato === 'annullato' ? 'opacity:.5;' : ''}">
       <td style="font-family:monospace;">${codiceFoglio(f.numero)}${f.pagine > 1 ? ` <small>(${f.pagina}/${f.pagine})</small>` : ''}</td>
-      <td>${esc(nomeOp(f.profili))}</td>
+      <td>${esc(nomeFoglio(f))}</td>
       <td>${(f.fogli_ore_righe || []).length}</td>
       <td><span class="badge ${f.stato === 'importato' ? 'badge-success' : f.stato === 'annullato' ? 'badge-danger' : 'badge-warning'}">${f.stato}</span></td>
       <td style="white-space:nowrap;">
@@ -255,58 +301,95 @@ async function caricaGenerati() {
 
 async function paginePerFogli(ids) {
   const { data, error } = await supabase.from('fogli_ore')
-    .select('id, numero, settimana_inizio, pagina, pagine, profili(nome, cognome), fogli_ore_righe(*)')
+    .select('id, numero, settimana_inizio, pagina, pagine, operatore_id, profili(nome, cognome), fogli_ore_righe(*)' + await SQ())
     .in('id', ids).order('numero')
   if (error) throw error
-  return (data || []).map(f => ({
-    foglio: f, operatore: nomeOp(f.profili),
-    righe: (f.fogli_ore_righe || []).sort((a, b) => a.riga - b.riga),
-  }))
+  const out = []
+  for (const f of data || []) {
+    const squadraUnica = f.squadre && !f.operatore_id
+    out.push({
+      foglio: f,
+      operatore: squadraUnica ? f.squadre.nome : nomeOp(f.profili),
+      squadra: f.squadre?.nome || null,
+      squadraUnica,
+      componenti: squadraUnica ? (await componentiFoglio(f)).map(c => c.nome) : [],
+      righe: (f.fogli_ore_righe || []).sort((a, b) => a.riga - b.riga),
+    })
+  }
+  return out
 }
 
 function scaricaPdf(doc, nome) {
   doc.save(nome)
 }
 
+// Salva un foglio (con le sue pagine da 15 righe) e ritorna gli id creati
+async function salvaFoglio(base, righe, lun) {
+  const ids = []
+  const chunks = []
+  for (let i = 0; i < Math.max(1, righe.length); i += RIGHE) chunks.push(righe.slice(i, i + RIGHE))
+  for (let p = 0; p < chunks.length; p++) {
+    const { data: f, error } = await supabase.from('fogli_ore')
+      .insert({ ...base, settimana_inizio: lun, pagina: p + 1, pagine: chunks.length })
+      .select('id').single()
+    if (error) throw error
+    if (chunks[p].length) {
+      const { error: e2 } = await supabase.from('fogli_ore_righe').insert(chunks[p].map((r, i) => ({
+        foglio_id: f.id, riga: i + 1, contratto_id: r.contratto_id, servizio_id: r.servizio_id,
+        codice: r.codice, etichetta: r.etichetta, dettaglio: r.dettaglio, minuti_previsti: r.minuti_previsti,
+      })))
+      if (e2) throw e2
+    }
+    ids.push(f.id)
+  }
+  return ids
+}
+
 async function generaFogli() {
   const lun = document.getElementById('fo-settimana').value
+  const modo = modoStampa()
   const ids = [...document.querySelectorAll('#fo-operatori input:checked')].map(i => i.value)
   if (!lun) { showToast('Scegli la settimana', 'error'); return }
-  if (!ids.length) { showToast('Seleziona almeno un\'operatrice', 'error'); return }
+  if (!ids.length) { showToast(modo === 'operatrici' ? 'Seleziona almeno un\'operatrice' : 'Seleziona almeno una squadra', 'error'); return }
+  if (modo !== 'operatrici' && !(await haV49())) { showToast('Per i fogli di squadra applica prima la migrazione v49', 'error'); return }
   const btn = document.getElementById('fo-genera')
   btn.disabled = true; btn.textContent = 'Genero…'
   try {
-    // fogli già stampati per la stessa settimana: si annullano (non quelli importati)
-    const { data: esistenti } = await supabase.from('fogli_ore').select('id, operatore_id')
-      .eq('settimana_inizio', lun).eq('stato', 'stampato').in('operatore_id', ids)
+    const squadre = modo === 'operatrici' ? [] : _squadre.filter(sq => ids.includes(sq.id))
+    // fogli già stampati per la stessa settimana e le stesse persone/squadre: si annullano (non quelli importati)
+    let q = supabase.from('fogli_ore').select('id').eq('settimana_inizio', lun).eq('stato', 'stampato')
+    if (modo === 'operatrici') { q = q.in('operatore_id', ids); if (await haV49()) q = q.is('squadra_id', null) }
+    else if (modo === 'squadra') q = q.in('squadra_id', ids).is('operatore_id', null)
+    else q = q.in('operatore_id', squadre.flatMap(sq => sq.componenti.map(c => c.id)))
+    const { data: esistenti } = await q
     if (esistenti?.length) {
-      if (!confirm(`Ci sono già ${esistenti.length} fogli stampati per questa settimana per le operatrici scelte. Li annullo e ne genero di nuovi?`)) return
+      if (!confirm(`Ci sono già ${esistenti.length} fogli stampati per questa settimana per le scelte fatte. Li annullo e ne genero di nuovi?`)) return
       const { error } = await supabase.from('fogli_ore').update({ stato: 'annullato' }).in('id', esistenti.map(e => e.id))
       if (error) throw error
     }
-    const per = await righePerOperatori(ids)
     const creati = []
-    for (const opId of ids) {
-      const righe = per.get(opId) || []
-      const chunks = []
-      for (let i = 0; i < Math.max(1, righe.length); i += RIGHE) chunks.push(righe.slice(i, i + RIGHE))
-      for (let p = 0; p < chunks.length; p++) {
-        const { data: f, error } = await supabase.from('fogli_ore')
-          .insert({ operatore_id: opId, settimana_inizio: lun, pagina: p + 1, pagine: chunks.length })
-          .select('id').single()
-        if (error) throw error
-        if (chunks[p].length) {
-          const { error: e2 } = await supabase.from('fogli_ore_righe').insert(chunks[p].map((r, i) => ({
-            foglio_id: f.id, riga: i + 1, contratto_id: r.contratto_id, servizio_id: r.servizio_id,
-            codice: r.codice, etichetta: r.etichetta, dettaglio: r.dettaglio, minuti_previsti: r.minuti_previsti,
-          })))
-          if (e2) throw e2
+    if (modo === 'operatrici') {
+      const per = await righePerOperatori(ids, lun)
+      for (const opId of ids) creati.push(...await salvaFoglio({ operatore_id: opId }, per.get(opId) || [], lun))
+    } else if (modo === 'squadra') {
+      const per = await righePerSquadre(ids, lun)
+      for (const sq of squadre) {
+        creati.push(...await salvaFoglio({ squadra_id: sq.id, componenti: sq.componenti.map(c => c.id) }, per.get(sq.id) || [], lun))
+      }
+    } else {
+      const perSq = await righePerSquadre(ids, lun)
+      const perOp = await righePerOperatori(squadre.flatMap(sq => sq.componenti.map(c => c.id)), lun)
+      for (const sq of squadre) {
+        const delSq = perSq.get(sq.id) || []
+        const contrSq = new Set(delSq.map(r => r.contratto_id))
+        for (const c of sq.componenti) {
+          const personali = (perOp.get(c.id) || []).filter(r => !contrSq.has(r.contratto_id))
+          creati.push(...await salvaFoglio({ operatore_id: c.id, squadra_id: sq.id }, [...delSq, ...personali], lun))
         }
-        creati.push(f.id)
       }
     }
     const doc = await creaPdfFogli(await paginePerFogli(creati))
-    scaricaPdf(doc, `fogli-ore-${lun}.pdf`)
+    scaricaPdf(doc, `fogli-ore-${modo === 'operatrici' ? '' : 'squadre-'}${lun}.pdf`)
     showToast(`${creati.length} fogli generati`)
     await caricaGenerati()
   } catch (err) {
@@ -347,9 +430,10 @@ async function contrattiAttivi() {
 
 async function caricaFoglio(id) {
   const { data, error } = await supabase.from('fogli_ore')
-    .select('id, numero, settimana_inizio, stato, operatore_id, pagina, pagine, profili(nome, cognome), fogli_ore_righe(*, contratti(stato), contratti_servizi(interventi_numero, interventi_periodo))')
+    .select('id, numero, settimana_inizio, stato, operatore_id, pagina, pagine, profili(nome, cognome), fogli_ore_righe(*, contratti(stato), contratti_servizi(interventi_numero, interventi_periodo))' + await SQ())
     .eq('id', id).maybeSingle()
   if (error) throw error
+  if (data?.squadre && !data.operatore_id) data._componenti = await componentiFoglio(data)
   return data
 }
 
@@ -395,6 +479,7 @@ function prepara(item) {
     x: {}, incerti: {},
     variazioni: L.variazioni.map(v => ({ ...v })),
     libere: {}, // riga → { contratto_id, minuti }
+    assenti: {}, // foglio di squadra: "operatore-giorno" → true
   }
   for (let r = 1; r <= RIGHE; r++) {
     for (let d = 0; d < 7; d++) {
@@ -429,7 +514,7 @@ function renderLettura(item) {
   const lun = f?.settimana_inizio
 
   const head = f
-    ? `<div><strong style="font-family:monospace;">${codiceFoglio(f.numero)}</strong> · ${esc(nomeOp(f.profili))} · settimana ${esc(settimanaLabel(lun))}</div>`
+    ? `<div><strong style="font-family:monospace;">${codiceFoglio(f.numero)}</strong> · ${esc(nomeFoglio(f))} · settimana ${esc(settimanaLabel(lun))}</div>`
     : `<div><strong>Pagina ${item.idx + 1}</strong>: foglio non riconosciuto.
         Codice foglio (es. FO-000123): <input type="text" class="form-input" data-role="codice" style="width:130px;display:inline-block;">
         <button class="btn btn-sm btn-secondary" data-action="cerca-foglio" data-idx="${item.idx}">Usa</button></div>`
@@ -477,6 +562,7 @@ function renderLettura(item) {
         }).join('') || `<tr><td colspan="11" style="color:var(--gray-500);">Nessuna X trovata.</td></tr>`}
         </tbody>
       </table></div>
+      ${f._componenti ? presenzeHtml(item) : ''}
       <div style="margin-top:10px;">
         <strong style="font-size:13px;">Variazioni</strong>
         <span style="font-size:12px;color:var(--gray-500);"> (tempo totale effettivo, sostituisce quello previsto)</span>
@@ -527,6 +613,22 @@ function renderLettura(item) {
     ${f ? '<div style="font-size:11px;color:var(--gray-500);margin-top:6px;">In giallo le caselle e le variazioni lette con poca sicurezza.</div>' : ''}
     ${grid}
   `
+}
+
+// Foglio unico di squadra: chi era presente ogni giorno (ogni X vale per ciascun presente)
+function presenzeHtml(item) {
+  const f = item.foglio, S = item.stato
+  return `
+      <div style="margin-top:10px;">
+        <strong style="font-size:13px;">Presenti</strong>
+        <span style="font-size:12px;color:var(--gray-500);"> ogni X vale il tempo della riga per ciascun componente spuntato. Togli la spunta a chi era assente (vedi le note scritte sul foglio).</span>
+        <div class="table-container" style="margin-top:6px;"><table class="washin-table" style="font-size:12px;">
+          <thead><tr><th>Componente</th>${GIORNI.map(g => `<th style="text-align:center;">${g}</th>`).join('')}</tr></thead>
+          <tbody>${f._componenti.map(c => `<tr><td>${esc(c.nome)}</td>${GIORNI.map((_, d) => `
+            <td style="text-align:center;"><input type="checkbox" data-role="presente" data-k="${c.id}-${d}" ${S.assenti[`${c.id}-${d}`] ? '' : 'checked'}></td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>`
 }
 
 // ── Controlli prima del salvataggio ─────────────────────────────────────────
@@ -667,7 +769,8 @@ function onLettureChange(e) {
   if (!item) return
   const S = item.stato
   const role = t.dataset.role
-  if (role === 'x') { if (t.checked) S.x[t.dataset.cella] = true; else delete S.x[t.dataset.cella]; delete S.incerti[t.dataset.cella] }
+  if (role === 'presente') { if (t.checked) delete S.assenti[t.dataset.k]; else S.assenti[t.dataset.k] = true }
+  else if (role === 'x') { if (t.checked) S.x[t.dataset.cella] = true; else delete S.x[t.dataset.cella]; delete S.incerti[t.dataset.cella] }
   else if (role === 'libera-contratto') (S.libere[t.dataset.riga] ||= {}).contratto_id = t.value || null
   else if (role === 'minuti-riga') (S.libere[t.dataset.riga] ||= {}).minuti = t.value === '' ? null : Number(t.value)
   else if (role?.startsWith('var-')) {
@@ -730,12 +833,17 @@ function calcolaOre(item) {
     if (min == null) { errori.push(`Riga ${r}: indica i minuti`); continue }
     const previsti = riga?.contratto_id ? riga.minuti_previsti : null
     const variazione = S.variazioni.some(v => v.riga === r && v.giorno === d)
-    out.set(k, {
+    const rec = {
       contratto_id, servizio_id: riga?.contratto_id ? riga.servizio_id : null,
       operatore_id: f.operatore_id, data: addDaysIso(f.settimana_inizio, d),
       minuti: min, minuti_previsti: previsti, variazione: variazione && previsti != null ? min !== previsti : variazione,
       fonte: 'foglio', foglio_id: f.id, riga: r,
-    })
+    }
+    if (f._componenti) { // foglio unico di squadra: una riga per ogni componente presente
+      const presenti = f._componenti.filter(c => !S.assenti[`${c.id}-${d}`])
+      if (!presenti.length) { errori.push(`Riga ${r}, ${GIORNI[d]}: c'è una X ma nessun componente presente`); continue }
+      for (const c of presenti) out.set(`${k}-${c.id}`, { ...rec, operatore_id: c.id })
+    } else out.set(k, rec)
   }
   return { righe: [...out.values()], errori: [...new Set(errori)] }
 }
@@ -756,7 +864,8 @@ async function conferma(item, btn) {
     item.salvato = true
     item.foglio.stato = 'importato'
     const tot = righe.reduce((s, r) => s + r.minuti, 0)
-    showToast(`${codiceFoglio(item.foglio.numero)}: ${righe.length} interventi, ${fmtMin(tot).trim()} salvati`)
+    const nX = new Set(righe.map(r => `${r.riga}-${r.data}`)).size
+    showToast(`${codiceFoglio(item.foglio.numero)}: ${nX} interventi, ${fmtMin(tot).trim()} salvati${item.foglio._componenti ? ' (somma delle persone)' : ''}`)
   } catch (err) {
     console.error(err)
     showToast('Errore nel salvataggio: ' + err.message, 'error')
