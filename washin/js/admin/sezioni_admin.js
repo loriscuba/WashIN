@@ -8,6 +8,8 @@ const SEZIONI = [
   { sezione: 'preventivi',          etichetta: 'Preventivi',   fixed: false },
   { sezione: 'fatture',             etichetta: 'Fatture',      fixed: false },
   { sezione: 'presenze',            etichetta: 'Presenze',     fixed: false },
+  { sezione: 'squadre',             etichetta: 'Squadre',      fixed: false },
+  { sezione: 'agenda-squadre',      etichetta: 'Agenda squadre', fixed: false },
   { sezione: 'fogli-ore',           etichetta: 'Fogli ore',    fixed: false },
   { sezione: 'magazzino',           etichetta: 'Magazzino',    fixed: false },
   { sezione: 'veicoli',             etichetta: 'Veicoli',      fixed: false },
