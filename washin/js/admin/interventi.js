@@ -149,11 +149,14 @@ export function renderListaInterventi(interventi){
       if (allOk) tr.style.borderLeft = '3px solid #10b981'
       else if (op1Ok || op2Ok) tr.style.borderLeft = '3px solid #f59e0b'
 
+      // Ore non ancora inserite: "mancanti" (rosso) solo da oggi indietro; per gli
+      // interventi futuri (es. quelli generati dall'agenda squadre) è normale, "da fare" in grigio
+      const futuro = iv.data_pianificata > formatDateISO(new Date())
       const opRow = (name, oreOrd, oreStr, compiled) => {
-        const color = compiled ? '#059669' : '#dc2626'
+        const color = compiled ? '#059669' : futuro ? '#9ca3af' : '#dc2626'
         const oreText = compiled
           ? `${oreOrd}h${oreStr ? ' +' + oreStr + 'h str' : ''}`
-          : 'mancanti'
+          : futuro ? 'ore da fare' : 'mancanti'
         return `<div style="font-size:12px;color:${color};font-weight:600;">${name}: ${oreText}</div>`
       }
       const op1Row = op1 ? opRow(op1, iv.ore_ordinarie, iv.ore_straordinario, op1Ok) : ''
