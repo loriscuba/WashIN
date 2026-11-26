@@ -102,6 +102,20 @@ async function completaNomiColleghi(interventi) {
   return interventi
 }
 
+// Squadra dell'operatore (v50): null se non è in una squadra o la migrazione manca
+let _miaSquadra
+async function miaSquadra() {
+  if (_miaSquadra === undefined) {
+    const { data, error } = await supabase.rpc('mia_squadra_id')
+    _miaSquadra = error ? null : (data || null)
+  }
+  return _miaSquadra
+}
+async function filtroMiei(operatoreId) {
+  const sq = await miaSquadra()
+  return `operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}` + (sq ? `,squadra_id.eq.${sq}` : '')
+}
+
 export async function loadInterventiOperatore(start, end) {
   try {
     const operatoreId = await getOperatoreId()
@@ -110,7 +124,7 @@ export async function loadInterventiOperatore(start, end) {
     const { data, error } = await supabase
       .from('interventi')
       .select('*, ore_ordinarie_op2, ore_straordinario_op2, sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
-      .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
+      .or(await filtroMiei(operatoreId))
       .gte('data_pianificata', start)
       .lte('data_pianificata', end)
       .order('data_pianificata', { ascending: true })
@@ -134,7 +148,7 @@ export async function loadInterventiPassati() {
     const { data, error } = await supabase
       .from('interventi')
       .select('*, ore_ordinarie_op2, ore_straordinario_op2, sedi_cliente(nome_sede,indirizzo), contratti!contratto_id(clienti(ragione_sociale)), operatore:profili!operatore_id(nome,cognome), operatore2:profili!operatore2_id(nome,cognome)')
-      .or(`operatore_id.eq.${operatoreId},operatore2_id.eq.${operatoreId}`)
+      .or(await filtroMiei(operatoreId))
       .lte('data_pianificata', localDateStr(ieri))
       .order('data_pianificata', { ascending: false })
       .limit(50)

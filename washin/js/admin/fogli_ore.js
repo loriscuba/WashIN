@@ -5,6 +5,7 @@ import { creaPdfFogli } from './fogli_ore_pdf.js'
 import { fileToCanvases, leggiPagina, ritaglio } from './fogli_ore_lettura.js'
 import { RIGHE, GIORNI, codiceFoglio, getLayout } from './fogli_ore_layout.js'
 import { righePerOperatori, righePerSquadre, contrattiSquadreSettimana } from './fogli_ore_righe.js'
+import { pianificatiSettimana } from './agenda_squadre.js'
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const PERIODO = { settimana: 'settimana', mese: 'mese', anno: 'anno', giorno: 'giorno', a_richiesta: 'a richiesta' }
@@ -60,6 +61,9 @@ function render() {
           <label style="display:flex;gap:6px;align-items:center;font-weight:400;"><input type="radio" name="fo-modo" value="squadra"> Squadra: foglio unico</label>
           <label style="display:flex;gap:6px;align-items:center;font-weight:400;"><input type="radio" name="fo-modo" value="componenti"> Squadra: un foglio per componente</label>
         </div>
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px;font-weight:400;margin-top:8px;">
+          <input type="checkbox" id="fo-pianificati"> Evidenzia in grigio i giorni pianificati in Agenda squadre
+        </label>
         <p id="fo-modo-nota" style="font-size:12px;color:var(--gray-500);margin:10px 0 8px;"></p>
         <div id="fo-operatori-nota" style="font-size:12px;color:var(--gray-500);margin-bottom:8px;"></div>
         <div id="fo-operatori" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;"></div>
@@ -314,6 +318,9 @@ async function paginePerFogli(ids) {
       squadraUnica,
       componenti: squadraUnica ? (await componentiFoglio(f)).map(c => c.nome) : [],
       righe: (f.fogli_ore_righe || []).sort((a, b) => a.riga - b.riga),
+      pianificati: document.getElementById('fo-pianificati')?.checked
+        ? await pianificatiSettimana(f.settimana_inizio, { squadraId: f.squadra_id || null, operatoreId: f.operatore_id || null })
+        : null,
     })
   }
   return out
