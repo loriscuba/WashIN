@@ -6,6 +6,7 @@ import { fileToCanvases, leggiPagina, ritaglio } from './fogli_ore_lettura.js'
 import { RIGHE, GIORNI, codiceFoglio, getLayout } from './fogli_ore_layout.js'
 import { righePerOperatori, righePerSquadre, contrattiSquadreSettimana } from './fogli_ore_righe.js'
 import { pianificatiSettimana } from './agenda_squadre.js'
+import { ribaltaSuInterventi } from './fogli_ore_interventi.js'
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const PERIODO = { settimana: 'settimana', mese: 'mese', anno: 'anno', giorno: 'giorno', a_richiesta: 'a richiesta' }
@@ -872,7 +873,15 @@ async function conferma(item, btn) {
     item.foglio.stato = 'importato'
     const tot = righe.reduce((s, r) => s + r.minuti, 0)
     const nX = new Set(righe.map(r => `${r.riga}-${r.data}`)).size
-    showToast(`${codiceFoglio(item.foglio.numero)}: ${nX} interventi, ${fmtMin(tot).trim()} salvati${item.foglio._componenti ? ' (somma delle persone)' : ''}`)
+    let suIv = ''
+    try {
+      const r = await ribaltaSuInterventi(righe, item.foglio.squadra_id || null)
+      suIv = ` · interventi: ${r.aggiornati} aggiornati${r.creati ? `, ${r.creati} creati` : ''}`
+    } catch (err) {
+      console.error(err)
+      showToast('Ore salvate sul contratto, ma non sugli interventi: ' + err.message, 'error')
+    }
+    showToast(`${codiceFoglio(item.foglio.numero)}: ${nX} interventi, ${fmtMin(tot).trim()} salvati${item.foglio._componenti ? ' (somma delle persone)' : ''}${suIv}`)
   } catch (err) {
     console.error(err)
     showToast('Errore nel salvataggio: ' + err.message, 'error')
