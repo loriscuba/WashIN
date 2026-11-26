@@ -27,12 +27,25 @@ function periodoInSettimana(a, lun) {
   return ''
 }
 
+// Servizi del contratto senza doppioni: righe identiche (stessa descrizione, tempo e
+// frequenza), come quelle importate due volte dall'elenco condomini, contano una volta sola
+export function serviziUnici(servizi) {
+  const visti = new Set()
+  return (servizi || []).filter(s => s.interventi_periodo !== 'a_richiesta')
+    .sort((a, b) => (a.ordine ?? 0) - (b.ordine ?? 0))
+    .filter(s => {
+      const k = [String(s.descrizione || '').trim().toLowerCase(), s.minuti_intervento ?? '', s.interventi_numero ?? '', s.interventi_periodo || ''].join('|')
+      if (visti.has(k)) return false
+      visti.add(k)
+      return true
+    })
+}
+
 // Una riga per servizio del contratto (i servizi "a richiesta" non vanno sul foglio)
 export function righeContratto(k, nota = '') {
   if (!k || (k.stato && k.stato !== 'attivo')) return []
   const nome = k.clienti?.nome_breve || k.clienti?.ragione_sociale || 'Contratto'
-  const servizi = (k.contratti_servizi || []).filter(s => s.interventi_periodo !== 'a_richiesta')
-    .sort((a, b) => (a.ordine ?? 0) - (b.ordine ?? 0))
+  const servizi = serviziUnici(k.contratti_servizi)
   const base = { contratto_id: k.id, codice: k.numero_contratto || '', etichetta: nome }
   const conNota = t => nota ? `${nota} · ${t}` : t
   if (!servizi.length) return [{ ...base, servizio_id: null, dettaglio: conNota('tempo da definire sul contratto'), minuti_previsti: null }]
