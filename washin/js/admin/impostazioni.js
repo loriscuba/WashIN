@@ -35,25 +35,13 @@ async function getImpostazione(chiave) {
   return data?.valore ?? null
 }
 
-function updateModalitaCards(isOrario) {
-  const classicaCard = document.getElementById('mode-classica-card')
-  const orarioCard   = document.getElementById('mode-orario-card')
-  if (!classicaCard || !orarioCard) return
-  if (isOrario) {
-    classicaCard.style.border = '2px solid var(--gray-200)'
-    classicaCard.style.background = '#fafafa'
-    classicaCard.querySelector('p').style.color = 'var(--gray-500)'
-    orarioCard.style.border = '2px solid #0d9488'
-    orarioCard.style.background = '#f0fdfa'
-    orarioCard.querySelector('p').style.color = '#0d9488'
-  } else {
-    classicaCard.style.border = '2px solid #0d9488'
-    classicaCard.style.background = '#f0fdfa'
-    classicaCard.querySelector('p').style.color = '#0d9488'
-    orarioCard.style.border = '2px solid var(--gray-200)'
-    orarioCard.style.background = '#fafafa'
-    orarioCard.querySelector('p').style.color = 'var(--gray-500)'
-  }
+function updateModalitaCards(modalita) {
+  document.querySelectorAll('.mode-card[data-modalita]').forEach(card => {
+    const on = card.dataset.modalita === modalita
+    card.style.border = on ? '2px solid #0d9488' : '2px solid var(--gray-200)'
+    card.style.background = on ? '#f0fdfa' : '#fafafa'
+    card.querySelector('p').style.color = on ? '#0d9488' : 'var(--gray-500)'
+  })
 }
 
 export function initImpostazioni() {
@@ -83,23 +71,19 @@ export function initImpostazioni() {
   })
 
   // Modalità interventi operatrice
-  const toggleOrario = document.getElementById('impost-modalita-orario')
-  if (toggleOrario) {
-    getImpostazione('modalita_intervento').then(val => {
-      const isOrario = val === 'orario'
-      toggleOrario.checked = isOrario
-      updateModalitaCards(isOrario)
-    })
-    toggleOrario.addEventListener('change', async () => {
-      const val = toggleOrario.checked ? 'orario' : 'classica'
+  const modeCards = document.querySelectorAll('.mode-card[data-modalita]')
+  if (modeCards.length) {
+    getImpostazione('modalita_intervento').then(val => updateModalitaCards(val || 'classica'))
+    modeCards.forEach(card => card.addEventListener('click', async () => {
+      const val = card.dataset.modalita
       try {
         await setImpostazione('modalita_intervento', val)
-        updateModalitaCards(toggleOrario.checked)
-        showToast(`Modalità impostata: ${val}`, 'success')
+        updateModalitaCards(val)
+        showToast(`Modalità impostata: ${card.querySelector('p').textContent.replace(/^\S+\s/, '')}`, 'success')
       } catch (err) {
         showToast('Errore salvataggio modalità', 'error')
         console.error(err)
       }
-    })
+    }))
   }
 }
