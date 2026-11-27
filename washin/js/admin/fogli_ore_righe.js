@@ -1,31 +1,21 @@
 // Righe dei fogli ore per una settimana: contratti delle operatrici (contratti_operatori)
-// e delle squadre (squadre_contratti, v48, e giri, v52). Una squadra assegnata a un contratto
-// SOSTITUISCE gli operatori fissi del contratto nel suo periodo: se copre tutta la
+// e delle squadre. I fogli di squadra (e dei suoi componenti) nascono SOLO dai giri (v52)
+// che passano nella settimana; un'assegnazione squadre_contratti con data "al" è una
+// copertura temporanea che sposta i giorni del giro a un'altra squadra.
+// Una squadra SOSTITUISCE gli operatori fissi del contratto: se lo copre tutta la
 // settimana il contratto sparisce dal foglio personale; se ne copre solo una parte
 // compare su entrambi i fogli con l'indicazione dei giorni.
 import supabase from '../supabase.js'
-import { caricaGiri, giroGiorni } from './giri_calendario.js'
+import { caricaGiri, passaggiSettimana, GIORNI_GIRO } from './giri_calendario.js'
 
 const PERIODO = { settimana: 'settimana', mese: 'mese', anno: 'anno', giorno: 'giorno', a_richiesta: 'a richiesta' }
 const CONTRATTO = 'id, numero_contratto, stato, clienti(nome_breve, ragione_sociale), contratti_servizi(id, ordine, descrizione, minuti_intervento, interventi_numero, interventi_periodo)'
 
 const addDaysIso = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
-const gm = iso => { const d = new Date(iso + 'T12:00:00'); return `${d.getDate()}/${d.getMonth() + 1}` }
 const fmtMin = m => {
   if (m == null) return '—'
   const h = Math.floor(m / 60), mm = m % 60
   return (h ? `${h}h` : '') + (mm ? ` ${String(mm).padStart(2, '0')}'` : (h ? '' : "0'"))
-}
-
-// Testo del periodo di un'assegnazione dentro la settimana ('' se la copre tutta)
-function periodoInSettimana(a, lun) {
-  const dom = addDaysIso(lun, 6)
-  const da = a.dal > lun ? a.dal : null
-  const fino = a.al && a.al < dom ? a.al : null
-  if (da && fino) return `dal ${gm(da)} al ${gm(fino)}`
-  if (da) return `dal ${gm(da)}`
-  if (fino) return `fino al ${gm(fino)}`
-  return ''
 }
 
 // Servizi del contratto senza doppioni: righe identiche (stessa descrizione, tempo e
@@ -61,69 +51,73 @@ export function righeContratto(k, nota = '') {
 
 const ordina = list => list.sort((a, b) => a.etichetta.localeCompare(b.etichetta, 'it', { numeric: true }))
 
-// Assegnazioni squadra ↔ contratto che toccano la settimana (null se manca la v48)
-async function assegnazioniSettimana(lun) {
+// Passaggi dei giri nella settimana, con la squadra che li fa (null se manca la v48/v52)
+async function passaggiDellaSettimana(lun) {
   const dom = addDaysIso(lun, 6)
   const { data, error } = await supabase.from('squadre_contratti')
-    .select(`squadra_id, contratto_id, dal, al, squadre(nome), contratti(${CONTRATTO})`)
+    .select('squadra_id, contratto_id, dal, al')
     .lte('dal', dom).or(`al.is.null,al.gte.${lun}`)
   if (error) { console.warn('squadre_contratti non disponibile', error.message); return null }
-  // I contratti dei giri (v52) che passano in questa settimana vanno alla squadra del giro
   const giri = await caricaGiri(CONTRATTO)
-  const daGiri = (giri || []).filter(g => g.attivo && g.squadra_id && giroGiorni(g, lun).length)
-    .flatMap(g => (g.giri_contratti || []).map(r => ({ squadra_id: g.squadra_id, contratto_id: r.contratto_id, dal: lun, al: null, squadre: g.squadre, contratti: r.contratti })))
-  return [...(data || []), ...daGiri]
+  if (giri === null) return null
+  return passaggiSettimana(giri, data || [], lun)
+    .filter(p => p.riga.contratti && (!p.riga.contratti.stato || p.riga.contratti.stato === 'attivo'))
 }
+
+const giorniTesto = gg => [...new Set(gg)].sort((a, b) => a - b).map(d => GIORNI_GIRO[d].toLowerCase()).join(', ')
 
 // Righe personali di ogni operatrice: contratti flaggati, tolti quelli coperti da una squadra
 export async function righePerOperatori(ids, lun) {
-  const [{ data, error }, assegn] = await Promise.all([
+  const [{ data, error }, pass] = await Promise.all([
     supabase.from('contratti_operatori').select(`operatore_id, contratti(${CONTRATTO})`).in('operatore_id', ids),
-    assegnazioniSettimana(lun),
+    passaggiDellaSettimana(lun),
   ])
   if (error) throw error
-  const coperti = new Map() // contratto_id → nota (o '' se coperto tutta la settimana)
-  for (const a of assegn || []) {
-    const p = periodoInSettimana(a, lun)
-    const prima = coperti.get(a.contratto_id)
-    if (prima === '') continue
-    coperti.set(a.contratto_id, p ? `squadra ${a.squadre?.nome || ''} ${p}`.replace(/\s+/g, ' ') : '')
-  }
+  // i contratti dei giri che passano in settimana vanno sul foglio della squadra
+  const coperti = new Set((pass || []).map(p => p.riga.contratto_id))
   const per = new Map(ids.map(id => [id, []]))
   for (const row of data || []) {
-    const nota = coperti.get(row.contratti?.id)
-    if (nota === '') continue // la squadra copre tutta la settimana
-    per.get(row.operatore_id).push(...righeContratto(row.contratti, nota || ''))
+    if (coperti.has(row.contratti?.id)) continue
+    per.get(row.operatore_id).push(...righeContratto(row.contratti))
   }
   for (const list of per.values()) ordina(list)
   return per
 }
 
-// Righe dei contratti assegnati a ogni squadra nella settimana
+// Righe dei giri di ogni squadra nella settimana: una riga per servizio del contratto
+// (solo quello scelto nel giro, se indicato), con il giro e i giorni in cui passa
 export async function righePerSquadre(ids, lun) {
-  const assegn = await assegnazioniSettimana(lun)
-  if (assegn === null) throw new Error('Tabelle squadre mancanti: applica la migrazione v48')
+  const pass = await passaggiDellaSettimana(lun)
+  if (pass === null) throw new Error('Tabelle squadre o giri mancanti: applica le migrazioni v48 e v52')
   const per = new Map(ids.map(id => [id, []]))
-  const visti = new Set()
-  for (const a of assegn) {
-    if (!per.has(a.squadra_id)) continue
-    const key = `${a.squadra_id}|${a.contratto_id}`
-    if (visti.has(key)) continue
-    visti.add(key)
-    per.get(a.squadra_id).push(...righeContratto(a.contratti, periodoInSettimana(a, lun)))
+  // stesso contratto in più giri della squadra: una riga sola con tutti i giri e i giorni
+  const gruppi = new Map()
+  for (const p of pass) {
+    if (!per.has(p.squadra_id)) continue
+    const k = `${p.squadra_id}|${p.riga.contratto_id}`
+    const gr = gruppi.get(k) || { squadra_id: p.squadra_id, contratto: p.riga.contratti, intero: false, servizi: new Set(), note: [] }
+    if (p.riga.servizio_id) gr.servizi.add(p.riga.servizio_id)
+    else gr.intero = true
+    gr.note.push(`${p.giro.nome} · ${giorniTesto(p.giorni)}`)
+    gruppi.set(k, gr)
+  }
+  for (const gr of gruppi.values()) {
+    let righe = righeContratto(gr.contratto, [...new Set(gr.note)].join(' + '))
+    if (!gr.intero) {
+      const solo = righe.filter(r => gr.servizi.has(r.servizio_id))
+      if (solo.length) righe = solo
+    }
+    per.get(gr.squadra_id).push(...righe)
   }
   for (const list of per.values()) ordina(list)
   return per
 }
 
-// Numero di contratti attivi per squadra nella settimana (per l'elenco in Stampa)
+// Numero di contratti dei giri per squadra nella settimana (per l'elenco in Stampa)
 export async function contrattiSquadreSettimana(lun) {
-  const assegn = await assegnazioniSettimana(lun)
-  if (assegn === null) return null
+  const pass = await passaggiDellaSettimana(lun)
+  if (pass === null) return null
   const n = new Map()
-  for (const a of assegn) {
-    if (a.contratti?.stato && a.contratti.stato !== 'attivo') continue
-    n.set(a.squadra_id, (n.get(a.squadra_id) || new Set()).add(a.contratto_id))
-  }
+  for (const p of pass) n.set(p.squadra_id, (n.get(p.squadra_id) || new Set()).add(p.riga.contratto_id))
   return new Map([...n].map(([k, s]) => [k, s.size]))
 }

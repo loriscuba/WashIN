@@ -1,8 +1,7 @@
 // Agenda settimanale delle squadre: interventi (tabella interventi) assegnati alle squadre,
 // una riga per squadra, una colonna "In settimana" (interventi senza giorno fisso, v53) e una per giorno.
-// "Genera settimana" crea gli interventi dai GIRI (v52) nei giorni del giro; i contratti
-// assegnati a una squadra ma in nessun giro seguono ancora la frequenza dei servizi e vanno
-// senza giorno (la squadra li fa quando può nella settimana), tranne i servizi giornalieri.
+// "Genera settimana" crea gli interventi SOLO dai GIRI (v52), nei giorni in cui passa il giro;
+// un'assegnazione squadre_contratti con data "al" è una copertura temporanea di un'altra squadra.
 // Col + si aggiunge anche un lavoro straordinario, pure su contratti fuori dal giro della squadra.
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
@@ -29,66 +28,7 @@ let _giri = []          // giri attivi con contratti (vuoto se manca la v52)
 let _drag = null
 let _tutti = null       // contratti attivi (per gli straordinari), caricati al primo uso
 
-// ── Pianificazione dalle frequenze ──────────────────────────────────────────
-// Giorni (0-5, domenica esclusa) in cui l'assegnazione è valida nella settimana
-function giorniValidi(a, lun) {
-  const out = []
-  for (let d = 0; d < 6; d++) {
-    const iso = addDaysIso(lun, d)
-    if (iso >= a.dal && (!a.al || iso <= a.al)) out.push(d)
-  }
-  return out
-}
-
-function settimanaIso(lun) {
-  const d = new Date(lun + 'T12:00:00')
-  d.setDate(d.getDate() + 3)
-  const gen4 = new Date(d.getFullYear(), 0, 4, 12)
-  return 1 + Math.round(((d - gen4) / 86400000 - 3 + ((gen4.getDay() + 6) % 7)) / 7)
-}
-
-// Quanti interventi servono in questa settimana per un servizio
-export function interventiSettimana(s, lun) {
-  const n = Number(s.interventi_numero) || 0
-  if (!n) return 0
-  switch (s.interventi_periodo) {
-    case 'giorno': return -1 // tutti i giorni validi
-    case 'settimana':
-      if (n >= 1) return Math.round(n)
-      return settimanaIso(lun) % Math.round(1 / n) === 0 ? 1 : 0 // es. 0,5 = settimane alterne
-    case 'mese': {
-      const w = Math.min(3, Math.floor((new Date(lun + 'T12:00:00').getDate() - 1) / 7)) // settimana del mese 0-3
-      let k = 0
-      for (let i = 0; i < Math.round(n); i++) if (Math.floor(i * 4 / Math.round(n)) % 4 === w) k++
-      return k
-    }
-    default: return 0 // annuali e a richiesta: a mano
-  }
-}
-
-// Giorni scelti per k interventi, distribuiti e sfalsati per contratto
-export function scegliGiorni(validi, k, seme) {
-  if (!validi.length || !k) return []
-  if (k < 0 || k >= validi.length) return [...validi]
-  const off = seme % validi.length
-  const out = new Set()
-  for (let i = 0; i < k; i++) out.add(validi[(off + Math.floor(i * validi.length / k)) % validi.length])
-  return [...out].sort((a, b) => a - b)
-}
-
-// Una sola assegnazione per squadra e contratto (se due periodi toccano la stessa settimana
-// si uniscono i giorni validi)
-function assegnUniche() {
-  const m = new Map()
-  for (const a of _assegn) {
-    const k = `${a.squadra_id}|${a.contratto_id}`
-    const prima = m.get(k)
-    if (!prima) m.set(k, { ...a, giorni: giorniValidi(a, _lun) })
-    else prima.giorni = [...new Set([...prima.giorni, ...giorniValidi(a, _lun)])].sort((x, y) => x - y)
-  }
-  return [...m.values()]
-}
-
+// ── Pianificazione dai giri ─────────────────────────────────────────────────
 const fmtMin = m => m == null ? '' : m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ' ' + String(m % 60).padStart(2, '0') + "'" : ''}` : `${m}'`
 const PER = { settimana: 'sett', mese: 'mese', anno: 'anno', giorno: 'giorno' }
 function etichettaServizio(s) {
@@ -103,9 +43,6 @@ function squadraDelGiorno(g, contrattoId, iso) {
   const cop = _assegn.find(a => a.contratto_id === contrattoId && a.al && a.squadra_id !== g.squadra_id && iso >= a.dal && iso <= a.al)
   return _squadre.find(s => s.id === (cop ? cop.squadra_id : g.squadra_id))
 }
-
-// Contratti in almeno un giro attivo: la loro pianificazione la fanno i giri
-const contrattiNeiGiri = () => new Set(_giri.filter(g => g.attivo).flatMap(g => (g.giri_contratti || []).map(r => r.contratto_id)))
 
 function pianoGiri() {
   const nuovi = []
@@ -136,34 +73,8 @@ function pianoGiri() {
   return nuovi
 }
 
-function piano() {
-  const nuovi = pianoGiri()
-  const neiGiri = contrattiNeiGiri()
-  for (const a of assegnUniche()) {
-    if (neiGiri.has(a.contratto_id)) continue
-    const sq = _squadre.find(s => s.id === a.squadra_id)
-    const k0 = a.contratti
-    if (!sq || !k0 || (k0.stato && k0.stato !== 'attivo')) continue
-    const validi = a.giorni
-    const servizi = serviziUnici(k0.contratti_servizi)
-    for (const s of servizi) {
-      const k = interventiSettimana(s, _lun)
-      if (!k) continue
-      if (!validi.length) continue
-      // giornalieri su ogni giorno; gli altri senza giorno fisso (data = primo giorno valido della settimana)
-      const giorni = k < 0 ? scegliGiorni(validi, k, 0) : Array(k).fill(validi[0])
-      const gia = _interventi.filter(iv => iv.contratto_id === k0.id && iv.tipo_pulizia !== 'straordinaria' && (iv.servizio_id === s.id || (!iv.servizio_id && servizi.length === 1))).length
-      for (const d of giorni.slice(gia)) {
-        nuovi.push({
-          contratto_id: k0.id, servizio_id: s.id, squadra_id: sq.id,
-          data_pianificata: addDaysIso(_lun, d), senza_giorno: k > 0, stato: 'pianificato', tipo_pulizia: 'ordinaria',
-          operatore_id: sq.componenti[0]?.id || null, operatore2_id: sq.componenti[1]?.id || null,
-        })
-      }
-    }
-  }
-  return nuovi
-}
+// Agenda della settimana: solo dai giri. I contratti in nessun giro si aggiungono a mano col +.
+const piano = () => pianoGiri()
 
 // ── Dati ────────────────────────────────────────────────────────────────────
 async function carica() {
@@ -233,8 +144,7 @@ function render() {
   }).join('')
   const righe = _squadre.map(sq => {
     const giriSq = _giri.filter(g => g.attivo && g.squadra_id === sq.id && giroGiorni(g, _lun).length)
-    const contr = [...new Set([..._assegn.filter(a => a.squadra_id === sq.id).map(a => a.contratto_id),
-      ...giriSq.flatMap(g => (g.giri_contratti || []).map(r => r.contratto_id))])]
+    const contr = [...new Set(giriSq.flatMap(g => (g.giri_contratti || []).map(r => r.contratto_id)))]
     const celle = ['S', ...GIORNI.keys()].map(d => {
       const items = _interventi.filter(iv => iv.squadra_id === sq.id &&
         (d === 'S' ? iv.senza_giorno : !iv.senza_giorno && iv.data_pianificata === addDaysIso(_lun, d)))
@@ -247,7 +157,7 @@ function render() {
       <td class="ag-sq">
         <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(sq.colore)};margin-right:4px;"></span><strong>${esc(sq.nome)}</strong></div>
         <div style="font-size:11px;color:var(--gray-500);">${esc(sq.componenti.map(c => c.nome).join(', ') || 'nessun componente')}</div>
-        <div style="font-size:11px;color:var(--gray-500);">${contr.length} contratt${contr.length === 1 ? 'o' : 'i'} questa settimana</div>
+        <div style="font-size:11px;color:var(--gray-500);">${contr.length} contratt${contr.length === 1 ? 'o' : 'i'} nei giri della settimana</div>
         ${giriSq.length ? `<div style="font-size:11px;color:var(--gray-500);">↻ ${esc(giriSq.map(g => g.nome).join(', '))}</div>` : ''}
       </td>${celle}</tr>`
   }).join('')
@@ -360,8 +270,8 @@ async function sposta(ivId, squadraId, giorno) {
 
 async function generaSettimana(btn) {
   const nuovi = piano()
-  if (!nuovi.length) { showToast('Niente da aggiungere: la settimana è già pianificata', 'success'); return }
-  if (!confirm(`Creo ${nuovi.length} interventi per la settimana dai contratti assegnati alle squadre? Quelli già in agenda restano.`)) return
+  if (!nuovi.length) { showToast(_giri.some(g => g.attivo && giroGiorni(g, _lun).length) ? 'Niente da aggiungere: i giri della settimana sono già in agenda' : 'Nessun giro passa in questa settimana', 'success'); return }
+  if (!confirm(`Creo ${nuovi.length} interventi per la settimana dai giri? Quelli già in agenda restano.`)) return
   btn.disabled = true
   const { error } = await supabase.from('interventi').insert(nuovi)
   btn.disabled = false
@@ -415,10 +325,10 @@ export function initAgendaSquadre({ apriIntervento } = {}) {
     </div>
     <div class="card">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-        <button class="btn btn-primary btn-sm" id="ag-genera">Genera settimana dai contratti</button>
+        <button class="btn btn-primary btn-sm" id="ag-genera">Genera settimana dai giri</button>
         <button class="btn btn-secondary btn-sm" id="ag-svuota">Togli i pianificati della settimana</button>
       </div>
-      <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">"Genera settimana" crea gli interventi dei <strong>giri</strong> (sezione Giri) nei loro giorni, con la squadra del giro (o quella che la copre temporaneamente). Per i contratti in nessun giro crea gli interventi che mancano secondo la frequenza dei servizi (es. 2 v/settimana, 1 v/mese) dei contratti assegnati a ogni squadra, nella colonna "In settimana" (senza giorno fisso); i servizi giornalieri vanno su ogni giorno del periodo di assegnazione. I servizi annuali, a richiesta e i lavori straordinari si aggiungono a mano con il +.</p>
+      <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">"Genera settimana" crea l'agenda della settimana <strong>solo dai giri</strong> (sezione Giri): per ogni giro che passa nella settimana, gli interventi dei suoi contratti nei giorni del giro, con la squadra del giro (o quella che la copre temporaneamente). Contratti fuori giro, servizi a richiesta e lavori straordinari si aggiungono a mano con il +.</p>
       <div id="ag-griglia"></div>
     </div>`
   _lun = lunediDi(new Date())
