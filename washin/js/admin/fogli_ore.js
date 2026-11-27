@@ -163,9 +163,9 @@ let _operatori = []
 let _squadre = []
 const modoStampa = () => document.querySelector('#fo-modo input:checked')?.value || 'operatrici'
 const NOTE_MODO = {
-  operatrici: 'Ogni operatrice riceve le righe dei contratti attivi in cui è flaggata come operatore (una riga per servizio). I contratti che in quella settimana sono assegnati a una squadra passano sul foglio della squadra. Oltre 15 righe si passa a un secondo foglio.',
-  squadra: 'Un solo foglio per squadra con i contratti assegnati alla squadra nella settimana: lo compila il capo squadra. All\'import ogni X vale il tempo previsto per ciascun componente presente (2 persone × 45\' = 45\' a testa); le assenze si indicano nella revisione.',
-  componenti: 'Un foglio per ogni componente della squadra con i contratti della squadra più quelli personali: ognuno segna solo quello che ha fatto.',
+  operatrici: 'Ogni operatrice riceve le righe dei contratti attivi in cui è flaggata come operatore (una riga per servizio). I contratti dei giri che passano in quella settimana vanno sul foglio della squadra. Oltre 15 righe si passa a un secondo foglio.',
+  squadra: 'Un solo foglio per squadra con i contratti dei suoi giri che passano nella settimana (su ogni riga il giro e i giorni): lo compila il capo squadra. All\'import ogni X vale il tempo previsto per ciascun componente presente (2 persone × 45\' = 45\' a testa); le assenze si indicano nella revisione.',
+  componenti: 'Un foglio per ogni componente della squadra con i contratti dei giri della squadra nella settimana più quelli personali: ognuno segna solo quello che ha fatto.',
 }
 
 async function caricaStampa() {
@@ -196,7 +196,7 @@ async function caricaSquadre(lun) {
     }))
     box.innerHTML = _squadre.length ? _squadre.map(sq => {
       const off = !sq.componenti.length || (modoStampa() === 'squadra' && !sq.contratti)
-      const perche = !sq.componenti.length ? 'nessun componente' : !sq.contratti ? 'nessun contratto in questa settimana' : ''
+      const perche = !sq.componenti.length ? 'nessun componente' : !sq.contratti ? 'nessun giro in questa settimana' : ''
       return `
         <label style="display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border:1px solid var(--gray-200);border-radius:8px;cursor:${off ? 'default' : 'pointer'};${off ? 'opacity:.55;' : ''}">
           <input type="checkbox" value="${sq.id}" ${off ? 'disabled' : ''}>
@@ -208,7 +208,7 @@ async function caricaSquadre(lun) {
     }).join('') : '<span style="color:var(--gray-500);font-size:13px;">Nessuna squadra attiva. Creale dalla sezione Squadre.</span>'
   } catch (err) {
     console.error(err)
-    box.innerHTML = `<span style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato le migrazioni v48 e v49?</span>`
+    box.innerHTML = `<span style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato le migrazioni v48, v49 e v52?</span>`
   }
 }
 

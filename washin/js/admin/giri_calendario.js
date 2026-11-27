@@ -60,3 +60,24 @@ export async function caricaGiri(selectContratto = 'id, numero_contratto, stato,
   for (const g of data || []) (g.giri_contratti || []).sort((a, b) => (a.ordine ?? 0) - (b.ordine ?? 0))
   return data || []
 }
+
+// Passaggi dei giri in una settimana, già assegnati alla squadra che li fa: una copertura
+// temporanea (squadre_contratti con data "al") di un'altra squadra prevale su quella del giro.
+// Ritorna [{ giro, riga (giri_contratti), squadra_id, giorni: [0 = lunedì … 5 = sabato] }]
+export function passaggiSettimana(giri, coperture, lun) {
+  const out = new Map()
+  for (const g of giri || []) {
+    if (!g.attivo || !g.squadra_id) continue
+    for (const d of giroGiorni(g, lun)) {
+      const iso = addDaysIso(lun, d)
+      for (const r of g.giri_contratti || []) {
+        const cop = (coperture || []).find(a => a.contratto_id === r.contratto_id && a.al && a.squadra_id !== g.squadra_id && iso >= a.dal && iso <= a.al)
+        const sq = cop ? cop.squadra_id : g.squadra_id
+        const k = `${r.id}|${sq}`
+        if (!out.has(k)) out.set(k, { giro: g, riga: r, squadra_id: sq, giorni: [] })
+        out.get(k).giorni.push(d)
+      }
+    }
+  }
+  return [...out.values()]
+}
