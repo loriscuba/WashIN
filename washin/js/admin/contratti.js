@@ -335,10 +335,11 @@ function readServizi() {
   }).filter(s => s.id || s.descrizione || s.minuti_intervento != null || s.prezzo != null || s.prezzo_ottimale != null)
 }
 
-function oreMese(s) {
+// Ore di lavoro al mese della riga: i minuti sono a testa, × operatrici stimate (v54)
+function oreMese(s, operatrici = 1) {
   const f = VOLTE_MESE[s.interventi_periodo]
   if (!f || s.minuti_intervento == null || s.interventi_numero == null) return null
-  return s.minuti_intervento / 60 * s.interventi_numero * f
+  return s.minuti_intervento / 60 * s.interventi_numero * f * operatrici
 }
 
 function prezzoMese(prezzo, unita, s) {
@@ -354,12 +355,12 @@ function prezzoMese(prezzo, unita, s) {
 }
 
 // Somma le righe; null se una riga con prezzo/ore non è calcolabile
-function calcolaDaServizi(servizi) {
+function calcolaDaServizi(servizi, operatrici = 1) {
   const sum = (vals) => (vals.length && vals.every(v => v != null) ? Math.round(vals.reduce((a, b) => a + b, 0) * 100) / 100 : null)
   return {
     importo: sum(servizi.filter(s => s.prezzo != null).map(s => prezzoMese(s.prezzo, s.prezzo_unita, s))),
     ottimale: sum(servizi.filter(s => s.prezzo_ottimale != null).map(s => prezzoMese(s.prezzo_ottimale, s.prezzo_unita || 'mese', s))),
-    ore: sum(servizi.filter(s => s.minuti_intervento != null).map(oreMese)),
+    ore: sum(servizi.filter(s => s.minuti_intervento != null).map(s => oreMese(s, operatrici))),
   }
 }
 
@@ -399,6 +400,7 @@ export async function openModalContratto(id = null, prefilledClienteId = null) {
 
     form.reset()
     delete form.dataset.contrattoId
+    delete form.dataset.haStimate
     delete modal.dataset.ammNuovo
     document.getElementById('contratto-servizi-body').innerHTML = ''
 
@@ -424,6 +426,7 @@ export async function openModalContratto(id = null, prefilledClienteId = null) {
       })
       if (clienteSelect && data.cliente_id) clienteSelect.value = data.cliente_id
       form.dataset.contrattoId = id
+      form.dataset.haStimate = 'operatrici_stimate' in data ? '1' : ''
       modal.querySelector('h2').textContent = 'Modifica Contratto'
       ;(data.contratti_servizi || []).sort((a, b) => a.ordine - b.ordine).forEach(addServizioRow)
     } else {
@@ -571,7 +574,7 @@ export function initContratti() {
       if (b) b.closest('tr')?.remove()
     })
     modal?.querySelector('#contratto-calcola')?.addEventListener('click', () => {
-      const r = calcolaDaServizi(readServizi())
+      const r = calcolaDaServizi(readServizi(), parseInt(form.querySelector('[name="operatrici_stimate"]')?.value, 10) || 1)
       const set = (n, v) => { if (v != null) form.querySelector(`[name="${n}"]`).value = v }
       set('importo_mensile', r.importo)
       set('prezzo_ottimale_mensile', r.ottimale)
@@ -651,6 +654,8 @@ export function initContratti() {
             punto_luce: txt('punto_luce'),
             ripostiglio: txt('ripostiglio'),
             note_accesso: txt('note_accesso'),
+            // v54: si invia solo se la colonna esiste (contratto letto con il campo) o se è compilato
+            ...((form.dataset.haStimate === '1' || v('operatrici_stimate') !== '') && { operatrici_stimate: int('operatrici_stimate') }),
           },
           servizi: readServizi(),
           operatori: readOperatori(),

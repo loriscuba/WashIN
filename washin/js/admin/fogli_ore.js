@@ -7,6 +7,7 @@ import { RIGHE, GIORNI, codiceFoglio, getLayout } from './fogli_ore_layout.js'
 import { righePerOperatori, righePerSquadre, contrattiSquadreSettimana } from './fogli_ore_righe.js'
 import { pianificatiSettimana } from './agenda_squadre.js'
 import { ribaltaSuInterventi } from './fogli_ore_interventi.js'
+import { ripartisciStimate } from './fogli_ore_stimate.js'
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const PERIODO = { settimana: 'settimana', mese: 'mese', anno: 'anno', giorno: 'giorno', a_richiesta: 'a richiesta' }
@@ -857,15 +858,18 @@ function calcolaOre(item) {
 }
 
 async function conferma(item, btn) {
-  const { righe, errori } = calcolaOre(item)
+  let { righe, errori } = calcolaOre(item)
   if (errori.length) { showToast(errori[0], 'error'); return }
   btn.disabled = true; btn.textContent = 'Salvo…'
   try {
     const { error: e1 } = await supabase.from('ore_rendicontate').delete().eq('foglio_id', item.foglio.id)
     if (e1) throw e1
+    let altre = []
     if (righe.length) {
-      const { error: e2 } = await supabase.from('ore_rendicontate').insert(righe)
+      const { data: ins, error: e2 } = await supabase.from('ore_rendicontate').insert(righe).select()
       if (e2) throw e2
+      // Operatrici stimate sul contratto: il lavoro si divide tra chi l'ha fatto (v54)
+      ;({ righe, altre } = await ripartisciStimate(ins || righe))
     }
     const { error: e3 } = await supabase.from('fogli_ore').update({ stato: 'importato', importato_at: new Date().toISOString() }).eq('id', item.foglio.id)
     if (e3) throw e3
@@ -876,6 +880,7 @@ async function conferma(item, btn) {
     let suIv = ''
     try {
       const r = await ribaltaSuInterventi(righe, item.foglio.squadra_id || null)
+      if (altre.length) await ribaltaSuInterventi(altre)
       suIv = ` · interventi: ${r.aggiornati} aggiornati${r.creati ? `, ${r.creati} creati` : ''}`
     } catch (err) {
       console.error(err)
