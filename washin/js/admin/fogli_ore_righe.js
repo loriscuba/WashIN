@@ -1,9 +1,10 @@
 // Righe dei fogli ore per una settimana: contratti delle operatrici (contratti_operatori)
-// e delle squadre (squadre_contratti, v48). Una squadra assegnata a un contratto
+// e delle squadre (squadre_contratti, v48, e giri, v52). Una squadra assegnata a un contratto
 // SOSTITUISCE gli operatori fissi del contratto nel suo periodo: se copre tutta la
 // settimana il contratto sparisce dal foglio personale; se ne copre solo una parte
 // compare su entrambi i fogli con l'indicazione dei giorni.
 import supabase from '../supabase.js'
+import { caricaGiri, giroGiorni } from './giri_calendario.js'
 
 const PERIODO = { settimana: 'settimana', mese: 'mese', anno: 'anno', giorno: 'giorno', a_richiesta: 'a richiesta' }
 const CONTRATTO = 'id, numero_contratto, stato, clienti(nome_breve, ragione_sociale), contratti_servizi(id, ordine, descrizione, minuti_intervento, interventi_numero, interventi_periodo)'
@@ -67,7 +68,11 @@ async function assegnazioniSettimana(lun) {
     .select(`squadra_id, contratto_id, dal, al, squadre(nome), contratti(${CONTRATTO})`)
     .lte('dal', dom).or(`al.is.null,al.gte.${lun}`)
   if (error) { console.warn('squadre_contratti non disponibile', error.message); return null }
-  return data || []
+  // I contratti dei giri (v52) che passano in questa settimana vanno alla squadra del giro
+  const giri = await caricaGiri(CONTRATTO)
+  const daGiri = (giri || []).filter(g => g.attivo && g.squadra_id && giroGiorni(g, lun).length)
+    .flatMap(g => (g.giri_contratti || []).map(r => ({ squadra_id: g.squadra_id, contratto_id: r.contratto_id, dal: lun, al: null, squadre: g.squadre, contratti: r.contratti })))
+  return [...(data || []), ...daGiri]
 }
 
 // Righe personali di ogni operatrice: contratti flaggati, tolti quelli coperti da una squadra
