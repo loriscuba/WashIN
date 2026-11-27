@@ -640,7 +640,8 @@ export async function initInterventi(){
   try{
     // Leggi modalità intervento per nascondere "Avvia" in modalità orario
     const { data: impost } = await supabase.from('impostazioni').select('valore').eq('chiave', 'modalita_intervento').maybeSingle()
-    _modalitaOrario = impost?.valore === 'orario'
+    // anche in chiusura unica niente Avvia/Stop
+    _modalitaOrario = impost?.valore === 'orario' || impost?.valore === 'unica'
 
     const prevBtn = document.getElementById('prev-week')
     const nextBtn = document.getElementById('next-week')
