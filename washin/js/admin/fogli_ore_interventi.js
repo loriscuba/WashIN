@@ -42,9 +42,11 @@ export async function ribaltaSuInterventi(righe, squadraId = null) {
   const date = [...new Set([...gruppi.values()].map(g => g.data))].sort()
   const contratti = [...new Set([...gruppi.values()].map(g => g.contratto_id))]
 
+  // dal lunedì: gli interventi senza giorno fisso (v53) hanno la data del primo giorno della settimana
+  const lun0 = (() => { const d = new Date(date[0] + 'T12:00:00'); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d.toISOString().slice(0, 10) })()
   const { data: ivs, error } = await supabase.from('interventi')
-    .select('id, data_pianificata, contratto_id, operatore_id, operatore2_id, stato')
-    .gte('data_pianificata', date[0]).lte('data_pianificata', date[date.length - 1])
+    .select('*')
+    .gte('data_pianificata', lun0).lte('data_pianificata', date[date.length - 1])
     .in('contratto_id', contratti).neq('stato', 'annullato')
     .order('created_at', { ascending: true })
   if (error) throw error
@@ -53,10 +55,14 @@ export async function ribaltaSuInterventi(righe, squadraId = null) {
   const update = new Map()
   const senza = [] // gruppi senza intervento
   for (const g of gruppi.values()) {
-    const iv = (ivs || []).find(i => i.data_pianificata === g.data && i.contratto_id === g.contratto_id &&
-      (i.operatore_id === g.operatore_id || i.operatore2_id === g.operatore_id))
+    const suo = i => i.contratto_id === g.contratto_id && (i.operatore_id === g.operatore_id || i.operatore2_id === g.operatore_id)
+    let iv = (ivs || []).find(i => !i.senza_giorno && i.data_pianificata === g.data && suo(i))
+    // altrimenti un intervento "in settimana" (senza giorno) della stessa settimana: prende il giorno del foglio
+    const sg = !iv && (ivs || []).find(i => i.senza_giorno && suo(i) && i.data_pianificata <= g.data &&
+      (new Date(g.data + 'T12:00:00') - new Date(i.data_pianificata + 'T12:00:00')) / 86400000 < 7 - (new Date(i.data_pianificata + 'T12:00:00').getDay() + 6) % 7)
+    if (sg) { sg.senza_giorno = false; sg.data_pianificata = g.data; iv = sg }
     if (!iv) { senza.push(g); continue }
-    const u = update.get(iv.id) || { iv, campi: {} }
+    const u = update.get(iv.id) || { iv, campi: sg ? { data_pianificata: g.data, senza_giorno: false } : {} }
     if (iv.operatore_id === g.operatore_id) Object.assign(u.campi, { ore_ordinarie: ore(g.minuti) })
     else Object.assign(u.campi, { ore_ordinarie_op2: ore(g.minuti) })
     update.set(iv.id, u)

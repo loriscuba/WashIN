@@ -174,7 +174,7 @@ export function renderInterventiPassati(interventi) {
     card.className = 'intervento-card'
     const cliente = iv.contratti?.clienti?.ragione_sociale || iv.sedi_cliente?.clienti?.ragione_sociale || 'Cliente sconosciuto'
     const sede = iv.sedi_cliente?.nome_sede || ''
-    const dataFmt = iv.data_pianificata
+    const dataFmt = iv.senza_giorno ? 'In settimana' : iv.data_pianificata
       ? new Date(iv.data_pianificata + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
       : '-'
     const fmtT = t => t ? t.slice(0, 5) : ''

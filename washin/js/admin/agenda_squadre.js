@@ -1,6 +1,8 @@
 // Agenda settimanale delle squadre: interventi (tabella interventi) assegnati alle squadre,
-// una riga per squadra e una colonna per giorno. Solo giorni, niente orari.
-// "Genera settimana" crea gli interventi dai contratti assegnati e dalla frequenza dei servizi.
+// una riga per squadra, una colonna "In settimana" (interventi senza giorno fisso, v53) e una per giorno.
+// "Genera settimana" crea gli interventi dai contratti assegnati e dalla frequenza dei servizi:
+// senza giorno (la squadra li fa quando può nella settimana), tranne i servizi giornalieri.
+// Col + si aggiunge anche un lavoro straordinario, pure su contratti fuori dal giro della squadra.
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
 import { serviziUnici } from './fogli_ore_righe.js'
@@ -22,6 +24,7 @@ let _squadre = []       // squadre attive con componenti ordinati (capo per prim
 let _assegn = []        // squadre_contratti che toccano la settimana, con contratto e servizi
 let _interventi = []    // interventi della settimana con squadra
 let _drag = null
+let _tutti = null       // contratti attivi (per gli straordinari), caricati al primo uso
 
 // ── Pianificazione dalle frequenze ──────────────────────────────────────────
 // Giorni (0-5, domenica esclusa) in cui l'assegnazione è valida nella settimana
@@ -102,12 +105,14 @@ function piano() {
     for (const s of servizi) {
       const k = interventiSettimana(s, _lun)
       if (!k) continue
-      const giorni = scegliGiorni(validi, k, hash(k0.id + s.id))
-      const gia = _interventi.filter(iv => iv.contratto_id === k0.id && (iv.servizio_id === s.id || (!iv.servizio_id && servizi.length === 1))).length
+      if (!validi.length) continue
+      // giornalieri su ogni giorno; gli altri senza giorno fisso (data = primo giorno valido della settimana)
+      const giorni = k < 0 ? scegliGiorni(validi, k, 0) : Array(k).fill(validi[0])
+      const gia = _interventi.filter(iv => iv.contratto_id === k0.id && iv.tipo_pulizia !== 'straordinaria' && (iv.servizio_id === s.id || (!iv.servizio_id && servizi.length === 1))).length
       for (const d of giorni.slice(gia)) {
         nuovi.push({
           contratto_id: k0.id, servizio_id: s.id, squadra_id: sq.id,
-          data_pianificata: addDaysIso(_lun, d), stato: 'pianificato', tipo_pulizia: 'ordinaria',
+          data_pianificata: addDaysIso(_lun, d), senza_giorno: k > 0, stato: 'pianificato', tipo_pulizia: 'ordinaria',
           operatore_id: sq.componenti[0]?.id || null, operatore2_id: sq.componenti[1]?.id || null,
         })
       }
@@ -131,13 +136,13 @@ async function carica() {
       .select('id, squadra_id, contratto_id, dal, al, contratti(id, numero_contratto, stato, clienti(nome_breve, ragione_sociale), contratti_servizi(id, ordine, descrizione, minuti_intervento, interventi_numero, interventi_periodo))')
       .lte('dal', dom).or(`al.is.null,al.gte.${_lun}`),
     supabase.from('interventi')
-      .select('id, data_pianificata, stato, contratto_id, servizio_id, squadra_id, contratti!contratto_id(numero_contratto, clienti(nome_breve, ragione_sociale)), contratti_servizi(descrizione, minuti_intervento)')
+      .select('id, data_pianificata, senza_giorno, tipo_pulizia, stato, contratto_id, servizio_id, squadra_id, contratti!contratto_id(numero_contratto, clienti(nome_breve, ragione_sociale)), contratti_servizi(descrizione, minuti_intervento)')
       .gte('data_pianificata', _lun).lte('data_pianificata', dom).not('squadra_id', 'is', null),
   ])
   const err = sq.error || as.error || iv.error
   if (err) {
     console.error(err)
-    box.innerHTML = `<p style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato le migrazioni v48, v49 e v50?</p>`
+    box.innerHTML = `<p style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato le migrazioni v48, v49, v50 e v53?</p>`
     return
   }
   _squadre = (sq.data || []).map(s => ({
@@ -162,6 +167,7 @@ function cardHtml(iv, colore) {
         <strong>${esc(nomeContratto(iv.contratti))}</strong>
         ${fatto || iv.stato === 'in_corso' ? '' : `<button type="button" class="ag-x" data-azione="togli" title="Togli dall'agenda">×</button>`}
       </div>
+      ${iv.tipo_pulizia === 'straordinaria' ? '<div style="color:#c2410c;font-weight:600;">Straordinario</div>' : ''}
       ${serv ? `<div style="color:var(--gray-500);">${esc(serv[0].toUpperCase() + serv.slice(1))}</div>` : ''}
       ${fatto ? '<div style="color:#16a34a;">✓ fatto</div>' : iv.stato === 'in_corso' ? '<div style="color:#2563eb;">in corso</div>' : ''}
     </div>`
@@ -174,16 +180,16 @@ function render() {
     return
   }
   const oggi = isoDate(new Date())
-  const head = GIORNI.map((g, d) => {
+  const head = '<th style="text-align:center;">In settimana<br><small>senza giorno</small></th>' + GIORNI.map((g, d) => {
     const iso = addDaysIso(_lun, d)
     return `<th style="text-align:center;${iso === oggi ? 'color:#0d9488;' : ''}">${g}<br><small>${new Date(iso + 'T12:00:00').getDate()}</small></th>`
   }).join('')
   const righe = _squadre.map(sq => {
     const contr = [...new Set(_assegn.filter(a => a.squadra_id === sq.id).map(a => a.contratto_id))]
-    const celle = GIORNI.map((_, d) => {
-      const iso = addDaysIso(_lun, d)
-      const items = _interventi.filter(iv => iv.squadra_id === sq.id && iv.data_pianificata === iso)
-      return `<td class="ag-cella${d === 6 ? ' ag-dom' : ''}" data-squadra="${sq.id}" data-giorno="${d}">
+    const celle = ['S', ...GIORNI.keys()].map(d => {
+      const items = _interventi.filter(iv => iv.squadra_id === sq.id &&
+        (d === 'S' ? iv.senza_giorno : !iv.senza_giorno && iv.data_pianificata === addDaysIso(_lun, d)))
+      return `<td class="ag-cella${d === 6 ? ' ag-dom' : d === 'S' ? ' ag-sett' : ''}" data-squadra="${sq.id}" data-giorno="${d}">
         ${items.map(iv => cardHtml(iv, sq.colore)).join('')}
         <button type="button" class="ag-add" data-azione="aggiungi" title="Aggiungi intervento">+</button>
       </td>`
@@ -200,30 +206,32 @@ function render() {
       <thead><tr><th style="min-width:150px;">Squadra</th>${head}</tr></thead>
       <tbody>${righe}</tbody>
     </table></div>
-    <p style="font-size:12px;color:var(--gray-500);margin-top:8px;">Trascina un intervento su un altro giorno o su un'altra squadra. Clicca per aprire la scheda completa.</p>`
+    <p style="font-size:12px;color:var(--gray-500);margin-top:8px;">Gli interventi "In settimana" si fanno in un giorno qualsiasi della settimana. Trascina un intervento su un giorno, su "In settimana" o su un'altra squadra. Clicca per aprire la scheda completa.</p>`
 }
 
 // Menu per aggiungere un intervento a mano: contratti della squadra nella settimana (e poi tutti)
 async function aggiungi(td) {
   const sq = _squadre.find(s => s.id === td.dataset.squadra)
-  const d = Number(td.dataset.giorno)
-  const suoi = [...new Map(_assegn.filter(a => a.squadra_id === sq.id && a.contratti).map(a => [a.contratto_id, a.contratti])).values()]
-    .sort((a, b) => nomeContratto(a).localeCompare(nomeContratto(b), 'it', { numeric: true }))
-  const opzioni = []
-  for (const k of suoi) {
+  const d = td.dataset.giorno === 'S' ? 'S' : Number(td.dataset.giorno)
+  const ordina = l => l.sort((a, b) => nomeContratto(a).localeCompare(nomeContratto(b), 'it', { numeric: true }))
+  const suoi = ordina([...new Map(_assegn.filter(a => a.squadra_id === sq.id && a.contratti).map(a => [a.contratto_id, a.contratti])).values()])
+  const opzioniDi = lista => lista.flatMap(k => {
     const servizi = serviziUnici(k.contratti_servizi)
-    if (!servizi.length) opzioni.push({ k, s: null })
-    for (const s of servizi) opzioni.push({ k, s })
-  }
+    return servizi.length ? servizi.map(s => ({ k, s })) : [{ k, s: null }]
+  })
+  const optHtml = l => l.length
+    ? l.map((o, i) => `<option value="${i}">${esc(nomeContratto(o.k))}${o.s ? ' · ' + esc(etichettaServizio(o.s)) : ''}</option>`).join('')
+    : '<option value="">Nessun contratto assegnato alla squadra</option>'
+  let opzioni = opzioniDi(suoi)
   document.querySelector('.ag-menu')?.remove()
   const menu = document.createElement('div')
   menu.className = 'ag-menu'
   menu.innerHTML = `
-    <div style="font-size:12px;font-weight:600;margin-bottom:6px;">${esc(sq.nome)} · ${GIORNI[d]} ${new Date(addDaysIso(_lun, d) + 'T12:00:00').getDate()}</div>
-    <select class="form-input" style="font-size:12px;width:100%;">
-      ${opzioni.length ? '' : '<option value="">Nessun contratto assegnato alla squadra</option>'}
-      ${opzioni.map((o, i) => `<option value="${i}">${esc(nomeContratto(o.k))}${o.s ? ' · ' + esc(etichettaServizio(o.s)) : ''}</option>`).join('')}
-    </select>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px;">${esc(sq.nome)} · ${d === 'S' ? 'in settimana, senza giorno' : GIORNI[d] + ' ' + new Date(addDaysIso(_lun, d) + 'T12:00:00').getDate()}</div>
+    <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-bottom:6px;cursor:pointer;">
+      <input type="checkbox" data-m="straord" style="width:auto;"> Lavoro straordinario (anche contratti fuori giro)
+    </label>
+    <select class="form-input" style="font-size:12px;width:100%;">${optHtml(opzioni)}</select>
     <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">
       <button type="button" class="btn btn-secondary btn-sm" data-m="chiudi">Annulla</button>
       <button type="button" class="btn btn-primary btn-sm" data-m="ok" ${opzioni.length ? '' : 'disabled'}>Aggiungi</button>
@@ -245,16 +253,35 @@ async function aggiungi(td) {
     document.addEventListener('mousedown', chiudi, true)
     window.addEventListener('scroll', chiudi, true)
   })
+  const sel = menu.querySelector('select')
+  const okBtn = menu.querySelector('[data-m="ok"]')
+  menu.querySelector('[data-m="straord"]').addEventListener('change', async e => {
+    if (e.target.checked && !_tutti) {
+      sel.innerHTML = '<option value="">Caricamento…</option>'
+      const { data, error } = await supabase.from('contratti')
+        .select('id, numero_contratto, stato, clienti(nome_breve, ragione_sociale), contratti_servizi(id, ordine, descrizione, minuti_intervento, interventi_numero, interventi_periodo)')
+        .eq('stato', 'attivo')
+      if (error) { showToast('Errore: ' + error.message, 'error'); e.target.checked = false }
+      else _tutti = ordina(data || [])
+    }
+    // straordinario: prima i contratti della squadra, poi tutti gli altri attivi
+    opzioni = opzioniDi(e.target.checked && _tutti ? [...suoi, ..._tutti.filter(k => !suoi.some(x => x.id === k.id))] : suoi)
+    sel.innerHTML = optHtml(opzioni)
+    okBtn.disabled = !opzioni.length
+  })
   menu.addEventListener('click', async e => {
     e.stopPropagation()
     const m = e.target.closest('[data-m]')?.dataset.m
     if (m === 'chiudi') chiudi()
     if (m !== 'ok') return
-    const o = opzioni[Number(menu.querySelector('select').value)]
+    const o = opzioni[Number(sel.value)]
+    if (!o) return
+    const straord = menu.querySelector('[data-m="straord"]').checked
     chiudi()
     const { error } = await supabase.from('interventi').insert({
       contratto_id: o.k.id, servizio_id: o.s?.id || null, squadra_id: sq.id,
-      data_pianificata: addDaysIso(_lun, d), stato: 'pianificato', tipo_pulizia: 'ordinaria',
+      data_pianificata: addDaysIso(_lun, d === 'S' ? 0 : d), senza_giorno: d === 'S', stato: 'pianificato',
+      tipo_pulizia: straord ? 'straordinaria' : 'ordinaria',
       operatore_id: sq.componenti[0]?.id || null, operatore2_id: sq.componenti[1]?.id || null,
     })
     if (error) { console.error(error); showToast('Errore: ' + error.message, 'error'); return }
@@ -266,9 +293,10 @@ async function sposta(ivId, squadraId, giorno) {
   const iv = _interventi.find(x => x.id === ivId)
   const sq = _squadre.find(s => s.id === squadraId)
   if (!iv || !sq) return
-  const data = addDaysIso(_lun, giorno)
-  if (iv.squadra_id === squadraId && iv.data_pianificata === data) return
-  const campi = { data_pianificata: data, squadra_id: squadraId }
+  const sg = giorno === 'S'
+  const data = sg ? (iv.senza_giorno ? iv.data_pianificata : _lun) : addDaysIso(_lun, giorno)
+  if (iv.squadra_id === squadraId && iv.data_pianificata === data && !!iv.senza_giorno === sg) return
+  const campi = { data_pianificata: data, senza_giorno: sg, squadra_id: squadraId }
   if (iv.squadra_id !== squadraId) Object.assign(campi, { operatore_id: sq.componenti[0]?.id || null, operatore2_id: sq.componenti[1]?.id || null })
   Object.assign(iv, campi) // subito a video, poi salvataggio
   render()
@@ -309,6 +337,7 @@ export function initAgendaSquadre({ apriIntervento } = {}) {
       #agenda-squadre .ag-table td, #agenda-squadre .ag-table th { vertical-align:top; padding:6px; }
       #agenda-squadre .ag-cella { min-width:110px; position:relative; }
       #agenda-squadre .ag-dom { background:var(--gray-50, #f9fafb); }
+      #agenda-squadre .ag-sett { background:#f0fdfa; }
       #agenda-squadre .ag-cella.over { background:#ccfbf1; }
       #agenda-squadre .ag-card { background:#fff; border:1px solid var(--gray-200); border-radius:6px; padding:4px 6px; margin-bottom:4px; font-size:11.5px; cursor:pointer; line-height:1.3; }
       #agenda-squadre .ag-card[draggable=true] { cursor:grab; }
@@ -336,7 +365,7 @@ export function initAgendaSquadre({ apriIntervento } = {}) {
         <button class="btn btn-primary btn-sm" id="ag-genera">Genera settimana dai contratti</button>
         <button class="btn btn-secondary btn-sm" id="ag-svuota">Togli i pianificati della settimana</button>
       </div>
-      <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">"Genera settimana" crea gli interventi che mancano secondo la frequenza dei servizi (es. 2 v/settimana, 1 v/mese) dei contratti assegnati a ogni squadra, dal lunedì al sabato e solo nei giorni del periodo di assegnazione. I servizi annuali e a richiesta si aggiungono a mano con il +.</p>
+      <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">"Genera settimana" crea gli interventi che mancano secondo la frequenza dei servizi (es. 2 v/settimana, 1 v/mese) dei contratti assegnati a ogni squadra, nella colonna "In settimana" (senza giorno fisso); i servizi giornalieri vanno su ogni giorno del periodo di assegnazione. I servizi annuali, a richiesta e i lavori straordinari si aggiungono a mano con il +.</p>
       <div id="ag-griglia"></div>
     </div>`
   _lun = lunediDi(new Date())
@@ -385,7 +414,7 @@ export function initAgendaSquadre({ apriIntervento } = {}) {
     e.preventDefault()
     const id = _drag
     _drag = null
-    sposta(id, td.dataset.squadra, Number(td.dataset.giorno))
+    sposta(id, td.dataset.squadra, td.dataset.giorno === 'S' ? 'S' : Number(td.dataset.giorno))
   })
   griglia.addEventListener('dragend', () => { _drag = null; griglia.querySelectorAll('.ag-cella.over').forEach(x => x.classList.remove('over')) })
 
@@ -397,7 +426,7 @@ export function initAgendaSquadre({ apriIntervento } = {}) {
 // Per i fogli ore: interventi pianificati in una settimana → Set "contratto|servizio|giorno" e "contratto||giorno"
 export async function pianificatiSettimana(lun, { squadraId = null, operatoreId = null } = {}) {
   const dom = addDaysIso(lun, 6)
-  let q = supabase.from('interventi').select('contratto_id, servizio_id, data_pianificata, squadra_id, operatore_id, operatore2_id')
+  let q = supabase.from('interventi').select('contratto_id, servizio_id, data_pianificata, senza_giorno, squadra_id, operatore_id, operatore2_id')
     .gte('data_pianificata', lun).lte('data_pianificata', dom).neq('stato', 'annullato')
   const ors = []
   if (squadraId) ors.push(`squadra_id.eq.${squadraId}`)
@@ -407,9 +436,13 @@ export async function pianificatiSettimana(lun, { squadraId = null, operatoreId 
   if (error) { console.warn(error.message); return new Set() }
   const out = new Set()
   for (const iv of data || []) {
-    const d = Math.round((new Date(iv.data_pianificata + 'T12:00:00') - new Date(lun + 'T12:00:00')) / 86400000)
-    out.add(`${iv.contratto_id}|${iv.servizio_id || ''}|${d}`)
-    out.add(`${iv.contratto_id}||${d}`)
+    // senza giorno: previsto in tutta la settimana (lun-sab)
+    const giorni = iv.senza_giorno ? [0, 1, 2, 3, 4, 5]
+      : [Math.round((new Date(iv.data_pianificata + 'T12:00:00') - new Date(lun + 'T12:00:00')) / 86400000)]
+    for (const d of giorni) {
+      out.add(`${iv.contratto_id}|${iv.servizio_id || ''}|${d}`)
+      out.add(`${iv.contratto_id}||${d}`)
+    }
   }
   return out
 }
