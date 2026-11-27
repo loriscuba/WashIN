@@ -1,11 +1,13 @@
 // Agenda settimanale delle squadre: interventi (tabella interventi) assegnati alle squadre,
 // una riga per squadra, una colonna "In settimana" (interventi senza giorno fisso, v53) e una per giorno.
-// "Genera settimana" crea gli interventi dai contratti assegnati e dalla frequenza dei servizi:
+// "Genera settimana" crea gli interventi dai GIRI (v52) nei giorni del giro; i contratti
+// assegnati a una squadra ma in nessun giro seguono ancora la frequenza dei servizi e vanno
 // senza giorno (la squadra li fa quando può nella settimana), tranne i servizi giornalieri.
 // Col + si aggiunge anche un lavoro straordinario, pure su contratti fuori dal giro della squadra.
 import supabase from '../supabase.js'
 import { showToast } from './clienti.js'
 import { serviziUnici } from './fogli_ore_righe.js'
+import { caricaGiri, giroGiorni } from './giri_calendario.js'
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const GIORNI = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -23,6 +25,7 @@ let _lun = null
 let _squadre = []       // squadre attive con componenti ordinati (capo per primo)
 let _assegn = []        // squadre_contratti che toccano la settimana, con contratto e servizi
 let _interventi = []    // interventi della settimana con squadra
+let _giri = []          // giri attivi con contratti (vuoto se manca la v52)
 let _drag = null
 let _tutti = null       // contratti attivi (per gli straordinari), caricati al primo uso
 
@@ -94,9 +97,50 @@ function etichettaServizio(s) {
   return [d, fmtMin(s.minuti_intervento), f].filter(Boolean).join(' · ')
 }
 
-function piano() {
+// Squadra che fa il contratto in quel giorno: una copertura temporanea (assegnazione con
+// data "al") su un'altra squadra prevale sulla squadra del giro
+function squadraDelGiorno(g, contrattoId, iso) {
+  const cop = _assegn.find(a => a.contratto_id === contrattoId && a.al && a.squadra_id !== g.squadra_id && iso >= a.dal && iso <= a.al)
+  return _squadre.find(s => s.id === (cop ? cop.squadra_id : g.squadra_id))
+}
+
+// Contratti in almeno un giro attivo: la loro pianificazione la fanno i giri
+const contrattiNeiGiri = () => new Set(_giri.filter(g => g.attivo).flatMap(g => (g.giri_contratti || []).map(r => r.contratto_id)))
+
+function pianoGiri() {
   const nuovi = []
+  const fissi = _interventi.filter(iv => !iv.senza_giorno && iv.tipo_pulizia !== 'straordinaria')
+  const presi = new Set(fissi.map(iv => `${iv.contratto_id}|${iv.servizio_id || ''}|${iv.data_pianificata}`))
+  for (const g of _giri) {
+    if (!g.attivo || !g.squadra_id) continue
+    for (const d of giroGiorni(g, _lun)) {
+      const iso = addDaysIso(_lun, d)
+      for (const r of g.giri_contratti || []) {
+        const k0 = r.contratti
+        if (!k0 || (k0.stato && k0.stato !== 'attivo')) continue
+        const servizi = serviziUnici(k0.contratti_servizi)
+        const servizio = r.servizio_id || (servizi.length === 1 ? servizi[0].id : null)
+        const chiave = `${k0.id}|${servizio || ''}|${iso}`
+        if (presi.has(chiave) || (!servizio && fissi.some(iv => iv.contratto_id === k0.id && iv.data_pianificata === iso))) continue
+        const sq = squadraDelGiorno(g, k0.id, iso)
+        if (!sq) continue
+        presi.add(chiave)
+        nuovi.push({
+          contratto_id: k0.id, servizio_id: servizio, squadra_id: sq.id, giro_id: g.id,
+          data_pianificata: iso, stato: 'pianificato', tipo_pulizia: 'ordinaria',
+          operatore_id: sq.componenti[0]?.id || null, operatore2_id: sq.componenti[1]?.id || null,
+        })
+      }
+    }
+  }
+  return nuovi
+}
+
+function piano() {
+  const nuovi = pianoGiri()
+  const neiGiri = contrattiNeiGiri()
   for (const a of assegnUniche()) {
+    if (neiGiri.has(a.contratto_id)) continue
     const sq = _squadre.find(s => s.id === a.squadra_id)
     const k0 = a.contratti
     if (!sq || !k0 || (k0.stato && k0.stato !== 'attivo')) continue
@@ -130,19 +174,21 @@ async function carica() {
   const f = d => new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
   document.getElementById('ag-label').textContent = `dal ${f(_lun)} al ${f(dom)}`
   box.innerHTML = '<p style="color:var(--gray-500);font-size:13px;">Caricamento…</p>'
+  const giri = await caricaGiri()
+  _giri = giri || []
   const [sq, as, iv] = await Promise.all([
     supabase.from('squadre').select('id, nome, colore, attiva, capo_squadra_id, squadre_operatori(operatore_id, profili(nome, cognome))').eq('attiva', true).order('nome'),
     supabase.from('squadre_contratti')
       .select('id, squadra_id, contratto_id, dal, al, contratti(id, numero_contratto, stato, clienti(nome_breve, ragione_sociale), contratti_servizi(id, ordine, descrizione, minuti_intervento, interventi_numero, interventi_periodo))')
       .lte('dal', dom).or(`al.is.null,al.gte.${_lun}`),
     supabase.from('interventi')
-      .select('id, data_pianificata, senza_giorno, tipo_pulizia, stato, contratto_id, servizio_id, squadra_id, contratti!contratto_id(numero_contratto, clienti(nome_breve, ragione_sociale)), contratti_servizi(descrizione, minuti_intervento)')
+      .select(`id, data_pianificata, senza_giorno, tipo_pulizia, stato, contratto_id, servizio_id, squadra_id, ${giri ? 'giro_id, ' : ''}contratti!contratto_id(numero_contratto, clienti(nome_breve, ragione_sociale)), contratti_servizi(descrizione, minuti_intervento)`)
       .gte('data_pianificata', _lun).lte('data_pianificata', dom).not('squadra_id', 'is', null),
   ])
   const err = sq.error || as.error || iv.error
   if (err) {
     console.error(err)
-    box.innerHTML = `<p style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato le migrazioni v48, v49, v50 e v53?</p>`
+    box.innerHTML = `<p style="color:#b91c1c;font-size:13px;">Errore: ${esc(err.message)}. Hai applicato le migrazioni v48-v50, v52 e v53?</p>`
     return
   }
   _squadre = (sq.data || []).map(s => ({
@@ -169,6 +215,7 @@ function cardHtml(iv, colore) {
       </div>
       ${iv.tipo_pulizia === 'straordinaria' ? '<div style="color:#c2410c;font-weight:600;">Straordinario</div>' : ''}
       ${serv ? `<div style="color:var(--gray-500);">${esc(serv[0].toUpperCase() + serv.slice(1))}</div>` : ''}
+      ${iv.giro_id ? `<div style="color:var(--gray-400);font-size:10.5px;">↻ ${esc(_giri.find(g => g.id === iv.giro_id)?.nome || 'giro')}</div>` : ''}
       ${fatto ? '<div style="color:#16a34a;">✓ fatto</div>' : iv.stato === 'in_corso' ? '<div style="color:#2563eb;">in corso</div>' : ''}
     </div>`
 }
@@ -185,7 +232,9 @@ function render() {
     return `<th style="text-align:center;${iso === oggi ? 'color:#0d9488;' : ''}">${g}<br><small>${new Date(iso + 'T12:00:00').getDate()}</small></th>`
   }).join('')
   const righe = _squadre.map(sq => {
-    const contr = [...new Set(_assegn.filter(a => a.squadra_id === sq.id).map(a => a.contratto_id))]
+    const giriSq = _giri.filter(g => g.attivo && g.squadra_id === sq.id && giroGiorni(g, _lun).length)
+    const contr = [...new Set([..._assegn.filter(a => a.squadra_id === sq.id).map(a => a.contratto_id),
+      ...giriSq.flatMap(g => (g.giri_contratti || []).map(r => r.contratto_id))])]
     const celle = ['S', ...GIORNI.keys()].map(d => {
       const items = _interventi.filter(iv => iv.squadra_id === sq.id &&
         (d === 'S' ? iv.senza_giorno : !iv.senza_giorno && iv.data_pianificata === addDaysIso(_lun, d)))
@@ -199,6 +248,7 @@ function render() {
         <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(sq.colore)};margin-right:4px;"></span><strong>${esc(sq.nome)}</strong></div>
         <div style="font-size:11px;color:var(--gray-500);">${esc(sq.componenti.map(c => c.nome).join(', ') || 'nessun componente')}</div>
         <div style="font-size:11px;color:var(--gray-500);">${contr.length} contratt${contr.length === 1 ? 'o' : 'i'} questa settimana</div>
+        ${giriSq.length ? `<div style="font-size:11px;color:var(--gray-500);">↻ ${esc(giriSq.map(g => g.nome).join(', '))}</div>` : ''}
       </td>${celle}</tr>`
   }).join('')
   box.innerHTML = `
@@ -214,14 +264,17 @@ async function aggiungi(td) {
   const sq = _squadre.find(s => s.id === td.dataset.squadra)
   const d = td.dataset.giorno === 'S' ? 'S' : Number(td.dataset.giorno)
   const ordina = l => l.sort((a, b) => nomeContratto(a).localeCompare(nomeContratto(b), 'it', { numeric: true }))
-  const suoi = ordina([...new Map(_assegn.filter(a => a.squadra_id === sq.id && a.contratti).map(a => [a.contratto_id, a.contratti])).values()])
+  const suoi = ordina([...new Map([
+    ..._assegn.filter(a => a.squadra_id === sq.id && a.contratti).map(a => [a.contratto_id, a.contratti]),
+    ..._giri.filter(g => g.attivo && g.squadra_id === sq.id).flatMap(g => (g.giri_contratti || []).filter(r => r.contratti).map(r => [r.contratto_id, r.contratti])),
+  ]).values()])
   const opzioniDi = lista => lista.flatMap(k => {
     const servizi = serviziUnici(k.contratti_servizi)
     return servizi.length ? servizi.map(s => ({ k, s })) : [{ k, s: null }]
   })
   const optHtml = l => l.length
     ? l.map((o, i) => `<option value="${i}">${esc(nomeContratto(o.k))}${o.s ? ' · ' + esc(etichettaServizio(o.s)) : ''}</option>`).join('')
-    : '<option value="">Nessun contratto assegnato alla squadra</option>'
+    : '<option value="">Nessun contratto assegnato alla squadra o ai suoi giri</option>'
   let opzioni = opzioniDi(suoi)
   document.querySelector('.ag-menu')?.remove()
   const menu = document.createElement('div')
@@ -365,7 +418,7 @@ export function initAgendaSquadre({ apriIntervento } = {}) {
         <button class="btn btn-primary btn-sm" id="ag-genera">Genera settimana dai contratti</button>
         <button class="btn btn-secondary btn-sm" id="ag-svuota">Togli i pianificati della settimana</button>
       </div>
-      <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">"Genera settimana" crea gli interventi che mancano secondo la frequenza dei servizi (es. 2 v/settimana, 1 v/mese) dei contratti assegnati a ogni squadra, nella colonna "In settimana" (senza giorno fisso); i servizi giornalieri vanno su ogni giorno del periodo di assegnazione. I servizi annuali, a richiesta e i lavori straordinari si aggiungono a mano con il +.</p>
+      <p style="font-size:12px;color:var(--gray-500);margin:0 0 10px;">"Genera settimana" crea gli interventi dei <strong>giri</strong> (sezione Giri) nei loro giorni, con la squadra del giro (o quella che la copre temporaneamente). Per i contratti in nessun giro crea gli interventi che mancano secondo la frequenza dei servizi (es. 2 v/settimana, 1 v/mese) dei contratti assegnati a ogni squadra, nella colonna "In settimana" (senza giorno fisso); i servizi giornalieri vanno su ogni giorno del periodo di assegnazione. I servizi annuali, a richiesta e i lavori straordinari si aggiungono a mano con il +.</p>
       <div id="ag-griglia"></div>
     </div>`
   _lun = lunediDi(new Date())

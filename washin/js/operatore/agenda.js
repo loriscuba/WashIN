@@ -1,10 +1,12 @@
 import supabase from '../supabase.js'
 
 let _modalitaOrario = false   // true = inserimento ore, false = classica
+let _modalitaUnica = false    // true = chiusura unica: solo tasto "Fatto"
 
 async function loadModalita() {
   const { data } = await supabase.from('impostazioni').select('valore').eq('chiave', 'modalita_intervento').maybeSingle()
   _modalitaOrario = data?.valore === 'orario'
+  _modalitaUnica = data?.valore === 'unica'
 }
 
 function createToastContainer() {
@@ -199,7 +201,7 @@ export function renderInterventiPassati(interventi) {
         </div>
       </div>
       ${sede ? `<div class="location">${sede}</div>` : ''}
-      ${incompleto ? `<div class="actions"><button class="btn btn-secondary btn-sm" data-action="checklist" data-id="${iv.id}" type="button">Compila checklist</button></div>` : ''}
+      ${incompleto && !_modalitaUnica ? `<div class="actions"><button class="btn btn-secondary btn-sm" data-action="checklist" data-id="${iv.id}" type="button">Compila checklist</button></div>` : ''}
     `
     container.appendChild(card)
   })
@@ -276,7 +278,10 @@ export function renderInterventi(interventi) {
       : null
     const oreBorderColor = oreCompilate ? '#10b981' : borderColor
 
-    const actionsHtml = _modalitaOrario
+    const actionsHtml = _modalitaUnica
+      ? `<a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
+         ${!actionDone ? `<button class="btn btn-primary btn-sm" data-action="fatto" data-id="${iv.id}" type="button">✓ Fatto</button>` : ''}`
+      : _modalitaOrario
       ? `<a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
          <button class="btn ${oreCompilate ? 'btn-secondary' : 'btn-primary'} btn-sm" data-action="inserisci-ore" data-id="${iv.id}" data-data="${iv.data_pianificata}" type="button">⏱ ${oreCompilate ? 'Modifica orario' : 'Inserisci orario'}</button>`
       : `<a class="btn btn-secondary btn-sm" style="text-align:center;" href="${mapsUrl}" target="_blank" rel="noreferrer">Mappa</a>
@@ -372,6 +377,16 @@ export async function cambiaStatoIntervento(id, stato) {
     console.error(error)
     return false
   }
+}
+
+// Chiusura unica: l'intervento passa subito a completato, senza checklist, avvio né geolocalizzazione
+async function segnaFatto(id) {
+  const { error } = await supabase.from('interventi')
+    .update({ stato: 'completato', fine_effettivo: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { showToast('Errore aggiornamento intervento', 'error'); console.error(error); return false }
+  showToast('Intervento segnato come fatto', 'success')
+  return true
 }
 
 async function apriModaleOre(interventoId, dataPianificata) {
@@ -570,6 +585,11 @@ export async function initAgenda() {
     if (action === 'status') {
       const newState = button.dataset.newstate
       const ok = await cambiaStatoIntervento(id, newState)
+      if (ok) await refresh()
+    }
+
+    if (action === 'fatto') {
+      const ok = await segnaFatto(id)
       if (ok) await refresh()
     }
 
